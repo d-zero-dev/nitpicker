@@ -526,6 +526,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				description:
 					'Distinct console messages / page errors captured during the crawl, aggregated across every page they occurred on. Filter by type; each row shows how many pages logged it and how many times in total.',
 				colType: 'Type',
+				colTime: 'Captured at',
 				colText: 'Message',
 				colLocation: 'Location',
 				colPageCount: 'Pages',
@@ -1071,6 +1072,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				description:
 					'クロール中に捕捉した console メッセージ・ページエラーを、内容ごとに全ページ横断で集約した一覧。type で絞り込め、各行に何ページで何回発生したかを表示します。',
 				colType: 'Type',
+				colTime: '記録日時',
 				colText: 'メッセージ',
 				colLocation: '発生箇所',
 				colPageCount: 'ページ数',

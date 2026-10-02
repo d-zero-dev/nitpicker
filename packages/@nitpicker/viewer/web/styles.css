@@ -1214,6 +1214,83 @@ pre code {
 	border: none;
 }
 
+/* Base layer for bare elements. Every selector is wrapped in `:where()` so it
+   has zero specificity: any class or contextual rule (`.filter-bar input`,
+   `.pager-button`, ...) still wins outright and only the properties it leaves
+   unset fall back to these. */
+:where(button, input, select, textarea) {
+	font: inherit;
+	color: var(--text);
+}
+
+:where(input, select, textarea) {
+	padding-block: 4px;
+	padding-inline: 8px;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 5px;
+}
+
+:where(input[type='checkbox'], input[type='radio']) {
+	padding: 0;
+	accent-color: var(--accent);
+}
+
+:where(button) {
+	padding-block: 4px;
+	padding-inline: 12px;
+	cursor: pointer;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 5px;
+}
+
+:where(
+	button:hover:not(:disabled),
+	input:hover:not(:disabled),
+	select:hover:not(:disabled)
+) {
+	border-color: var(--accent);
+}
+
+:where(button, input, select, textarea, summary):focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+:where(button:disabled, input:disabled, select:disabled, textarea:disabled) {
+	cursor: not-allowed;
+	opacity: 0.5;
+}
+
+:where(hr) {
+	margin-block: 24px;
+	margin-inline: 0;
+	border: 0;
+	border-block-start: 1px solid var(--border);
+}
+
+:where(blockquote) {
+	padding-inline: 16px;
+	margin-block: 16px;
+	margin-inline: 0;
+	color: var(--text-dim);
+	border-inline-start: 3px solid var(--border);
+}
+
+:where(pre) {
+	padding-block: 10px;
+	padding-inline: 14px;
+	margin-block: 16px;
+	margin-inline: 0;
+	overflow-x: auto;
+	font-size: var(--font-size-base);
+	line-height: 1.5;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
 /* One template cluster / one block group as a card: name heading, property
    cards, then (clusters) a collapsed details block. */
 :is(.cluster-card, .block-card) {
@@ -1857,6 +1934,41 @@ pre code {
 
 .state-error {
 	color: var(--danger);
+}
+
+/* Console message type badge: severity by color, always with the type's
+   name as text. `pageerror` (an uncaught exception) is the only solid fill. */
+.console-type {
+	display: inline-block;
+	padding-block: 1px;
+	padding-inline: 8px;
+	font-family: monospace;
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	line-height: 1.5;
+	color: var(--text-dim);
+	background: color-mix(in srgb, var(--text-dim) 18%, transparent);
+	border-radius: 999px;
+}
+
+.console-type-pageerror {
+	color: var(--text-on-accent);
+	background: var(--danger);
+}
+
+.console-type-error {
+	color: var(--danger);
+	background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.console-type-warn {
+	color: var(--warn);
+	background: color-mix(in srgb, var(--warn) 20%, transparent);
+}
+
+.console-type-info {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .external-url {

@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 
 import { useConsoleLogsInfinite } from '../api/use-console-logs-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { ConsoleLogType } from '../components/console-log-type.js';
 import {
 	addChecklistFilter,
 	addSort,
@@ -54,7 +55,7 @@ export function ConsoleLogsView() {
 				accessorKey: 'type',
 				header: t('views.consoleLogs.colType'),
 				size: 100,
-				cell: (i) => i.getValue<string>(),
+				cell: (i) => <ConsoleLogType type={i.getValue<string>()} />,
 			},
 			{
 				accessorKey: 'text',
