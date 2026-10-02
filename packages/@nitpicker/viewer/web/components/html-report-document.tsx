@@ -5,6 +5,7 @@ import type {
 } from '../report-ui/types.js';
 import type { ReactNode } from 'react';
 
+import { getStatusLabel } from '../i18n/get-status-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 import { ContentTypeStackedBar } from './content-type-stacked-bar.js';
@@ -17,7 +18,7 @@ import { TechnologyDistributionBars } from './technology-distribution-bars.js';
 
 /**
  * Marks a table cell value as a problem (missing resources, HTTP 400+,
- * console errors) with the shared danger color and bold weight.
+ * fetch errors, console errors) with the shared danger color and bold weight.
  * @param alert - Whether the value is a problem.
  * @param value - Cell contents.
  */
@@ -55,8 +56,10 @@ export function HtmlReportDocument(props: HtmlReportData) {
 			label: t('views.report.columns.status'),
 			render: (page) =>
 				reportAlert(
-					page.status != null && page.status >= 400,
-					page.status ?? t('common.none'),
+					// `-1` is the fetch-failure sentinel: a page that never loaded is at
+					// least as alarming as a 4xx/5xx.
+					page.status != null && (page.status >= 400 || page.status === -1),
+					getStatusLabel(page.status, t) ?? t('common.none'),
 				),
 		},
 		{

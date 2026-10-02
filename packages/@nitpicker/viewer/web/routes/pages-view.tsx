@@ -25,6 +25,7 @@ import { ExternalUrl } from '../components/external-url.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
+import { getStatusLabel } from '../i18n/get-status-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 import { formatTemplateLabel } from '../utils/format-template-label.js';
 
@@ -186,7 +187,7 @@ export function PagesView() {
 				accessorKey: 'status',
 				header: t('views.pages.colStatus'),
 				size: 110,
-				cell: textCell,
+				cell: (info) => getStatusLabel(info.getValue<number | null>(), t) ?? '—',
 			},
 			{
 				accessorKey: 'redirectDestUrl',
@@ -448,7 +449,7 @@ export function PagesView() {
 			t('views.pages.colStatus'),
 			(facets?.statuses ?? []).map((value) => ({
 				value: String(value),
-				label: String(value),
+				label: getStatusLabel(value, t) ?? String(value),
 				checked: status.includes(String(value)),
 			})),
 		);

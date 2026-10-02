@@ -17,6 +17,7 @@ import { ExternalUrl } from '../components/external-url.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
+import { getStatusLabel } from '../i18n/get-status-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
@@ -79,7 +80,7 @@ export function ResourcesView() {
 				accessorKey: 'status',
 				header: t('views.resources.colStatus'),
 				size: 80,
-				cell: (i) => i.getValue<number | null>() ?? '—',
+				cell: (i) => getStatusLabel(i.getValue<number | null>(), t) ?? '—',
 			},
 			{
 				accessorKey: 'statusText',
@@ -138,6 +139,7 @@ export function ResourcesView() {
 			buildStatusFilterOptions({
 				items: paged.data?.items,
 				getStatus: (item) => item.status,
+				t,
 				currentStatuses: status,
 			}),
 		);

@@ -109,6 +109,7 @@ export function BrokenLinksView() {
 			buildStatusFilterOptions({
 				items: paged.data?.items,
 				getStatus: (item) => item.status,
+				t,
 				currentStatuses: status,
 			}),
 		);

@@ -69,11 +69,12 @@ export interface StatusDistributionBarsProps {
  * @returns The bar group element.
  */
 export function StatusDistributionBars(props: StatusDistributionBarsProps) {
+	const { t } = useI18n();
 	const total = props.entries.reduce((acc, entry) => acc + entry.count, 0);
 	return (
 		<div className="bars">
 			{props.entries.map((entry) => {
-				const { key, label } = buildStatusRowDescriptor(entry);
+				const { key, label } = buildStatusRowDescriptor(entry, t);
 				return (
 					<StatusDistributionRow
 						key={key}
