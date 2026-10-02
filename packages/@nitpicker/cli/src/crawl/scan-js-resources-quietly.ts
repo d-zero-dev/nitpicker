@@ -11,9 +11,8 @@ import { formatProgressCount } from '../format-progress-count.js';
  * crawl-time signal extraction and from read-model backfill) against a
  * just-finished crawl's archive, immediately before
  * `ensureViewerReadModelQuietly` — so any newly-discovered technology
- * signal is reflected in the same run's `viewer_technology_summary` /
- * `viewer_technology_directory_stats` rather than requiring a second
- * `viewer-build`.
+ * signal is reflected in the same run's `viewer_technology_summary` rather
+ * than requiring a second `viewer-build`.
  *
  * Wires `scanJsResourcesForTechnologySignals`'s `onProgress` into `onProgress`
  * (issue #294): re-fetching hundreds to thousands of already-discovered JS

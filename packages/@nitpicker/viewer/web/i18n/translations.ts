@@ -221,6 +221,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterImageScan: 'Image scan outcome',
 				filterDedupeCapped: 'Dedupe-cap trap',
 				directoryFilterNotice: 'Showing pages under {directory}',
+				technologyFilterNotice: 'Showing pages using {technology}',
 				dedupeCapEventFilterNotice:
 					'Showing pages captured by crawl suppression {shapeKey}',
 			},
@@ -446,17 +447,12 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			technologies: {
 				title: 'Technologies',
 				description:
-					"Every technology detected across the archive — combining beholder's Wappalyzer pass with structural signals (URL patterns, HTML markers, scoped attributes, meta generator, JS license comments) into one confidence score per technology, per page. Click a row to see its directory distribution and page list.",
+					"Every technology detected across the archive — combining beholder's Wappalyzer pass with structural signals (URL patterns, HTML markers, scoped attributes, meta generator, JS license comments) into one confidence score per technology, per page. Click a technology to list the pages using it.",
 				colTechnology: 'Technology',
 				colCategory: 'Category',
 				colPageCount: 'Pages',
 				colAvgConfidence: 'Avg. confidence',
 				empty: 'No technologies detected in this archive.',
-				directoryDistribution: 'Directory distribution',
-				directoryDistributionUnavailable:
-					'Directory distribution requires the viewer read model. Run `npx @nitpicker/cli viewer-build <archive>`.',
-				colDirectory: 'Directory',
-				pagesForTechnology: 'Pages using {technology}',
 				viewPageDetail: 'View page detail',
 			},
 			templateClusters: {
@@ -771,6 +767,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				filterImageScan: '画像スキャン結果',
 				filterDedupeCapped: 'Dedupe-capトラップ',
 				directoryFilterNotice: '「{directory}」配下のページを表示中',
+				technologyFilterNotice: '「{technology}」を使用しているページを表示中',
 				dedupeCapEventFilterNotice:
 					'クロール抑制 {shapeKey} に取り込まれたページのみ表示中',
 			},
@@ -996,17 +993,12 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			technologies: {
 				title: '技術スタック',
 				description:
-					'アーカイブ全体で検出された技術スタックの一覧。beholderのWappalyzer検出と、nitpicker独自の構造シグナル（URLパターン・HTMLマーカー・スコープ付き属性・meta generator・JSライセンスコメント）を組み合わせ、技術ごと・ページごとに確信度を算出しています。行をクリックするとディレクトリ分布とページ一覧が表示されます。',
+					'アーカイブ全体で検出された技術スタックの一覧。beholderのWappalyzer検出と、nitpicker独自の構造シグナル（URLパターン・HTMLマーカー・スコープ付き属性・meta generator・JSライセンスコメント）を組み合わせ、技術ごと・ページごとに確信度を算出しています。技術名をクリックすると、その技術を使用しているページを一覧できます。',
 				colTechnology: '技術',
 				colCategory: 'カテゴリ',
 				colPageCount: 'ページ数',
 				colAvgConfidence: '平均確信度',
 				empty: 'このアーカイブでは技術が検出されませんでした。',
-				directoryDistribution: 'ディレクトリ分布',
-				directoryDistributionUnavailable:
-					'ディレクトリ分布の表示にはviewer read modelが必要です。`npx @nitpicker/cli viewer-build <archive>` を実行してください。',
-				colDirectory: 'ディレクトリ',
-				pagesForTechnology: '{technology} を使用しているページ',
 				viewPageDetail: 'ページ詳細を見る',
 			},
 			templateClusters: {

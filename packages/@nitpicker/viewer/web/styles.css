@@ -1658,18 +1658,6 @@ details[open] > summary {
 	}
 }
 
-/* Technology inventory drilldown (directory distribution + page list)
-   inside an expanded inventory row: a stacked block, not a dt/dd grid. */
-.technology-drilldown {
-	display: block grid;
-	gap: 8px;
-}
-
-.technology-drilldown ul {
-	padding-inline-start: 18px;
-	margin: 0;
-}
-
 /* HTML preview */
 .html-preview {
 	overflow: hidden;

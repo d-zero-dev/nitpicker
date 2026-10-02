@@ -89,6 +89,8 @@ export interface ViewerPagesCursorFilterKeyInput {
 	source?: string;
 	/** See `ListViewerPagesOptions.templateKey`. */
 	templateKey?: string | string[];
+	/** See `ListViewerPagesOptions.technology`. */
+	technology?: string | string[];
 	/** See `ListViewerPagesOptions.directory`. */
 	directory?: string;
 	/** See `ListViewerPagesOptions.urlPattern`. */

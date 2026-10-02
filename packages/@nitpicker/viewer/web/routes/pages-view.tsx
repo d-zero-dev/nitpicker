@@ -122,6 +122,7 @@ export function PagesView() {
 	const filter: PagesFilter = {
 		urlPattern: params.get('urlPattern') ?? undefined,
 		directory: params.get('directory') ?? undefined,
+		technology: params.get('technology') ?? undefined,
 		status,
 		isExternal,
 		lang,
@@ -613,6 +614,11 @@ export function PagesView() {
 			{filter.directory && (
 				<p className="filter-notice">
 					{t('views.pages.directoryFilterNotice', { directory: filter.directory })}
+				</p>
+			)}
+			{filter.technology && (
+				<p className="filter-notice">
+					{t('views.pages.technologyFilterNotice', { technology: filter.technology })}
 				</p>
 			)}
 			{dedupeCapEventId != null && dedupeCapEventShapeKey && (

@@ -749,7 +749,12 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	`);
 
 	// Directory × technology distribution — one row per (directory,
-	// technology) pair, produced by `buildTechnologyDirectoryStatsRows`. A
+	// technology) pair, produced by `buildTechnologyDirectoryStatsRows`. No
+	// reader remains (the viewer dropped the per-technology directory
+	// breakdown); the table is kept because removing it is a schema change
+	// that bumps `VIEWER_READ_MODEL_SCHEMA_VERSION`, which would force every
+	// existing archive through `viewer-build` — remove it together with the
+	// next bump that is needed for another reason. A
 	// page contributes to one row per technology it was detected with
 	// (not limited to a single "primary" technology), so counts across a
 	// directory's rows can exceed its page count.

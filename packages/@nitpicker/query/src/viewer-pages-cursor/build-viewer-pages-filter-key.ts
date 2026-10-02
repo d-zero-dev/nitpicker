@@ -29,6 +29,7 @@ export function buildViewerPagesFilterKey(
 		hasHSTS: filters.hasHSTS,
 		source: filters.source,
 		templateKey: filters.templateKey,
+		technology: filters.technology,
 		directory: filters.directory,
 		urlPattern: filters.urlPattern,
 	});

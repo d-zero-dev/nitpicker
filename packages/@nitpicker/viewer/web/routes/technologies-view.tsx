@@ -1,91 +1,22 @@
-import type { TechnologyDirectoryStatsEntry } from '@nitpicker/query';
-
-import { Fragment, useState } from 'react';
-
 import { useTechnologies } from '../api/use-technologies.js';
-import { useTechnologyPages } from '../api/use-technology-pages.js';
 import { AppLink } from '../components/app-link.js';
 import { ViewHeader } from '../components/view-header.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /**
- * Renders one technology's directory distribution (rows already filtered
- * to this technology by the caller) plus its page list, fetched on demand.
- * @param props - The selected technology and the pre-filtered distribution rows.
- * @param props.technology
- * @param props.directoryRows
- */
-function TechnologyDrilldown(props: {
-	technology: string;
-	directoryRows: TechnologyDirectoryStatsEntry[];
-}) {
-	const { technology, directoryRows } = props;
-	const { t } = useI18n();
-	const { data, isLoading, error } = useTechnologyPages(technology);
-
-	return (
-		<div className="technology-drilldown">
-			<h3>{t('views.technologies.directoryDistribution')}</h3>
-			{directoryRows.length === 0 ? (
-				<p className="view-description">
-					{t('views.technologies.directoryDistributionUnavailable')}
-				</p>
-			) : (
-				<div className="plain-table-scroll">
-					<table className="plain-table">
-						<thead>
-							<tr>
-								<th>{t('views.technologies.colDirectory')}</th>
-								<th className="plain-table-num">
-									{t('views.technologies.colPageCount')}
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							{directoryRows
-								.toSorted((a, b) => b.pageCount - a.pageCount)
-								.map((row) => (
-									<tr key={row.directory}>
-										<td>{row.directory}</td>
-										<td className="plain-table-num">{row.pageCount}</td>
-									</tr>
-								))}
-						</tbody>
-					</table>
-				</div>
-			)}
-
-			<h3>{t('views.technologies.pagesForTechnology', { technology })}</h3>
-			{isLoading && <div className="state">{t('common.loading')}</div>}
-			{error && <div className="state state-error">{error.message}</div>}
-			{data && (
-				<ul>
-					{data.map((page) => (
-						<li key={page.url}>
-							<AppLink to={`/pages/detail?url=${encodeURIComponent(page.url)}`}>
-								{page.url}
-							</AppLink>
-						</li>
-					))}
-				</ul>
-			)}
-		</div>
-	);
-}
-
-/**
  * Site-wide technology inventory: one row per detected technology (page
- * count, mean confidence), expandable into its directory × technology
- * distribution and page list. Combines beholder's Wappalyzer pass with
- * nitpicker's own structural signals into one confidence score per
- * technology, per page — see `getPageTechnologies` for the per-signal
- * evidence behind any one page's detections.
+ * count, mean confidence). Each technology links to the Pages list filtered
+ * to the pages that use it (`/pages?technology=`), so paging, sorting and
+ * every other Pages filter apply to that list instead of a second,
+ * technology-only list living inside this table. Combines beholder's
+ * Wappalyzer pass with nitpicker's own structural signals into one
+ * confidence score per technology, per page — see `getPageTechnologies` for
+ * the per-signal evidence behind any one page's detections.
  * @returns The technologies view element.
  */
 export function TechnologiesView() {
 	const { t } = useI18n();
 	const { data, isLoading, error } = useTechnologies();
-	const [selected, setSelected] = useState<string | null>(null);
 
 	return (
 		<div>
@@ -115,32 +46,17 @@ export function TechnologiesView() {
 						</thead>
 						<tbody>
 							{data.inventory.map((entry) => (
-								<Fragment key={entry.technology}>
-									<tr
-										className={`is-expandable${
-											selected === entry.technology ? ' is-expanded' : ''
-										}`}
-										onClick={() =>
-											setSelected(selected === entry.technology ? null : entry.technology)
-										}>
-										<td>{entry.technology}</td>
-										<td>{entry.category ?? '—'}</td>
-										<td className="plain-table-num">{entry.pageCount}</td>
-										<td className="plain-table-num">{entry.avgConfidence}</td>
-									</tr>
-									{selected === entry.technology && (
-										<tr>
-											<td colSpan={4} className="plain-table-detail">
-												<TechnologyDrilldown
-													technology={entry.technology}
-													directoryRows={data.directoryDistribution.filter(
-														(row) => row.technology === entry.technology,
-													)}
-												/>
-											</td>
-										</tr>
-									)}
-								</Fragment>
+								<tr key={entry.technology}>
+									<td>
+										<AppLink
+											to={`/pages?technology=${encodeURIComponent(entry.technology)}`}>
+											{entry.technology}
+										</AppLink>
+									</td>
+									<td>{entry.category ?? '—'}</td>
+									<td className="plain-table-num">{entry.pageCount}</td>
+									<td className="plain-table-num">{entry.avgConfidence}</td>
+								</tr>
 							))}
 						</tbody>
 					</table>
