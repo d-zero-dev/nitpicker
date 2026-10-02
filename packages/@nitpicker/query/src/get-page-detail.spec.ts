@@ -266,7 +266,7 @@ describe('getPageDetail: templateKey（page_templates の LEFT JOIN）', () => {
 	});
 });
 
-describe('getPageDetail: page_templates テーブル自体が存在しないアーカイブ（--templates 未実行の旧アーカイブ、read-only オープンで自己修復が走らないケースの再現）', () => {
+describe('getPageDetail: page_templates テーブル自体が存在しないアーカイブ（分類機能導入前の旧アーカイブ、read-only オープンで自己修復が走らないケースの再現）', () => {
 	let archive: InstanceType<typeof Archive>;
 	const dir = path.resolve(
 		__dirname,
@@ -319,7 +319,7 @@ describe('getPageDetail: page_templates テーブル自体が存在しないア�
 			isSkipped: false,
 		});
 
-		// Simulates an archive crawled/analyzed before `--templates` shipped:
+		// Simulates an archive created before template classification existed:
 		// drop the table this connection would otherwise self-heal on the
 		// next write-mode open, mirroring a viewer read-only connection that
 		// never runs that self-heal at all (see `hasPageTemplatesTable`'s doc).

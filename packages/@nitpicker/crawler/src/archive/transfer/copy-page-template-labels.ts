@@ -13,7 +13,7 @@ const SRC = TRANSFER_SOURCE_ALIAS;
  * (concat) number their labels independently, so both can carry an
  * "events template A" under different keys. Leaving both would give the
  * merged archive two templates with one name — and a later
- * `analyze --templates` would *keep* both, since `replacePageTemplates`
+ * re-classification of the output (`concat` / `split` run one) would *keep* both, since `replacePageTemplates`
  * carries labels forward by member overlap rather than renaming. The later
  * key (by `template_key` order, for determinism) is therefore moved to the
  * next free ordinal in its section here, at copy time.

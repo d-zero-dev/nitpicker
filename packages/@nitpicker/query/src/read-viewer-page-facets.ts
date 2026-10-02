@@ -42,9 +42,9 @@ function resolveFacetCategoryKey(
  * `viewer_count_buckets`'s `(scope, key, value)` primary key, so this stays
  * inside the 100ms contract regardless of archive size.
  *
- * `templateKeys` (and `templateLabelsByKey`) is the one exception: `page_templates` is populated at
- * `analyze --templates` time, entirely independent of the crawl-end/
- * viewer-build read-model pipeline that produces `viewer_count_buckets` (see
+ * `templateKeys` (and `templateLabelsByKey`) is the one exception: `page_templates` is populated by the template
+ * classification step, a separate derived-data step from the read-model
+ * build that produces `viewer_count_buckets` (see
  * `hasPageTemplatesTable`'s doc), so there is no precomputed bucket to look
  * up. It reads a live `DISTINCT template_key` instead — acceptable because
  * `page_templates` is a narrow two-column `WITHOUT ROWID` table with no
@@ -100,7 +100,7 @@ export async function readViewerPageFacets(
 			).map((row) => row.template_key)
 		: [];
 	// Same live-read rationale as `templateKeys`: labels are written by
-	// `analyze --templates`, never by the read-model build, and
+	// the template classification step, never by the read-model build, and
 	// `page_template_labels` is one narrow row per key.
 	const templateLabelsByKey = Object.fromEntries(
 		await loadTemplateClusterLabels(knex, templateKeys),

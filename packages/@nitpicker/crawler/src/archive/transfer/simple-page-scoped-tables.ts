@@ -5,9 +5,12 @@
  * beholder-`MainContentsData` sub-entity tables, the technology-detection
  * pair (always updated together, per ARCHITECTURE.md's pairing
  * invariant — copying both in the same call keeps that true here too),
- * `page_jsonld`, `page_errors`, and `page_templates` (`template_key` is a
- * plain string column, not a dictionary FK — see
- * `copy-page-template-clusters.ts` for its paired cluster-evidence table).
+ * `page_jsonld`, `page_errors`, `page_html_ref` (`hash` is the content-
+ * addressed identity of a `page_html_blobs` row, identical in every archive,
+ * so it passes through once `copy-page-html-blobs.ts` has copied the blob),
+ * and `page_templates` (`template_key` is a plain string column, not a
+ * dictionary FK — see `copy-page-template-clusters.ts` for its paired
+ * cluster-evidence table).
  *
  * Shared between {@link import('./copy-simple-page-scoped-tables.js').copySimplePageScopedTables}
  * (what to copy verbatim) and
@@ -31,5 +34,6 @@ export const SIMPLE_PAGE_SCOPED_TABLES: readonly { table: string; pageColumn: st
 		{ table: 'page_technologies', pageColumn: 'pageId' },
 		{ table: 'page_jsonld', pageColumn: 'pageId' },
 		{ table: 'page_errors', pageColumn: 'pageId' },
+		{ table: 'page_html_ref', pageColumn: 'page_id' },
 		{ table: 'page_templates', pageColumn: 'page_id' },
 	];

@@ -20,6 +20,7 @@ import {
 import { buildViewerReadModelInWorker } from '@nitpicker/query';
 
 import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';
+import { classifyTemplatesQuietly } from '../crawl/classify-templates-quietly.js';
 import { createVerboseTimestampStream } from '../crawl/create-verbose-timestamp-stream.js';
 import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 import { ExitCode } from '../exit-code.js';
@@ -69,8 +70,9 @@ function buildConcatRowLabels(sourceCount: number): string[] {
  * Rendered as a single `TaskList` (every row is known statically — unlike
  * `viewer-build`, nothing here depends on a value only readable after
  * extraction): one "Extract archive" row per source, "Create output
- * archive", the bridged transfer-phase rows, the viewer read-model's own
- * phase rows, then "Write archive". Sources are opened via
+ * archive", the bridged transfer-phase rows, "Classify page templates"
+ * (unless `--skip-templates`), the viewer read-model's own phase rows, then
+ * "Write archive". Sources are opened via
  * `Archive.openCached` (read-only, no lock, no `.bak` — matches
  * `diff.ts`'s own precedent for a command that only reads existing
  * archives).
@@ -79,13 +81,14 @@ function buildConcatRowLabels(sourceCount: number): string[] {
  * destination (`releaseHandle()`, never `close()` — see that function's
  * docs for why) and removes the destination's tmpDir/output path before
  * exiting. On success, operator notices (in-scope-but-external pages,
- * dropped analyze plugin data, a read-model build failure) print AFTER
+ * dropped analyze plugin data, a template classification or read-model
+ * build failure) print AFTER
  * the `TaskList` has fully settled, never while a row is still active.
  * @param args - Positional arguments: two or more `.nitpicker` archive paths.
  * @param flags - Parsed CLI flags from the `concat` command.
  * @returns Resolves when the merge completes. Exits with code 1 on
  *   validation/pipeline failure, 2 if pending is non-empty or the
- *   read-model build failed, 0 otherwise.
+ *   template classification / read-model build failed, 0 otherwise.
  */
 export async function concat(args: string[], flags: ConcatFlags): Promise<void> {
 	if (!flags.output) {
@@ -93,7 +96,7 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 		console.error('Error: -o/--output is required.');
 		// eslint-disable-next-line no-console
 		console.error(
-			'Usage: npx @nitpicker/cli concat <archive> <archive> [<archive>...] -o <output> [--verbose]',
+			'Usage: npx @nitpicker/cli concat <archive> <archive> [<archive>...] -o <output> [--skip-templates] [--verbose]',
 		);
 		process.exit(ExitCode.Fatal);
 	}
@@ -122,12 +125,14 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 		writeStarted: boolean;
 		pluginDataEntries: Set<string>;
 		readModelError: string | null;
+		templateClassificationError: string | null;
 	} = {
 		sourceAccessors: [],
 		destination: null,
 		writeStarted: false,
 		pluginDataEntries: new Set(),
 		readModelError: null,
+		templateClassificationError: null,
 	};
 
 	try {
@@ -188,8 +193,27 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 
 		const pendingState = await state.destination!.getCrawlingState();
 
+		// The merged archive's templates are re-derived rather than copied: the
+		// copied `page_templates` keys come from per-source clusterings whose
+		// keys (`cluster:<n>`) collide across sources. Copied labels stay in
+		// place — they seed label inheritance in this re-classification.
+		let readModelPipeline = TaskList.from(state.destination!);
+		if (!flags.skipTemplates) {
+			readModelPipeline = readModelPipeline.pipe(
+				'Classify page templates',
+				async (destination: ArchiveType, ctx: StepContext<ArchiveType>) => {
+					state.templateClassificationError = await classifyTemplatesQuietly(
+						destination,
+						(message) => {
+							ctx.progress(message);
+						},
+					);
+					return destination;
+				},
+			);
+		}
 		await appendViewerReadModelPhaseRows(
-			TaskList.from(state.destination!),
+			readModelPipeline,
 			VIEWER_READ_MODEL_FULL_BUILD_PHASES,
 			{
 				getArchive: (a: ArchiveType) => a,
@@ -232,6 +256,7 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 			pendingCount: pendingState.pending.length,
 			pluginDataEntries: [...state.pluginDataEntries],
 			readModelError: state.readModelError,
+			templateClassificationError: state.templateClassificationError,
 		};
 		for (const line of formatTransferNotices(outcome)) {
 			// eslint-disable-next-line no-console

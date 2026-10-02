@@ -14,6 +14,7 @@ const BASE: TransferOutcome = {
 	pendingCount: 0,
 	pluginDataEntries: [],
 	readModelError: null,
+	templateClassificationError: null,
 };
 
 describe('resolveTransferExitCode', () => {
@@ -29,6 +30,12 @@ describe('resolveTransferExitCode', () => {
 		expect(resolveTransferExitCode({ ...BASE, readModelError: 'boom' })).toBe(
 			ExitCode.Warning,
 		);
+	});
+
+	it('returns Warning when the page template classification failed', () => {
+		expect(
+			resolveTransferExitCode({ ...BASE, templateClassificationError: 'boom' }),
+		).toBe(ExitCode.Warning);
 	});
 
 	it('external-in-scope count alone does not affect the exit code', () => {

@@ -1,15 +1,19 @@
 import type { CrawlEvent } from '@nitpicker/crawler';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { VIEWER_READ_MODEL_FULL_BUILD_PHASES } from '../viewer-read-model-full-build-phases.js';
 
 const mockScanJsResourcesQuietly = vi.fn();
+const mockClassifyTemplatesQuietly = vi.fn();
 const mockEnsureViewerReadModelQuietly = vi.fn();
 const mockBuildViewerReadModelInWorker = vi.fn();
 
 vi.mock('./scan-js-resources-quietly.js', () => ({
 	scanJsResourcesQuietly: mockScanJsResourcesQuietly,
+}));
+vi.mock('./classify-templates-quietly.js', () => ({
+	classifyTemplatesQuietly: mockClassifyTemplatesQuietly,
 }));
 vi.mock('./ensure-viewer-read-model-quietly.js', () => ({
 	ensureViewerReadModelQuietly: mockEnsureViewerReadModelQuietly,
@@ -87,6 +91,10 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
+beforeEach(() => {
+	mockClassifyTemplatesQuietly.mockResolvedValue(null);
+});
+
 describe('runPostCrawlTaskList', () => {
 	it('runs Scan JS resources, every read-model phase, and Write archive in order (issue #294)', async () => {
 		mockScanJsResourcesQuietly.mockResolvedValue();
@@ -101,10 +109,15 @@ describe('runPostCrawlTaskList', () => {
 			verbose: true,
 			silent: false,
 			skipTechnologyJsScan: false,
+			skipTemplates: false,
 			stream,
 		});
 
 		expect(mockScanJsResourcesQuietly).toHaveBeenCalledWith(
+			orchestrator.archive,
+			expect.any(Function),
+		);
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(
 			orchestrator.archive,
 			expect.any(Function),
 		);
@@ -113,6 +126,13 @@ describe('runPostCrawlTaskList', () => {
 		expect(orchestrator.write).toHaveBeenCalledOnce();
 		const rendered = lines.join('');
 		expect(rendered).toContain('Scan JS resources');
+		expect(rendered).toContain('Classify page templates');
+		expect(rendered.indexOf('Scan JS resources')).toBeLessThan(
+			rendered.indexOf('Classify page templates'),
+		);
+		expect(rendered.indexOf('Classify page templates')).toBeLessThan(
+			rendered.indexOf('Backfilling analysis violations'),
+		);
 		expect(rendered).not.toContain('Build viewer read model');
 		expect(rendered).toContain('Backfilling analysis violations');
 		expect(rendered).toContain('Building anchor facts');
@@ -133,6 +153,7 @@ describe('runPostCrawlTaskList', () => {
 			verbose: true,
 			silent: false,
 			skipTechnologyJsScan: false,
+			skipTemplates: false,
 			stream,
 		});
 
@@ -157,6 +178,7 @@ describe('runPostCrawlTaskList', () => {
 			verbose: true,
 			silent: false,
 			skipTechnologyJsScan: false,
+			skipTemplates: false,
 			stream,
 		});
 
@@ -178,12 +200,34 @@ describe('runPostCrawlTaskList', () => {
 			verbose: true,
 			silent: false,
 			skipTechnologyJsScan: true,
+			skipTemplates: false,
 			stream,
 		});
 
 		expect(mockScanJsResourcesQuietly).not.toHaveBeenCalled();
 		const rendered = lines.join('');
 		expect(rendered).not.toContain('Scan JS resources');
+	});
+
+	it('skips the Classify page templates row when skipTemplates is true', async () => {
+		mockScanJsResourcesQuietly.mockResolvedValue();
+		mockBuildViewerReadModelInWorker.mockImplementation(async (_archive, options) => {
+			await driveOnPhase(options, VIEWER_READ_MODEL_FULL_BUILD_PHASES);
+		});
+		const { runPostCrawlTaskList } = await import('./run-post-crawl-task-list.js');
+		const orchestrator = createFakeOrchestrator();
+		const { stream, lines } = createCapturingStream();
+
+		await runPostCrawlTaskList(orchestrator as never, {
+			verbose: true,
+			silent: false,
+			skipTechnologyJsScan: false,
+			skipTemplates: true,
+			stream,
+		});
+
+		expect(mockClassifyTemplatesQuietly).not.toHaveBeenCalled();
+		expect(lines.join('')).not.toContain('Classify page templates');
 	});
 
 	it('under --silent, runs the same steps without any TaskList rendering', async () => {
@@ -196,9 +240,11 @@ describe('runPostCrawlTaskList', () => {
 			verbose: false,
 			silent: true,
 			skipTechnologyJsScan: false,
+			skipTemplates: false,
 		});
 
 		expect(mockScanJsResourcesQuietly).toHaveBeenCalledWith(orchestrator.archive);
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(orchestrator.archive);
 		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(orchestrator.archive);
 		expect(mockBuildViewerReadModelInWorker).not.toHaveBeenCalled();
 		expect(orchestrator.write).toHaveBeenCalledOnce();
@@ -219,6 +265,7 @@ describe('runPostCrawlTaskList', () => {
 				verbose: true,
 				silent: false,
 				skipTechnologyJsScan: false,
+				skipTemplates: false,
 				stream,
 			}),
 		).rejects.toMatchObject({ cause: expect.objectContaining({ message: 'disk full' }) });

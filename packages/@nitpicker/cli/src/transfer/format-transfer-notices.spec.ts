@@ -12,6 +12,7 @@ const BASE: TransferOutcome = {
 	pendingCount: 0,
 	pluginDataEntries: [],
 	readModelError: null,
+	templateClassificationError: null,
 };
 
 describe('formatTransferNotices', () => {
@@ -60,19 +61,30 @@ describe('formatTransferNotices', () => {
 		expect(line).toContain('viewer-build /out/merged.nitpicker');
 	});
 
-	it('reports every applicable notice, in the fixed external/pending/plugin-data/read-model order', () => {
+	it('reports a template classification failure with the re-classify hint', () => {
+		const [line] = formatTransferNotices({
+			...BASE,
+			templateClassificationError: 'clustering blew up',
+		});
+		expect(line).toContain('page template classification failed (clustering blew up)');
+		expect(line).toContain('viewer-build /out/merged.nitpicker');
+	});
+
+	it('reports every applicable notice, in the fixed external/pending/plugin-data/templates/read-model order', () => {
 		const lines = formatTransferNotices({
 			...BASE,
 			externalInScopeCount: 1,
 			pendingCount: 1,
 			pluginDataEntries: ['analysis'],
+			templateClassificationError: 'oops',
 			readModelError: 'boom',
 		});
-		expect(lines).toHaveLength(4);
+		expect(lines).toHaveLength(5);
 		expect(lines[0]).toContain('external links');
 		expect(lines[1]).toContain('Warning:');
 		expect(lines[1]).toContain('pending');
 		expect(lines[2]).toContain('Analyze plugin data');
-		expect(lines[3]).toContain('read model build failed');
+		expect(lines[3]).toContain('page template classification failed');
+		expect(lines[4]).toContain('read model build failed');
 	});
 });

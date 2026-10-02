@@ -863,7 +863,7 @@ export interface ListPagesOptions {
 	/** Directory path prefix to filter by. */
 	directory?: string;
 	/**
-	 * Filter by exact `--templates` DOM-structure classification group key.
+	 * Filter by exact DOM-structure template classification group key.
 	 * Also supported by {@link ListViewerPagesOptions}'s read-model fast
 	 * path via a `page_id`-PK join to `page_templates` — see
 	 * `applyViewerPagesFilters`.
@@ -1207,12 +1207,12 @@ export interface PageListItem {
 	hasXContentTypeOptions: boolean;
 	/** Whether Strict-Transport-Security header is present. */
 	hasHSTS: boolean;
-	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
+	/** DOM-structure template group key from template classification, or null if never classified. */
 	templateKey: string | null;
 	/**
 	 * The human-facing label of `templateKey`'s cluster (`events template A`),
 	 * or `null` when the page is unclassified or the archive was classified
-	 * before labels were stored — re-running `analyze --templates` assigns them.
+	 * before labels were stored — classifying the archive again (`viewer-build`) assigns them.
 	 */
 	templateLabel: TemplateLabel | null;
 	/** Whether this page's URL shape matches a `--dedupe-cap` trap captured by any `dedupe_cap_events` row. */
@@ -1323,7 +1323,7 @@ export interface PageListFacets {
 	/** Distinct internal/external flags present in the page-list universe. */
 	types: boolean[];
 	/**
-	 * Distinct `--templates` classification group keys present in the
+	 * Distinct template classification group keys present in the
 	 * page-list universe. Empty when the archive has never been classified
 	 * (or `page_templates` doesn't exist yet — see `hasPageTemplatesTable`).
 	 */
@@ -1421,7 +1421,7 @@ export interface ListViewerPagesOptions {
 	/** Filter by provenance — see {@link PageSource}. */
 	source?: import('@nitpicker/crawler').PageSource;
 	/**
-	 * Filter by exact `--templates` DOM-structure classification group key,
+	 * Filter by exact DOM-structure template classification group key,
 	 * or any of several (OR). This IS supported by the fast path:
 	 * `page_templates` is joined by `page_id` (its PK), never the wide
 	 * `pages` table — see `applyViewerPagesFilters`.
@@ -1733,7 +1733,7 @@ export interface PageDetail {
 	imageScanDesktop: ImageScanOutcome | null;
 	/** `<img>` element scan outcome at the mobile-small preset (denormalised; full detail via `getPageMainContents`), or `null` when not attempted. */
 	imageScanMobile: ImageScanOutcome | null;
-	/** DOM-structure template group key from `--templates` classification, or null if never classified. */
+	/** DOM-structure template group key from template classification, or null if never classified. */
 	templateKey: string | null;
 	/** The human-facing label of `templateKey`'s cluster — see {@link PageListItem.templateLabel}. */
 	templateLabel: TemplateLabel | null;
@@ -3785,7 +3785,7 @@ export interface TemplateClusterSummary {
 	 * the classification wrote `page_template_labels`; otherwise computed on
 	 * read with the same numbering rules but no previous run to inherit from
 	 * (`provisional: true`) — such a label is not guaranteed to survive the
-	 * next `analyze --templates`, which is what stores one. `null` only when
+	 * next classification of the archive, which is what stores one. `null` only when
 	 * the archive is classified but this cluster has no stored label while
 	 * others do (a partially written table; not expected in practice).
 	 */
@@ -3892,11 +3892,12 @@ export interface TemplateClusterReasonSummary {
  */
 export interface TemplateClusterListResult {
 	/**
-	 * Whether `--templates` classification has ever been run on this
-	 * archive. `false` covers both "no `page_templates` table" (a
-	 * pre-`--templates` archive) and "table exists but has zero rows" (a
-	 * fresh archive always provisions the table via `createAdjunctTables`,
-	 * independent of whether `--templates` was passed to `analyze`) — table
+	 * Whether template classification has ever been run on this
+	 * archive. `false` covers both "no `page_templates` table" (an archive
+	 * created before classification existed) and "table exists but has zero
+	 * rows" (a fresh archive always provisions the table via
+	 * `createTemplateTables`, whether or not it was ever classified, e.g.
+	 * crawled with `--skip-templates`) — table
 	 * presence alone cannot tell those apart, and the viewer must not
 	 * confuse either with "ran, and found zero clusters" (a case that
 	 * cannot otherwise occur: any row in `page_templates` belongs to some

@@ -1,4 +1,4 @@
-import type { TemplateClusterReason } from './db-ops/analysis/types.js';
+import type { TemplateClusterReason } from './db-ops/templates/types.js';
 import type {
 	JsonLdRow,
 	MainContentAudioRow,
@@ -46,7 +46,6 @@ import { emitError } from '../utils/error/emit-error.js';
 import { createWriteRefCaches } from './db-ops/_shared/create-write-ref-caches.js';
 import { retrySetting } from './db-ops/_shared/retry-setting.js';
 import { replaceAnalysisViolations as replaceAnalysisViolationsOp } from './db-ops/analysis/replace-analysis-violations.js';
-import { replacePageTemplates as replacePageTemplatesOp } from './db-ops/analysis/replace-page-templates.js';
 import { getAnchorsOnPage as getAnchorsOnPageOp } from './db-ops/anchors/get-anchors-on-page.js';
 import { getBaseUrl as getBaseUrlOp } from './db-ops/config/get-base-url.js';
 import { getConfig as getConfigOp } from './db-ops/config/get-config.js';
@@ -109,6 +108,7 @@ import { getResources as getResourcesOp } from './db-ops/resources/get-resources
 import { insertInventoryResources as insertInventoryResourcesOp } from './db-ops/resources/insert-inventory-resources.js';
 import { insertResourceReferrers as insertResourceReferrersOp } from './db-ops/resources/insert-resource-referrers.js';
 import { insertResource as insertResourceOp } from './db-ops/resources/insert-resource.js';
+import { replacePageTemplates as replacePageTemplatesOp } from './db-ops/templates/replace-page-templates.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 

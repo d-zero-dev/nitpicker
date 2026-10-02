@@ -113,7 +113,7 @@ async function buildFixture(workingDir: string, classify: boolean) {
 }
 
 describe('registerTemplateClustersRoute (integration)', () => {
-	describe('--templates分類済み', () => {
+	describe('分類済み', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_register_template_clusters_route_classified__',
@@ -150,7 +150,7 @@ describe('registerTemplateClustersRoute (integration)', () => {
 		});
 	});
 
-	describe('--templates未実行', () => {
+	describe('未分類', () => {
 		const workingDir = path.resolve(
 			__dirname,
 			'__test_fixtures_register_template_clusters_route_unclassified__',

@@ -20,6 +20,7 @@ import {
 import { buildViewerReadModelInWorker } from '@nitpicker/query';
 
 import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';
+import { classifyTemplatesQuietly } from '../crawl/classify-templates-quietly.js';
 import { createVerboseTimestampStream } from '../crawl/create-verbose-timestamp-stream.js';
 import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 import { ExitCode } from '../exit-code.js';
@@ -67,7 +68,7 @@ const SPLIT_ROW_LABELS: string[] = [
  * @param flags - Parsed CLI flags from the `split` command.
  * @returns Resolves when the extraction completes. Exits with code 1 on
  *   validation/pipeline failure, 2 if pending is non-empty or the
- *   read-model build failed, 0 otherwise.
+ *   template classification / read-model build failed, 0 otherwise.
  */
 export async function split(args: string[], flags: SplitFlags): Promise<void> {
 	if (!flags.output) {
@@ -75,7 +76,7 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 		console.error('Error: -o/--output is required.');
 		// eslint-disable-next-line no-console
 		console.error(
-			'Usage: npx @nitpicker/cli split <archive> <URL> [<URL>...] -o <output> [--verbose]',
+			'Usage: npx @nitpicker/cli split <archive> <URL> [<URL>...] -o <output> [--skip-templates] [--verbose]',
 		);
 		process.exit(ExitCode.Fatal);
 	}
@@ -107,12 +108,14 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 		writeStarted: boolean;
 		pluginDataEntries: Set<string>;
 		readModelError: string | null;
+		templateClassificationError: string | null;
 	} = {
 		sourceAccessor: null,
 		destination: null,
 		writeStarted: false,
 		pluginDataEntries: new Set(),
 		readModelError: null,
+		templateClassificationError: null,
 	};
 
 	try {
@@ -165,8 +168,28 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 
 		const pendingState = await state.destination!.getCrawlingState();
 
+		// Templates are re-derived from the extracted pages rather than copied
+		// as-is: the source's clusters were computed over the whole source
+		// archive, so a cluster's membership (and its stored reason) no longer
+		// describes the subset. Copied labels stay in place — they seed label
+		// inheritance in this re-classification.
+		let readModelPipeline = TaskList.from(state.destination!);
+		if (!flags.skipTemplates) {
+			readModelPipeline = readModelPipeline.pipe(
+				'Classify page templates',
+				async (destination: ArchiveType, ctx: StepContext<ArchiveType>) => {
+					state.templateClassificationError = await classifyTemplatesQuietly(
+						destination,
+						(message) => {
+							ctx.progress(message);
+						},
+					);
+					return destination;
+				},
+			);
+		}
 		await appendViewerReadModelPhaseRows(
-			TaskList.from(state.destination!),
+			readModelPipeline,
 			VIEWER_READ_MODEL_FULL_BUILD_PHASES,
 			{
 				getArchive: (a: ArchiveType) => a,
@@ -205,6 +228,7 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 			pendingCount: pendingState.pending.length,
 			pluginDataEntries: [...state.pluginDataEntries],
 			readModelError: state.readModelError,
+			templateClassificationError: state.templateClassificationError,
 		};
 		for (const line of formatTransferNotices(outcome)) {
 			// eslint-disable-next-line no-console
