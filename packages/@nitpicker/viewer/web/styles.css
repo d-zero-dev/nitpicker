@@ -434,10 +434,64 @@ h1 {
 	font-size: var(--font-size-2xl);
 }
 
+/* Heading scale: strictly decreasing h1 > h2 > h3 > h4–h6. `h3` and below had
+   no rule, so they fell back to the browser's 1.17em and rendered larger than
+   the pinned `h2`. Always set a heading's size here — never per component. */
 h2 {
 	margin-block: 18px 8px;
 	margin-inline: 0;
+	font-size: var(--font-size-xl);
+}
+
+h3 {
+	margin-block: 14px 6px;
+	margin-inline: 0;
 	font-size: var(--font-size-lg);
+}
+
+:is(h4, h5, h6) {
+	margin-block: 12px 4px;
+	margin-inline: 0;
+	font-size: var(--font-size-md);
+}
+
+/* Bare lists (no class): the same rich treatment `.url-list` / `.detail-list`
+   give, so an `<ol>` reads as richly as a `<ul>`. Classed lists keep their own
+   layout. */
+:is(ul, ol):not([class]) {
+	padding-inline-start: 22px;
+	margin-block: 0 12px;
+}
+
+:is(ul, ol):not([class]) > li + li {
+	margin-block-start: 4px;
+}
+
+:is(ul, ol):not([class]) > li::marker {
+	color: var(--text-dim);
+}
+
+ol:not([class]) > li::marker {
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Disclosure widgets (`<details>` / `<summary>`). */
+details {
+	padding-block: 8px;
+	padding-inline: 12px;
+	margin-block: 8px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+summary {
+	font-weight: 600;
+	cursor: pointer;
+}
+
+details[open] > summary {
+	margin-block-end: 8px;
 }
 
 /* An `h2` with a trailing link to the section's full view. The link sits
@@ -1492,11 +1546,6 @@ h2 {
 .technology-drilldown {
 	display: block grid;
 	gap: 8px;
-}
-
-.technology-drilldown h3 {
-	margin: 0;
-	font-size: var(--font-size-md);
 }
 
 .technology-drilldown ul {

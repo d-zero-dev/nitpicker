@@ -21,7 +21,7 @@ import type { StorybookConfig } from '@storybook/react-vite';
  * the package root (Storybook's build cwd), not this `.storybook/` file.
  */
 const config: StorybookConfig = {
-	stories: ['../web/components/*.stories.tsx'],
+	stories: ['../web/foundation/*.stories.tsx', '../web/components/*.stories.tsx'],
 	addons: ['@storybook/addon-a11y'],
 	framework: {
 		name: '@storybook/react-vite',
