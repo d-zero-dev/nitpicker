@@ -17,7 +17,7 @@ export const Inline: Story = {
 				under the key <code>{'["css:166e4235afcb8b15","cluster:0"]'}</code>.
 			</p>
 			<h3>
-				Common stylesheets: <code>coordinators.css</code>, <code>style_default.css</code>
+				Common stylesheets: <code>product.css</code>, <code>site.css</code>
 			</h3>
 		</div>
 	),
