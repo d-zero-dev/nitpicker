@@ -1060,6 +1060,67 @@ details[open] > summary {
 	border-radius: 4px;
 }
 
+/* Property list: a row of small-label-over-prominent-value pairs, the
+   card-header counterpart of `.detail-grid`. */
+.property-list {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 8px 24px;
+	margin-block: 6px 10px;
+	margin-inline: 0;
+}
+
+.property-list-item dt {
+	font-size: var(--font-size-sm);
+	color: var(--text-dim);
+}
+
+.property-list-item dd {
+	margin: 0;
+	font-size: var(--font-size-xl);
+	font-weight: 600;
+}
+
+/* Inline wrapping chips (e.g. a card's leading related paths). */
+.chip-list {
+	display: block flex;
+	flex-wrap: wrap;
+	gap: 4px 8px;
+	padding: 0;
+	margin: 0;
+	list-style: none;
+}
+
+.chip-list code {
+	padding-block: 1px;
+	padding-inline: 6px;
+	font-size: var(--font-size-base);
+	font-weight: normal;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+/* One template cluster as a card: name heading, header properties, then a
+   collapsed details block. */
+.cluster-card {
+	padding-block: 10px 12px;
+	padding-inline: 16px;
+	margin-block: 12px;
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+.cluster-card > h3 {
+	margin-block: 0;
+	overflow-wrap: anywhere;
+}
+
+.cluster-card details {
+	margin-block: 4px 10px;
+}
+
 /* Summary target URL(s): the first thing the page answers ("what is this
    archive of?"), so it gets an accent edge and a heading-sized URL. */
 .summary-roots {

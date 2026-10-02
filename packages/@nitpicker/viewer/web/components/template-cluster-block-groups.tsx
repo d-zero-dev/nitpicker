@@ -8,6 +8,7 @@ import { AppLink } from './app-link.js';
 import { buildBlockHeading } from './build-block-heading.js';
 import { formatClusterName } from './format-cluster-name.js';
 import { listClusterBlocks } from './list-cluster-blocks.js';
+import { PropertyList } from './property-list.js';
 
 /** Props for {@link TemplateClusterBlockGroups}. */
 export interface TemplateClusterBlockGroupsProps {
@@ -22,9 +23,10 @@ export interface TemplateClusterBlockGroupsProps {
  * blocks is listed under each of them (see `groupClustersByBlock`), and its
  * row names the other blocks it came from so the repeat reads as intended.
  *
- * Deliberately not `<details>`: the per-cluster sections below are the only
- * `<details>` on the view, which the viewer E2E specs rely on to locate a
- * cluster by its heading text.
+ * Each block's heading names the block; its cluster and page counts are
+ * header properties rather than a parenthesised tail of the heading, so the
+ * heading stays the block's name alone. Deliberately not `<details>`: the
+ * block sections stay open so every cluster is scannable without clicking.
  * @param props - The block groups to render.
  * @returns The grouped sections, or `null` when there are no groups.
  */
@@ -56,10 +58,17 @@ export function TemplateClusterBlockGroups(props: TemplateClusterBlockGroupsProp
 			{groups.map((group) => (
 				<section key={group.block.blockKey} aria-labelledby={headingId(group)}>
 					<h3 id={headingId(group)}>
-						{getBlockingKindLabel(group.block.kind, t)}: {buildBlockHeading(group)} (
-						{t('views.templateClusters.colClusters')}: {group.clusters.length},{' '}
-						{t('views.templateClusters.colPages')}: {group.pageCount})
+						{getBlockingKindLabel(group.block.kind, t)}: {buildBlockHeading(group)}
 					</h3>
+					<PropertyList
+						items={[
+							{
+								label: t('views.templateClusters.colClusters'),
+								value: group.clusters.length,
+							},
+							{ label: t('views.templateClusters.colPages'), value: group.pageCount },
+						]}
+					/>
 					<div className="plain-table-scroll">
 						<table className="plain-table">
 							<thead>
