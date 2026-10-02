@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/use-i18n.js';
 import { computeRatio } from '../utils/compute-ratio.js';
 import { formatPercent } from '../utils/format-percent.js';
 
+import { AppLink } from './app-link.js';
 import { buildStatusRowDescriptor } from './build-status-row-descriptor.js';
 import { ErrorKindBreakdownList } from './error-kind-breakdown-list.js';
 
@@ -58,22 +59,43 @@ function StatusDistributionRow(props: {
 export interface StatusDistributionBarsProps {
 	/** The status-distribution entries to render, each as a share of the whole. */
 	entries: readonly StatusCount[];
+	/**
+	 * Whether the error group's heading links to the viewer-only connection
+	 * errors screen (`/errors`). Defaults to `true`; the static HTML report has
+	 * no such screen and passes `false`.
+	 */
+	showErrorsLink?: boolean;
 }
 
 /**
- * The status-distribution section of the Summary view: one bar per HTTP
- * status bucket, each showing its share of the total. The `status === -1`
- * hard-failure bucket may additionally show a per-cause breakdown (see
- * {@link ErrorKindBreakdownList}).
+ * Whether an entry is a failure to get any HTTP response at all: the `-1`
+ * fetch-failure sentinel, or a status that was never recorded (`null`).
+ * @param entry - The status-distribution entry.
+ * @returns `true` when the page never produced an HTTP status.
+ */
+function isErrorEntry(entry: StatusCount): boolean {
+	return entry.status === null || entry.status < 0;
+}
+
+/**
+ * The status-distribution section of the Summary view: one bar per status
+ * bucket, each showing its share of the **whole** total, split into two
+ * groups so a real HTTP response (2xx–5xx) is never mixed up with a page
+ * Nitpicker could not fetch at all. The error group (`-1` fetch errors and
+ * unrecorded statuses) links to the connection errors screen and may show a
+ * per-cause breakdown on the `-1` row (see {@link ErrorKindBreakdownList}).
+ * An empty group is omitted.
  * @param props - The status-distribution entries.
- * @returns The bar group element.
+ * @returns The grouped bar elements.
  */
 export function StatusDistributionBars(props: StatusDistributionBarsProps) {
 	const { t } = useI18n();
 	const total = props.entries.reduce((acc, entry) => acc + entry.count, 0);
-	return (
+	const responses = props.entries.filter((entry) => !isErrorEntry(entry));
+	const errors = props.entries.filter((entry) => isErrorEntry(entry));
+	const renderRows = (entries: readonly StatusCount[]) => (
 		<div className="bars">
-			{props.entries.map((entry) => {
+			{entries.map((entry) => {
 				const { key, label } = buildStatusRowDescriptor(entry, t);
 				return (
 					<StatusDistributionRow
@@ -85,5 +107,26 @@ export function StatusDistributionBars(props: StatusDistributionBarsProps) {
 				);
 			})}
 		</div>
+	);
+	return (
+		<>
+			{responses.length > 0 && (
+				<>
+					<h3>{t('views.summary.statusGroupResponses')}</h3>
+					{renderRows(responses)}
+				</>
+			)}
+			{errors.length > 0 && (
+				<>
+					<div className="section-heading section-heading-sub">
+						<h3>{t('views.summary.statusGroupErrors')}</h3>
+						{props.showErrorsLink !== false && (
+							<AppLink to="/errors">{t('views.summary.viewConnectionErrors')}</AppLink>
+						)}
+					</div>
+					{renderRows(errors)}
+				</>
+			)}
+		</>
 	);
 }

@@ -506,8 +506,13 @@ details[open] > summary {
 	margin-block: 18px 8px;
 }
 
-.section-heading h2 {
+.section-heading :is(h2, h3) {
 	margin: 0;
+}
+
+/* The same heading-plus-link row one level down (an `h3`). */
+.section-heading-sub {
+	margin-block: 14px 6px;
 }
 
 .section-heading a {

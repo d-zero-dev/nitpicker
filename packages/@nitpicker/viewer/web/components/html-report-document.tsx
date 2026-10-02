@@ -158,7 +158,10 @@ export function HtmlReportDocument(props: HtmlReportData) {
 				</div>
 
 				<h2>{t('views.summary.statusDistribution')}</h2>
-				<StatusDistributionBars entries={props.summary.statusDistribution} />
+				<StatusDistributionBars
+					entries={props.summary.statusDistribution}
+					showErrorsLink={false}
+				/>
 
 				{props.summary.contentTypeDistribution.some(
 					(entry) => entry.internal + entry.external > 0,
