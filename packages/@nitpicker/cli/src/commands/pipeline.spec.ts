@@ -212,6 +212,23 @@ describe('pipeline command', () => {
 		);
 	});
 
+	it('passes an omitted --credentials through to the report step as undefined', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+		vi.mocked(reportFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: undefined,
+		});
+
+		expect(reportFn).toHaveBeenCalledWith(
+			['/tmp/site.nitpicker'],
+			expect.objectContaining({ credentials: undefined }),
+		);
+	});
+
 	it('passes verbose and silent flags to all steps', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
 		vi.mocked(analyzeFn).mockResolvedValue();

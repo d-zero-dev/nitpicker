@@ -14,6 +14,7 @@ import { verbosely } from '../report/debug.js';
 import { formatInvalidReportUrlWarning } from '../report/format-invalid-report-url-warning.js';
 import { formatReportUrlSkipSummary } from '../report/format-report-url-skip-summary.js';
 import { parseSheetNames } from '../report/parse-sheet-names.js';
+import { resolveCredentialFilePath } from '../report/resolve-credential-file-path.js';
 
 /** Parsed flag values for the `report` CLI command. */
 type ReportFlags = InferFlags<typeof commandDef.flags>;
@@ -48,6 +49,11 @@ type ReportFlags = InferFlags<typeof commandDef.flags>;
  * `--sheets <name,...>` (Google Sheets only) generates exactly the named
  * sheets without `--all`'s full set or the interactive picker — see
  * `parseSheetNames` for the accepted aliases. Takes precedence over `--all`.
+ *
+ * `--credentials <path>` (Google Sheets only) is optional: when omitted, the
+ * path falls back to `GOOGLE_AUTH_CREDENTIALS`, then `./credentials.json` if
+ * it exists, then Application Default Credentials — see
+ * `resolveCredentialFilePath`. `--html` never resolves credentials.
  * @param args - Positional arguments; first argument is the `.nitpicker` file path
  * @param flags - Parsed CLI flags from the `report` command
  * @returns Resolves when the report is complete.
@@ -126,7 +132,6 @@ export async function report(args: string[], flags: ReportFlags) {
 		}
 	}
 
-	const credentialFilePath = flags.credentials;
 	const configFilePath = flags.config || null;
 	const isTTY = process.stdout.isTTY;
 	const all = flags.all || !isTTY;
@@ -195,7 +200,7 @@ export async function report(args: string[], flags: ReportFlags) {
 					await report({
 						filePath,
 						sheetUrl: sheetUrl!,
-						credentialFilePath,
+						credentialFilePath: resolveCredentialFilePath(flags.credentials),
 						configPath: configFilePath,
 						all,
 						sheets,
