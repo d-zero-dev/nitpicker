@@ -7,15 +7,27 @@ name: E2E
 # Triggers:
 #   - nightly via cron (catch regressions on the default branch)
 #   - on demand via workflow_dispatch
-#   - on PRs that touch the crawler / CLI / test-server (path filter)
+#   - on PRs that touch the CLI, test-server, or any package the CLI depends on
+#     (path filter; mcp-server is not a CLI dependency, so it is excluded)
 on:
   schedule:
     - cron: '0 18 * * *' # 03:00 JST, nightly
   workflow_dispatch:
   pull_request:
     paths:
-      - 'packages/@nitpicker/crawler/**'
+      - 'packages/@nitpicker/analyze-axe/**'
+      - 'packages/@nitpicker/analyze-lighthouse/**'
+      - 'packages/@nitpicker/analyze-markuplint/**'
+      - 'packages/@nitpicker/analyze-search/**'
+      - 'packages/@nitpicker/analyze-textlint/**'
       - 'packages/@nitpicker/cli/**'
+      - 'packages/@nitpicker/core/**'
+      - 'packages/@nitpicker/crawler/**'
+      - 'packages/@nitpicker/query/**'
+      - 'packages/@nitpicker/report-google-sheets/**'
+      - 'packages/@nitpicker/report-html/**'
+      - 'packages/@nitpicker/types/**'
+      - 'packages/@nitpicker/viewer/**'
       - 'packages/test-server/**'
       - 'vitest.e2e.config.ts'
       - '.github/workflows/e2e.yml'
