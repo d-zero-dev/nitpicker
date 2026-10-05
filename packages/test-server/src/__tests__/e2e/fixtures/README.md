@@ -24,8 +24,16 @@ Baked-in URLs (used verbatim by both e2e tests' `--urls` lists):
 
 ### Regenerating
 
-Only needed if the archive schema version changes (`ARCHIVE_SCHEMA_VERSION`)
-or the fixture needs different content. From the repo root, with the
+Needed when the archive schema version changes (`ARCHIVE_SCHEMA_VERSION`), when
+`VIEWER_READ_MODEL_SCHEMA_VERSION` is bumped (the baked-in read model becomes
+stale and `report -H`/`query` refuse to open it), or when the fixture needs
+different content.
+
+If only the read model went stale, a fresh crawl is not required: run
+`viewer-build --force` against a copy of the committed fixture, then repack it
+with `portable: true` as described below. For different content (or a schema
+change `viewer-build` cannot migrate), regenerate from a crawl. From the repo
+root, with the
 built CLI (`yarn build` first) and the test server running:
 
 ```sh

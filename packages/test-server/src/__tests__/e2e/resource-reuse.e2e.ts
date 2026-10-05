@@ -61,12 +61,14 @@ describe('Resource reuse', () => {
 		for (const item of items) {
 			expect(item.contentType === null || item.contentType === 'text/html').toBe(true);
 		}
-		// 唯一の HTML ページは /resource-reuse/（他リンクは全て画像）。listPages も
-		// getSummary も絶対値 1 で固定する（片側だけ壊れても、両側同時に壊れても落ちる）。
+		// 唯一の HTML ページは /resource-reuse/（他リンクは全て画像）なので listPages は 1。
+		// 一方 getSummary は viewer の Page List と同じ行範囲で数えるため、301 を返す
+		// /resource-reuse/redirected.png（リダイレクト元行、Content-Type 不明）もページに
+		// 含めて 2 になる。listPages はリダイレクト元行を除外するので両者は一致しない。
+		// 双方を絶対値で固定する（片側だけ壊れても、両側同時に壊れても落ちる）。
 		expect(total).toBe(1);
 		const summary = await getSummary(result.accessor);
-		expect(summary.totalPages).toBe(1);
-		expect(summary.totalPages).toBe(total);
+		expect(summary.totalPages).toBe(2);
 	});
 
 	it('サブリソースに無い直リンク画像は従来どおり HEAD でフォールバックする', () => {
