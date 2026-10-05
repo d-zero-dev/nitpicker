@@ -118,11 +118,23 @@ export type {
 	TemplateClusterReason,
 	TemplateLabel,
 	TemplateLabelClusterInput,
-} from './archive/db-ops/analysis/types.js';
+} from './archive/db-ops/templates/types.js';
 // The label assigner is exported so `@nitpicker/query` can number clusters
 // provisionally, with the exact same rules, for an archive classified before
 // labels were stored — one implementation, no cross-package drift.
-export { assignTemplateLabels } from './archive/db-ops/analysis/assign-template-labels.js';
+export { assignTemplateLabels } from './archive/db-ops/templates/assign-template-labels.js';
+
+// Crawl-end DOM-structure template classification (page_templates /
+// page_template_clusters / page_template_labels). A post-crawl derived-data
+// step like `scanJsResourcesForTechnologySignals`, run by the CLI's crawl
+// post-processing, `viewer-build`, `concat` and `split`.
+export { classifyArchivePageTemplates } from './template-classification/classify-archive-page-templates.js';
+export type {
+	ClassifyArchivePageTemplatesOptions,
+	ClassifyArchivePageTemplatesResult,
+	TemplateClassificationProgress,
+	TemplateClusteringProgress,
+} from './template-classification/types.js';
 
 // Output-path resolution and scope-map construction, needed by CLI commands
 // that produce a NEW `.nitpicker` archive from existing ones (`concat` /

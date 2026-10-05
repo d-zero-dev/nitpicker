@@ -3,6 +3,7 @@ import type { Knex } from 'knex';
 import { createAdjunctTables } from './create-adjunct-tables.js';
 import { createEntityTables } from './create-entity-tables.js';
 import { createRefTables } from './create-ref-tables.js';
+import { createTemplateTables } from './create-template-tables.js';
 
 /**
  * Applies the connection-level PRAGMAs that govern foreign-key enforcement
@@ -42,7 +43,7 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
 /**
  * Initializes the archive database schema if tables do not exist.
  *
- * The schema is composed of four groups, each owned by a dedicated DDL
+ * The schema is composed of five groups, each owned by a dedicated DDL
  * function so the migration script (`scripts/migrate-to-0.13.mjs`) can
  * provision the exact same shapes on archives it upgrades:
  *
@@ -63,6 +64,10 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   `analysis_text_refs` + `analysis_violations`, `page_html_blobs` +
  *   `page_html_ref`. Must run AFTER `createEntityTables` because the
  *   page-scoped tables FK into `content_items(id)`.
+ * - **Template classification tables** ({@link createTemplateTables}):
+ *   `page_templates`, `page_template_clusters`, `page_template_labels` —
+ *   the crawl-end DOM-structure classification, kept apart from the
+ *   adjunct/analysis tables because it has its own producer and write path.
  *
  * The legacy flat write-model tables (`pages` / `anchors` / `images` /
  * `resources` / `resources-referrers`) are deliberately NOT created:
@@ -83,7 +88,7 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  */
 export async function initSchema(instance: Knex) {
 	// Only the one-shot work (PRAGMAs + `info` creation) is gated on the
-	// `info` table's existence. The three DDL groups below run on EVERY
+	// `info` table's existence. The DDL groups below run on EVERY
 	// call: each is internally idempotent (sentinel / IF NOT EXISTS /
 	// per-table guards), and re-running them self-heals an archive whose
 	// provisioning crashed partway through — `info` created but a later
@@ -151,4 +156,11 @@ export async function initSchema(instance: Knex) {
 	// two paths is exactly how migrated archives ended up with stale
 	// `REFERENCES pages(id)` declarations in the pre-0.13 era.
 	await createAdjunctTables(instance);
+
+	// Template classification tables (page_templates / page_template_clusters /
+	// page_template_labels). Separate from the adjunct group because the
+	// producer is the crawl-end classification step, not the crawl write path
+	// or analyze. `page_templates` FKs into `content_items(id)`, so this too
+	// MUST run after {@link createEntityTables}.
+	await createTemplateTables(instance);
 }

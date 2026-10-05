@@ -77,7 +77,7 @@ export const PAGE_LIST_COLUMNS: readonly string[] = [
  * `robots_raw_ref` / `og_title_ref` / `og_description_ref`).
  *
  * `templateKey` (from `page_templates`, `pt`) is deliberately NOT in this
- * list: that table may not exist yet on archives predating `--templates`
+ * list: that table may not exist yet on archives predating template classification
  * classification or on read-only connections (schema self-heal is skipped
  * — see `hasPageTemplatesTable` in `./page-templates-join.js`), so every
  * caller appends its own `templateKeySelectColumn(...)` result instead of

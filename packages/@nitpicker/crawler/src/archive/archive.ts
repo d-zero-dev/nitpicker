@@ -1,4 +1,4 @@
-import type { TemplateClusterReason } from './db-ops/analysis/types.js';
+import type { TemplateClusterReason } from './db-ops/templates/types.js';
 import type {
 	Config,
 	DedupeCapObservationRow,
@@ -483,13 +483,14 @@ export default class Archive extends ArchiveAccessor {
 
 	/**
 	 * Replaces the archive's DOM-structure template classification
-	 * (`--templates`) with a fresh SQL-backed set.
+	 * with a fresh SQL-backed set.
 	 *
 	 * Thin facade over {@link Database.replacePageTemplates}; kept on
-	 * `Archive` so the analyze pipeline can persist template keys without
+	 * `Archive` so the crawl-end classification step
+	 * (`classifyArchivePageTemplates`) can persist template keys without
 	 * reaching into the low-level database class directly.
 	 * @param templateKeysByUrl - Page URL → template key, as produced by
-	 *   `@nitpicker/core`'s `classifyPageTemplates`.
+	 *   `classifyPageTemplates`.
 	 * @param clusterReasonsByTemplateKey - Template key → cluster-selection
 	 *   evidence, if the caller captured it. Omitting this always clears the
 	 *   previously-stored reasons too — "no reason" means "not captured for

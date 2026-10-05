@@ -96,7 +96,7 @@ export function applyViewerPagesFilters(
 	}
 	if (hasFilterValue(options.templateKey)) {
 		// `page_templates` is a narrow, `page_id`-PK'd auxiliary table
-		// populated by `--templates` (see `hasPageTemplatesTable`'s doc) —
+		// populated by the crawl-end template classification (see `hasPageTemplatesTable`'s doc) —
 		// like `page_technologies`/`page_jsonld`, it is not part of the
 		// read-model schema, so filtering by it needs no `viewer_pages` column and no
 		// `VIEWER_READ_MODEL_SCHEMA_VERSION` bump. A `whereIn` subquery (not

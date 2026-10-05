@@ -170,6 +170,18 @@ describe('pipeline command', () => {
 		);
 	});
 
+	it('forwards --skip-templates to startCrawl', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], { ...defaultFlags, skipTemplates: true });
+
+		expect(startCrawlFn).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({ skipTemplates: true }),
+		);
+	});
+
 	it('runs crawl, analyze, and report when --sheet is provided', async () => {
 		const sheetUrl = 'https://docs.google.com/spreadsheets/d/xxx';
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');

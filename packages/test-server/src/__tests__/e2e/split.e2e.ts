@@ -145,6 +145,20 @@ describe('split', () => {
 			expect(docsMeta).toHaveLength(0);
 
 			expect(await isViewerReadModelCurrent(archive)).toBe(true);
+
+			// Templates are re-derived from the extracted pages: the three
+			// in-scope pages are classified, the external stub is not.
+			const templatedRows: { url: string }[] = await knex
+				.select('url_refs.url as url')
+				.from('page_templates')
+				.join('content_items', 'content_items.id', 'page_templates.page_id')
+				.join('url_refs', 'url_refs.id', 'content_items.url_id');
+			expect(templatedRows.map((r) => new URL(r.url).pathname).toSorted()).toEqual([
+				'/scope/blog/',
+				'/scope/blog/post-1',
+				'/scope/blog/post-2',
+			]);
+
 			const { pending } = await archive.getCrawlingState();
 			expect(pending).toEqual([]);
 		} finally {

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAdjunctTables } from '../../create-adjunct-tables.js';
 import { createEntityTables } from '../../create-entity-tables.js';
 import { createRefTables } from '../../create-ref-tables.js';
+import { createTemplateTables } from '../../create-template-tables.js';
 import { LibsqlDialect } from '../../libsql-dialect.js';
 import { seedContentItem } from '../../test-utils/seed-content-item.js';
 import { decodeJsonRef } from '../_shared/decode-json-ref.js';
@@ -45,6 +46,7 @@ describe('replacePageTemplates', () => {
 		await createRefTables(db);
 		await createEntityTables(db);
 		await createAdjunctTables(db);
+		await createTemplateTables(db);
 	});
 
 	afterEach(async () => {

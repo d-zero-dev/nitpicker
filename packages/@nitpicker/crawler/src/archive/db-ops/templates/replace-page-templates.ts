@@ -7,11 +7,11 @@ import { compressPayload } from '../_shared/compress-payload.js';
 import { assignTemplateLabels } from './assign-template-labels.js';
 
 /**
- * Replaces the stored DOM-structure template classification (`--templates`)
- * with a freshly generated set.
+ * Replaces the stored DOM-structure template classification with a freshly
+ * generated set.
  *
  * Every classified page is a full-archive, all-or-nothing recomputation
- * (see `@nitpicker/core`'s `classifyPageTemplates`), so this always deletes
+ * (see `classifyPageTemplates`), so this always deletes
  * every existing row before inserting the new set — there is no per-page
  * incremental update path, matching `replaceAnalysisViolations`'s
  * whole-table replace shape. Unlike violations, a page whose URL can't be

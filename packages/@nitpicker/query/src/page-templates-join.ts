@@ -3,8 +3,8 @@ import type { Knex } from 'knex';
 /**
  * Whether the current archive connection has the `page_templates` table.
  *
- * Archives crawled/analyzed before `--templates` DOM-structure
- * classification shipped don't have this table yet, and a viewer's
+ * Archives created before DOM-structure template classification
+ * existed don't have this table yet, and a viewer's
  * read-only connection to a live/interrupted crawl skips schema self-heal
  * entirely (see `@nitpicker/crawler`'s `db-ops/lifecycle/init.ts`). Every
  * page-list / page-detail query checks this once and conditionally joins

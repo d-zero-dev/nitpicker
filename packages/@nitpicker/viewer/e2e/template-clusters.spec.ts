@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Covers the "`--templates` never run" fallback against the shared fixture
+ * Covers the "archive not classified yet" fallback against the shared fixture
  * (`generate-fixture.mjs`), which never writes a `page_templates`
  * classification. The "classification present" surface (sections, headings,
  * Pages link) is covered separately in `template-clusters-classified.spec.ts`
@@ -11,13 +11,13 @@ import { expect, test } from '@playwright/test';
  * Resources / Unused Resources view assertions).
  */
 test.describe('Nitpicker Viewer template clusters (unclassified fixture)', () => {
-	test('--templates未実行のアーカイブでは案内メッセージを表示する', async ({ page }) => {
+	test('分類されていないアーカイブでは案内メッセージを表示する', async ({ page }) => {
 		await page.goto('/template-clusters');
 		await expect(
 			page.getByRole('heading', { name: 'Template Clusters', level: 1 }),
 		).toBeVisible();
 		await expect(page.locator('.state code')).toHaveText(
-			'npx @nitpicker/cli analyze <archive> --templates',
+			'npx @nitpicker/cli viewer-build <archive>',
 		);
 		await expect(page.locator('details')).toHaveCount(0);
 	});

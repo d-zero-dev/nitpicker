@@ -18,8 +18,9 @@ import { ExitCode } from '../exit-code.js';
  * anomaly would be worse than writing the archive with a warning — the
  * operator can inspect and re-run `--append`/`viewer-build` as needed.
  * @param outcome - See {@link TransferOutcome}.
- * @returns {@link ExitCode.Warning} if `pendingCount > 0` or the read
- *   model build failed; {@link ExitCode.Success} otherwise.
+ * @returns {@link ExitCode.Warning} if `pendingCount > 0`, the read model
+ *   build failed, or the page template classification failed;
+ *   {@link ExitCode.Success} otherwise.
  * @example
  * ```ts
  * process.exitCode = resolveTransferExitCode(outcome);
@@ -28,7 +29,11 @@ import { ExitCode } from '../exit-code.js';
 export function resolveTransferExitCode(
 	outcome: TransferOutcome,
 ): (typeof ExitCode)[keyof typeof ExitCode] {
-	if (outcome.pendingCount > 0 || outcome.readModelError !== null) {
+	if (
+		outcome.pendingCount > 0 ||
+		outcome.readModelError !== null ||
+		outcome.templateClassificationError !== null
+	) {
 		return ExitCode.Warning;
 	}
 	return ExitCode.Success;

@@ -3320,7 +3320,6 @@ __metadata:
   resolution: "@nitpicker/core@workspace:packages/@nitpicker/core"
   dependencies:
     "@d-zero/dealer": "npm:1.14.0"
-    "@d-zero/page-cluster": "npm:0.8.0"
     "@d-zero/shared": "npm:0.23.0"
     "@nitpicker/crawler": "npm:0.22.2"
     "@nitpicker/types": "npm:0.22.0"
@@ -3337,6 +3336,7 @@ __metadata:
     "@d-zero/beholder": "npm:5.0.0"
     "@d-zero/dealer": "npm:1.14.0"
     "@d-zero/fs": "npm:0.2.7"
+    "@d-zero/page-cluster": "npm:0.8.0"
     "@d-zero/shared": "npm:0.23.0"
     "@types/debug": "npm:4.1.13"
     "@types/follow-redirects": "npm:1.14.4"

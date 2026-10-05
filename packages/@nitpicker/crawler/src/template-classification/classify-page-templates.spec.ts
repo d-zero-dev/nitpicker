@@ -1,10 +1,10 @@
-import { stat, utimes } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive, decodeJsonRef } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+import Archive from '../archive/archive.js';
+import { decodeJsonRef } from '../archive/db-ops/_shared/decode-json-ref.js';
 
 import { classifyPageTemplates } from './classify-page-templates.js';
 
@@ -105,9 +105,6 @@ describe('classifyPageTemplates', () => {
 				isSkipped: false,
 			});
 		}
-
-		// Real file, so it has real, distinct stat() output for the cache key.
-		await archive.write();
 	});
 
 	afterAll(async () => {
@@ -178,8 +175,6 @@ describe('classifyPageTemplates', () => {
 
 	it('各templateKeyのクラスタ選定理由を捕捉する', async () => {
 		const pages = await archive.getPages();
-		const future = new Date(Date.now() + 90_000);
-		await utimes(archiveFilePath, future, future);
 
 		const result = await classifyPageTemplates({ archive, pages });
 		const keyA = result.templateKeysByUrl.get('https://example.com/article-1')!;
@@ -190,82 +185,35 @@ describe('classifyPageTemplates', () => {
 		expect(reasonA!.memberCount).toBeGreaterThan(0);
 	});
 
-	it('同一アーカイブへの繰り返し呼び出しはキャッシュヒットし、mtime変更で再計算される', async () => {
+	it('スタイルシート収集の開始を通知したうえで、クラスタリングの進捗イベントを転送する', async () => {
 		const pages = await archive.getPages();
+		const events: string[] = [];
 
-		// Prime the cache for the archive's current stat (hit-or-miss here
-		// depends on test execution order with the previous `it`, which is
-		// exactly why this test only asserts relative behavior from this
-		// point on, not the state of this first call).
-		await classifyPageTemplates({ archive, pages });
+		await classifyPageTemplates({
+			archive,
+			pages,
+			onProgress: (event) => {
+				events.push(event.phase);
+			},
+		});
 
-		vi.mocked(resolvePageClusterKeys).mockClear();
-		const cached = await classifyPageTemplates({ archive, pages });
-		expect(resolvePageClusterKeys).not.toHaveBeenCalled();
-		// A cache hit must restore clusterReasonsByTemplateKey too — see
-		// TemplateClassificationCacheEntry's JSDoc for why a cache hit that
-		// dropped them would silently discard reason data a full
-		// recomputation would have produced.
-		expect(cached.clusterReasonsByTemplateKey.size).toBeGreaterThan(0);
-
-		const future = new Date(Date.now() + 60_000);
-		await utimes(archiveFilePath, future, future);
-
-		vi.mocked(resolvePageClusterKeys).mockClear();
-		const recomputed = await classifyPageTemplates({ archive, pages });
-		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(1);
-		expect(Object.fromEntries(recomputed.templateKeysByUrl)).toEqual(
-			Object.fromEntries(cached.templateKeysByUrl),
-		);
-		expect(Object.fromEntries(recomputed.clusterReasonsByTemplateKey)).toEqual(
-			Object.fromEntries(cached.clusterReasonsByTemplateKey),
-		);
+		expect(events[0]).toBe('collecting-stylesheets');
+		expect(events.length).toBeGreaterThan(1);
 	});
 
-	it('ファイルのsize/mtimeが同じでもページ数が変わればキャッシュが無効化される', async () => {
+	it('呼び出しごとに再計算し、結果をキャッシュしない', async () => {
 		const pages = await archive.getPages();
 
+		vi.mocked(resolvePageClusterKeys).mockClear();
+		await classifyPageTemplates({ archive, pages });
 		await classifyPageTemplates({ archive, pages });
 
-		// Same archive file (same size/mtime) but a different page count —
-		// simulates the cache-key component this run added specifically to
-		// catch the "same stat, different content" gap that size+mtime alone
-		// cannot.
-		vi.mocked(resolvePageClusterKeys).mockClear();
-		await classifyPageTemplates({ archive, pages: pages.slice(0, 2) });
-		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(1);
-	});
-
-	it('クラスタ選定理由を持たない旧形式のキャッシュエントリは再計算にフォールバックする', async () => {
-		const { Cache } = await import('@d-zero/shared/cache');
-		const pages = await archive.getPages();
-
-		const future = new Date(Date.now() + 150_000);
-		await utimes(archiveFilePath, future, future);
-		const stats = await stat(archiveFilePath);
-		const cacheKey = `${archiveFilePath}:${stats.size}:${stats.mtimeMs}:${pages.length}`;
-
-		const cache = new Cache<Record<string, string>>(
-			'nitpicker-templates',
-			path.join(os.tmpdir(), 'nitpicker/cache/templates'),
-		);
-		// Pre-`clusterReasonsByTemplateKey` on-disk shape: a bare URL→key map,
-		// no `templateKeys`/`clusterReasons` wrapper.
-		await cache.store(cacheKey, { 'https://example.com/stale': 'stale-key' });
-
-		vi.mocked(resolvePageClusterKeys).mockClear();
-		const result = await classifyPageTemplates({ archive, pages });
-		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(1);
-		expect(result.templateKeysByUrl.has('https://example.com/stale')).toBe(false);
+		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(2);
 	});
 
 	it('resolvePageClusterKeysの戻り値件数がページ数と食い違う場合はエラーを投げる', async () => {
 		const pages = await archive.getPages();
 
-		// Force a fresh computation (not a cache hit from an earlier test) so
-		// the mocked bad return value below is actually exercised.
-		const future = new Date(Date.now() + 120_000);
-		await utimes(archiveFilePath, future, future);
 		vi.mocked(resolvePageClusterKeys).mockResolvedValueOnce(['only-one-key']);
 
 		await expect(classifyPageTemplates({ archive, pages })).rejects.toThrow(

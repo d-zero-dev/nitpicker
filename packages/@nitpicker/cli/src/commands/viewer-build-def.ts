@@ -18,6 +18,10 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Always rebuild, even if the read model is already current (default: only build when missing/stale)',
 		},
+		skipTemplates: {
+			type: 'boolean',
+			desc: 'Skip the page template classification (DOM-structure clustering into per-site templates) that otherwise runs before the read model build',
+		},
 		verbose: {
 			type: 'boolean',
 			desc: 'Append each progress/phase line with an ISO 8601 timestamp instead of overwriting a single line — for timing which step of a slow build is the bottleneck (issue #294)',

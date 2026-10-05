@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
  * Covers the "classification present" surface against a dedicated fixture
  * (`generate-template-clusters-fixture.mjs`) — see
  * `playwright.template-clusters.config.ts` for why a dedicated fixture is
- * needed here. The "`--templates` never run" fallback is covered separately
+ * needed here. The "archive not classified yet" fallback is covered separately
  * in `template-clusters.spec.ts` against the shared fixture.
  */
 test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
@@ -257,7 +257,7 @@ test.describe('Nitpicker Viewer template clusters (classified fixture)', () => {
 			'No cluster-selection evidence was captured for this cluster.',
 		);
 		await expect(sectionsCluster).toContainText(
-			'npx @nitpicker/cli analyze <archive> --templates',
+			'npx @nitpicker/cli viewer-build <archive>',
 		);
 	});
 });

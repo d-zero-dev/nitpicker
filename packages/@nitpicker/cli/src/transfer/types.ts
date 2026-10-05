@@ -29,4 +29,9 @@ export interface TransferOutcome {
 	readonly pluginDataEntries: readonly string[];
 	/** The viewer read-model build's failure message, or `null` if it succeeded. */
 	readonly readModelError: string | null;
+	/**
+	 * The page template classification's failure message, or `null` if it
+	 * succeeded (or was skipped with `--skip-templates`).
+	 */
+	readonly templateClassificationError: string | null;
 }

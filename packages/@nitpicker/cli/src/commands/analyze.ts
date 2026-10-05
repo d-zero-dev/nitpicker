@@ -94,10 +94,7 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 		const config = await nitpicker.getConfig();
 		const plugins = config.analyze || [];
 
-		// `--templates` runs an opt-in core phase independent of the
-		// `@nitpicker/analyze-*` plugin system (see `AnalyzeOptions.classifyTemplates`),
-		// so a plugin-less config is only an error when templates aren't requested.
-		if (plugins.length === 0 && !flags.templates) {
+		if (plugins.length === 0) {
 			throw new Error(
 				'No analyze plugins found. Install @nitpicker/analyze-* packages or configure them in .nitpickerrc.',
 			);
@@ -105,31 +102,28 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 
 		const pluginFlags = flags.plugin ?? [];
 
-		const filter =
-			plugins.length === 0
-				? []
-				: await selectPlugins({
-						all: flags.all ?? false,
-						pluginFlags,
-						plugins,
-						isTTY: !!isTTY,
-						async promptPlugins() {
-							const labels = await readPluginLabels(plugins);
-							const choices = plugins.map((plugin) => ({
-								name: plugin.name,
-								message: labels.get(plugin.name) || plugin.name,
-							}));
-							const res = await prompt<{ filter: string[] }>([
-								{
-									message: 'What do you analyze?',
-									name: 'filter',
-									type: 'multiselect',
-									choices,
-								},
-							]);
-							return res.filter;
-						},
-					});
+		const filter = await selectPlugins({
+			all: flags.all ?? false,
+			pluginFlags,
+			plugins,
+			isTTY: !!isTTY,
+			async promptPlugins() {
+				const labels = await readPluginLabels(plugins);
+				const choices = plugins.map((plugin) => ({
+					name: plugin.name,
+					message: labels.get(plugin.name) || plugin.name,
+				}));
+				const res = await prompt<{ filter: string[] }>([
+					{
+						message: 'What do you analyze?',
+						name: 'filter',
+						type: 'multiselect',
+						choices,
+					},
+				]);
+				return res.filter;
+			},
+		});
 
 		// Warn about unknown plugin names specified via --plugin
 		if (pluginFlags.length > 0 && filter) {
@@ -142,11 +136,7 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 					`Unknown plugin(s): ${unknownPlugins.join(', ')}\nAvailable plugins: ${availableNames}`,
 				);
 			}
-			// Same `--templates` bypass as the plugin-less guard above: an
-			// entirely-unmatched `--plugin` list is only a hard error when
-			// there's no other reason (template classification) for this
-			// run to proceed.
-			if (filter.length === 0 && !flags.templates) {
+			if (filter.length === 0) {
 				throw new Error('No valid plugins to run.');
 			}
 		}
@@ -163,11 +153,7 @@ export async function analyze(args: string[], flags: AnalyzeFlags) {
 
 		{
 			using lanes = silent ? undefined : new Lanes({ verbose, indent: '  ' });
-			await nitpicker.analyze(filter, {
-				lanes,
-				verbose,
-				classifyTemplates: flags.templates,
-			});
+			await nitpicker.analyze(filter, { lanes, verbose });
 		}
 
 		await nitpicker.write();

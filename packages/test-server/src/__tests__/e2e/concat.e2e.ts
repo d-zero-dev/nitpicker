@@ -154,6 +154,29 @@ describe('concat', () => {
 
 			expect(await isViewerReadModelCurrent(archive)).toBe(true);
 
+			// The output is re-classified as a whole (per-source `templateKey`s
+			// can collide), so exactly the five internal pages carry a template
+			// and every key in `page_templates` has its cluster row.
+			const templatedRows: { url: string }[] = await knex
+				.select('url_refs.url as url')
+				.from('page_templates')
+				.join('content_items', 'content_items.id', 'page_templates.page_id')
+				.join('url_refs', 'url_refs.id', 'content_items.url_id');
+			expect(templatedRows.map((r) => new URL(r.url).pathname).toSorted()).toEqual([
+				'/scope/admin/',
+				'/scope/admin/settings',
+				'/scope/blog/',
+				'/scope/blog/post-1',
+				'/scope/blog/post-2',
+			]);
+			const keysWithoutClusterRow = await knex('page_templates')
+				.distinct('template_key')
+				.whereNotIn(
+					'template_key',
+					knex('page_template_clusters').select('template_key'),
+				);
+			expect(keysWithoutClusterRow).toEqual([]);
+
 			const { pending } = await archive.getCrawlingState();
 			expect(pending).toEqual([]);
 		} finally {

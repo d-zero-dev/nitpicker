@@ -61,6 +61,12 @@ vi.mock('@nitpicker/query', () => ({
 	VIEWER_READ_MODEL_SCHEMA_VERSION: 29,
 }));
 
+const mockClassifyTemplatesQuietly = vi.fn();
+
+vi.mock('../crawl/classify-templates-quietly.js', () => ({
+	classifyTemplatesQuietly: mockClassifyTemplatesQuietly,
+}));
+
 const mockFormatCliError = vi.fn();
 
 vi.mock('../format-cli-error.js', () => ({
@@ -97,6 +103,8 @@ describe('viewerBuild command', () => {
 		});
 		mockArchiveWrite.mockResolvedValue();
 		mockArchiveClose.mockResolvedValue();
+		mockClassifyTemplatesQuietly.mockResolvedValue(null);
+		process.exitCode = undefined;
 		// Drives the real, full phase sequences by default so every row a
 		// call doesn't override still settles instead of hanging forever —
 		// `appendViewerReadModelPhaseRows` only resolves a row on the next
@@ -131,6 +139,7 @@ describe('viewerBuild command', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		process.exitCode = undefined;
 	});
 
 	it('exits with error when no archive path is provided', async () => {
@@ -206,6 +215,49 @@ describe('viewerBuild command', () => {
 		expect(output).toContain('Backfilling dedupe-cap markers');
 		expect(output).toContain('Checkpointing read model');
 		expect(output).toContain('Write archive');
+	});
+
+	it('classifies page templates on the extracted archive before the read-model rows, on both the backfill-only and full-build paths', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+		const archive = await mockArchiveOpen();
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(
+			archive,
+			expect.any(Function),
+		);
+		const output = renderedOutput();
+		expect(output.indexOf('Classify page templates')).toBeGreaterThan(
+			output.indexOf('Extract archive'),
+		);
+		expect(output.indexOf('Classify page templates')).toBeLessThan(
+			output.indexOf('Backfilling page content hashes'),
+		);
+
+		mockClassifyTemplatesQuietly.mockClear();
+		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledOnce();
+	});
+
+	it('skips the Classify page templates row when --skip-templates is passed', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], { skipTemplates: true } as never);
+
+		expect(mockClassifyTemplatesQuietly).not.toHaveBeenCalled();
+		expect(renderedOutput()).not.toContain('Classify page templates');
+	});
+
+	it('still builds the read model and writes the archive when classification fails, then warns with exit code 2', async () => {
+		mockClassifyTemplatesQuietly.mockResolvedValue('clustering blew up');
+		const { viewerBuild } = await import('./viewer-build.js');
+		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
+
+		expect(mockRunViewerReadModelBackfillsInWorker).toHaveBeenCalledOnce();
+		expect(mockArchiveWrite).toHaveBeenCalledOnce();
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining('page template classification failed (clustering blew up)'),
+		);
+		expect(process.exitCode).toBe(2);
 	});
 
 	it('renders all 22 full-build phases as individual rows when --force is passed (issue #294)', async () => {

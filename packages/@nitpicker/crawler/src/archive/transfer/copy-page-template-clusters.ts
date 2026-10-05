@@ -22,9 +22,9 @@ const SRC = TRANSFER_SOURCE_ALIAS;
  * template — `ON CONFLICT(template_key) DO NOTHING` below means the
  * FIRST source's `reason_json` (cluster-selection evidence) wins and the
  * merged `member_count` recompute mixes both sources' pages under it.
- * Re-running `nitpicker analyze --templates` on the concat output
- * recomputes clean, merged-corpus clusters from scratch and is the
- * documented remedy (see `docs/concat.md`).
+ * `concat` therefore re-classifies its output right after this copy,
+ * recomputing clean, merged-corpus clusters (see `docs/concat.md`); the
+ * copied rows only seed label inheritance for that run.
  * @param trx - Transaction with the source ATTACHed as
  *   {@link TRANSFER_SOURCE_ALIAS}. Must run after
  *   `copySimplePageScopedTables` (which copies `page_templates` itself).

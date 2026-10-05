@@ -458,10 +458,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			templateClusters: {
 				title: 'Template Clusters',
 				description:
-					'Every DOM-structure template cluster found by `--templates`, with the top directories by page count and common stylesheet set computed from its member pages — the raw template key is an opaque blocking key and is not human-readable on its own.',
+					'Every DOM-structure template cluster found by template classification, with the top directories by page count and common stylesheet set computed from its member pages — the raw template key is an opaque blocking key and is not human-readable on its own.',
 				notClassified:
 					'This archive has no DOM-structure template classification yet. Run the following, then re-open the viewer:',
-				notClassifiedCommandHint: 'npx @nitpicker/cli analyze <archive> --templates',
+				notClassifiedCommandHint: 'npx @nitpicker/cli viewer-build <archive>',
 				noClusters: 'No template clusters found.',
 				pageCount: '{count} pages',
 				relatedPaths: 'Related paths',
@@ -476,7 +476,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				viewPages: 'View pages in this cluster',
 				blocking: 'Blocking evidence',
 				blockingCaveat:
-					'Why `--templates` grouped this cluster separately from other clusters, as reported by the clustering library.',
+					'Why the classification grouped this cluster separately from other clusters, as reported by the clustering library.',
 				distinctiveStylesheets: 'Distinctive stylesheets',
 				distinctiveCssCaveat:
 					'Stylesheets left after removing site-wide chrome and non-first-party hosts — distinctive to this blocking group, but shared with any sibling clusters listed below.',
@@ -491,7 +491,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				siblingsCaveat:
 					'Clusters that split off from the same blocking group as this one.',
 				noReason: 'No cluster-selection evidence was captured for this cluster.',
-				noReasonCommandHint: 'npx @nitpicker/cli analyze <archive> --templates',
+				noReasonCommandHint: 'npx @nitpicker/cli viewer-build <archive>',
 				overviewClusters: 'Clusters',
 				overviewPages: 'Classified pages',
 				overviewSingletons: 'Single-page clusters',
@@ -512,13 +512,13 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				colMergedBlocks: 'Also from',
 				blockOverview: 'Blocks by kind',
 				blockOverviewCaveat:
-					'A block is the coarse group `--templates` forms first — by distinctive stylesheet set, or by first URL path segment (with pages that recorded no stylesheet folded into their section’s stylesheet block) — before splitting it into clusters by DOM structure. Clusters and pages are counted under their first block only.',
+					'A block is the coarse group the classification forms first — by distinctive stylesheet set, or by first URL path segment (with pages that recorded no stylesheet folded into their section’s stylesheet block) — before splitting it into clusters by DOM structure. Clusters and pages are counted under their first block only.',
 				byBlock: 'Clusters by block',
 				byBlockCaveat:
 					'Every cluster listed under the block(s) it drew pages from. Clusters in the same block are each other’s sibling clusters. A cluster merged across blocks appears under each of them, with the others named in “Also from”, so a block’s page total can count such a cluster more than once.',
 				allClusters: 'All clusters',
 				provisionalLabels:
-					'Template names on this archive are provisional: the classification predates stored labels, so they are numbered on the fly and may change on the next `analyze --templates`, which stores them for good.',
+					'Template names on this archive are provisional: the classification predates stored labels, so they are numbered on the fly and may change the next time the archive is classified (`viewer-build`, or a crawl), which stores them for good.',
 				memberHint: 'Members',
 			},
 			consoleLogs: {
@@ -1005,10 +1005,10 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			templateClusters: {
 				title: 'テンプレートクラスタ',
 				description:
-					'`--templates` で検出したDOM構造テンプレートクラスタの一覧。各クラスタの所属ページ数が多いディレクトリ上位と共通CSSファイルを算出して表示します — 生のテンプレートキーはブロッキング用の内部識別子で、それ自体は人間には読めません。',
+					'テンプレート分類で検出したDOM構造テンプレートクラスタの一覧。各クラスタの所属ページ数が多いディレクトリ上位と共通CSSファイルを算出して表示します — 生のテンプレートキーはブロッキング用の内部識別子で、それ自体は人間には読めません。',
 				notClassified:
 					'このアーカイブはまだテンプレート分類を実行していません。以下を実行してからビューアを再度開いてください:',
-				notClassifiedCommandHint: 'npx @nitpicker/cli analyze <archive> --templates',
+				notClassifiedCommandHint: 'npx @nitpicker/cli viewer-build <archive>',
 				noClusters: 'テンプレートクラスタが見つかりません。',
 				pageCount: '{count} ページ',
 				relatedPaths: '関連パス',
@@ -1023,7 +1023,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				viewPages: 'このクラスタのページを見る',
 				blocking: '分類の根拠',
 				blockingCaveat:
-					'`--templates` がこのクラスタを他のクラスタと分けて分類した理由（クラスタリングライブラリの報告）。',
+					'テンプレート分類がこのクラスタを他のクラスタと分けた理由（クラスタリングライブラリの報告）。',
 				distinctiveStylesheets: '特徴的なCSSファイル',
 				distinctiveCssCaveat:
 					'サイト全体共通のCSSと自ドメイン以外のホストを除いた後に残ったCSSファイル — このブロッキンググループに特徴的ですが、下記の兄弟クラスタとは共有される場合があります。',
@@ -1037,7 +1037,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				siblings: '兄弟クラスタ',
 				siblingsCaveat: '同じブロッキンググループから分岐したクラスタ。',
 				noReason: 'このクラスタのクラスタ選定理由は保存されていません。',
-				noReasonCommandHint: 'npx @nitpicker/cli analyze <archive> --templates',
+				noReasonCommandHint: 'npx @nitpicker/cli viewer-build <archive>',
 				overviewClusters: 'クラスタ数',
 				overviewPages: '分類済みページ',
 				overviewSingletons: '1ページのみのクラスタ',
@@ -1058,13 +1058,13 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				colMergedBlocks: '統合元',
 				blockOverview: '種別ごとのブロック',
 				blockOverviewCaveat:
-					'ブロックは `--templates` が最初に作る粗いグループです。特徴的なCSSファイルの組み合わせ、またはURLの先頭パス（CSS参照が記録されていないページは、同じセクションのCSSブロックに合流）で分け、そのあとDOM構造でクラスタに分割します。クラスタ数とページ数は先頭のブロックにだけ数えます。',
+					'ブロックはテンプレート分類が最初に作る粗いグループです。特徴的なCSSファイルの組み合わせ、またはURLの先頭パス（CSS参照が記録されていないページは、同じセクションのCSSブロックに合流）で分け、そのあとDOM構造でクラスタに分割します。クラスタ数とページ数は先頭のブロックにだけ数えます。',
 				byBlock: 'ブロック別のクラスタ',
 				byBlockCaveat:
 					'各クラスタを、ページの取り込み元ブロックの下に並べた一覧。同じブロック内のクラスタは互いに兄弟クラスタです。複数ブロックをまたいで統合されたクラスタは各ブロックの下に現れ、「統合元」に他方のブロックを示します。そのためブロックのページ数は、こうしたクラスタを重複して数えることがあります。',
 				allClusters: 'すべてのクラスタ',
 				provisionalLabels:
-					'このアーカイブのテンプレート名は暫定です。ラベル保存より前の分類なので表示時に採番しており、次の `analyze --templates` で変わることがあります（実行するとラベルが保存されて確定します）。',
+					'このアーカイブのテンプレート名は暫定です。ラベル保存より前の分類なので表示時に採番しており、次にこのアーカイブを分類したとき（`viewer-build` またはクロール）に変わることがあります（分類するとラベルが保存されて確定します）。',
 				memberHint: 'メンバー',
 			},
 			consoleLogs: {

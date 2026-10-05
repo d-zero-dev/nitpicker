@@ -17,6 +17,7 @@ import {
 } from '@nitpicker/query';
 
 import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';
+import { classifyTemplatesQuietly } from '../crawl/classify-templates-quietly.js';
 import { createVerboseTimestampStream } from '../crawl/create-verbose-timestamp-stream.js';
 import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 import { ExitCode } from '../exit-code.js';
@@ -86,9 +87,10 @@ function unwrapTaskListStepError(error: unknown): unknown {
  * Rendered as three sequential `@d-zero/dealer` `TaskList`s (issue #294's
  * original single-`Lanes`-line design, migrated once `TaskList` gained
  * per-phase row expansion): `Back up archive` → `Extract archive` (list 1),
- * then one row per internal read-model phase (list 2 — every
- * `buildViewerReadModel` phase fully expanded, not collapsed into a single
- * text-swapping row), then `Write archive` (list 3). Three separate
+ * then `Classify page templates` (unless `--skip-templates`) followed by one
+ * row per internal read-model phase (list 2 — every `buildViewerReadModel`
+ * phase fully expanded, not collapsed into a single text-swapping row),
+ * then `Write archive` (list 3). Three separate
  * `TaskList.run()` calls rather than one continuous pipeline because which
  * phase array list 2 renders (`VIEWER_READ_MODEL_FULL_BUILD_PHASES` or
  * `VIEWER_READ_MODEL_BACKFILL_PHASES`) depends on `getViewerReadModelVersion`,
@@ -131,7 +133,7 @@ export async function viewerBuild(
 		console.error('Error: No .nitpicker file specified.');
 		// eslint-disable-next-line no-console
 		console.error(
-			'Usage: npx @nitpicker/cli viewer-build <archive> [--force] [--verbose]',
+			'Usage: npx @nitpicker/cli viewer-build <archive> [--force] [--skip-templates] [--verbose]',
 		);
 		process.exit(ExitCode.Fatal);
 	}
@@ -181,9 +183,14 @@ export async function viewerBuild(
 	// restoring that broken copy back over `absFilePath` would destroy a
 	// still-intact original archive. Restoring must only run once the backup
 	// is known to have actually completed.
-	const lifecycle: { archive: ArchiveType | null; backupComplete: boolean } = {
+	const lifecycle: {
+		archive: ArchiveType | null;
+		backupComplete: boolean;
+		templateClassificationError: string | null;
+	} = {
 		archive: null,
 		backupComplete: false,
+		templateClassificationError: null,
 	};
 
 	try {
@@ -240,8 +247,29 @@ export async function viewerBuild(
 			!!flags.force ||
 			(await getViewerReadModelVersion(archive)) !== VIEWER_READ_MODEL_SCHEMA_VERSION;
 
+		// Classification runs on every `viewer-build` (full and backfill-only
+		// alike): it is the way to (re)derive templates for an archive crawled
+		// with `--skip-templates` or before classification existed, and it
+		// does not depend on the read-model schema version. Best-effort like
+		// the crawl-end step: a failure shows on its own row, the build and
+		// the write still run, and the command exits with a warning code.
+		let buildPipeline = TaskList.from(archive);
+		if (!flags.skipTemplates) {
+			buildPipeline = buildPipeline.pipe(
+				'Classify page templates',
+				async (a: ArchiveType, ctx: StepContext<ArchiveType>) => {
+					lifecycle.templateClassificationError = await classifyTemplatesQuietly(
+						a,
+						(message) => {
+							ctx.progress(message);
+						},
+					);
+					return a;
+				},
+			);
+		}
 		await appendViewerReadModelPhaseRows(
-			TaskList.from(archive),
+			buildPipeline,
 			fullBuild ? VIEWER_READ_MODEL_FULL_BUILD_PHASES : VIEWER_READ_MODEL_BACKFILL_PHASES,
 			{
 				getArchive: (a: ArchiveType) => a,
@@ -310,4 +338,11 @@ export async function viewerBuild(
 		process.exit(ExitCode.Fatal);
 	}
 	await lifecycle.archive?.close().catch(() => {});
+	if (lifecycle.templateClassificationError !== null) {
+		// eslint-disable-next-line no-console
+		console.error(
+			`Warning: page template classification failed (${lifecycle.templateClassificationError}). Retry with: npx @nitpicker/cli viewer-build ${filePath}`,
+		);
+		process.exitCode = ExitCode.Warning;
+	}
 }

@@ -13,7 +13,7 @@ Nitpicker は Web サイト全体をヘッドレスブラウザでクロール�
 ## CLI コマンド
 
 ```sh
-npx @nitpicker/cli crawl <URL> [<URL>...]              # クロールして .nitpicker 生成（複数 URL で multi-root、TTY実行中は parallels/exclude 等を対話入力可）
+npx @nitpicker/cli crawl <URL> [<URL>...]              # クロールして .nitpicker 生成（複数 URL で multi-root、TTY実行中は parallels/exclude 等を対話入力可。完了時にテンプレート分類を自動実行、--skip-templates で省略）
 npx @nitpicker/cli crawl <archive> --append <URL>      # 既存アーカイブに起点を追加クロール
 npx @nitpicker/cli crawl <archive> --retry-failed      # 失敗ページのみ再取得（永続失敗は自動除外）
 npx @nitpicker/cli crawl <archive> --inventory <urls.txt>  # URL リストとの突合で未発見ページを取り込み
@@ -26,11 +26,11 @@ npx @nitpicker/cli pipeline <URL>                      # crawl → analyze → r
 npx @nitpicker/cli query <file> <sub-command>          # アーカイブへのクエリ（JSON 出力）
 npx @nitpicker/cli query <file> match-urls --urls <urls.txt>  # URL リストとアーカイブの突合結果を診断（未収録/redirect/対象外を判別）
 npx @nitpicker/cli viewer <file-or-stub-dir>           # ローカルビューア起動（常駐、Ctrl-C で停止）
-npx @nitpicker/cli viewer-build <archive> [--force]    # viewer read model を明示的に(再)ビルド
+npx @nitpicker/cli viewer-build <archive> [--force]    # viewer read model を明示的に(再)ビルド + ページのテンプレート分類（--skip-templates で分類を省略）
 npx @nitpicker/cli cache list [--json]                 # on-disk キャッシュ一覧（tar展開キャッシュ＋analyze table、サイズ・最終更新日時）
 npx @nitpicker/cli cache clear [archive]               # on-disk キャッシュ全削除、または指定アーカイブのみ削除
-npx @nitpicker/cli concat <a> <b> [...] -o <out>       # 複数アーカイブを結合（roots 和集合、同一 URL は最も情報量の多い観測を採用。再クロール・再昇格はしない）
-npx @nitpicker/cli split <archive> <URL> [...] -o <out> # 指定スコープ配下だけを新アーカイブに抽出（範囲外の被参照ページは external stub 化）
+npx @nitpicker/cli concat <a> <b> [...] -o <out>       # 複数アーカイブを結合（roots 和集合、同一 URL は最も情報量の多い観測を採用。再クロール・再昇格はしない。テンプレート分類は出力で再実行）
+npx @nitpicker/cli split <archive> <URL> [...] -o <out> # 指定スコープ配下だけを新アーカイブに抽出（範囲外の被参照ページは external stub 化。テンプレート分類は出力で再実行）
 ```
 
 フラグの相互排他・挙動の詳細は `--help` と各コマンド実装（`packages/@nitpicker/cli/src/commands/`）の JSDoc を参照。
