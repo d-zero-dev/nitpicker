@@ -64,13 +64,23 @@ describe('resolveCredentialFilePath', () => {
 		expect(resolveCredentialFilePath(undefined, { cwd, env: {} })).toBeUndefined();
 	});
 
-	it('treats an empty explicit path and an empty env value as unset', () => {
+	it('treats an empty explicit path as unset and falls through to the env path', () => {
 		expect(
 			resolveCredentialFilePath('', {
 				cwd,
+				env: { GOOGLE_AUTH_CREDENTIALS: '/env/path.json' },
+			}),
+		).toBe('/env/path.json');
+	});
+
+	it('treats an empty env value as unset and falls through to credentials.json', async () => {
+		await fs.writeFile(path.join(cwd, 'credentials.json'), '{}');
+		expect(
+			resolveCredentialFilePath(undefined, {
+				cwd,
 				env: { GOOGLE_AUTH_CREDENTIALS: '' },
 			}),
-		).toBeUndefined();
+		).toBe(path.join(cwd, 'credentials.json'));
 	});
 
 	it('reads process.env when options are omitted', () => {

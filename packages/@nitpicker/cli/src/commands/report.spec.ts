@@ -456,6 +456,24 @@ describe('report command', () => {
 		expect(resolveCredentialFilePath).not.toHaveBeenCalled();
 	});
 
+	it('forwards an explicit --credentials value to the resolver', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './sa.json',
+			config: undefined,
+			all: undefined,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(resolveCredentialFilePath).toHaveBeenCalledWith('./sa.json');
+		expect(runReport).toHaveBeenCalledWith(
+			expect.objectContaining({ credentialFilePath: './sa.json' }),
+		);
+	});
+
 	it('passes the resolved credential path to the Sheets reporter when --credentials is omitted', async () => {
 		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
 		vi.mocked(resolveCredentialFilePath).mockReturnValue('/run/secrets/google.json');

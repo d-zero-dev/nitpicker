@@ -104,6 +104,28 @@ describe('report', () => {
 		vi.restoreAllMocks();
 	});
 
+	it('passes the given credentialFilePath to authentication as is', async () => {
+		const { authentication } = await import('@d-zero/google-auth');
+
+		await report({ ...baseParams, credentialFilePath: './sa.json', all: true });
+
+		expect(vi.mocked(authentication).mock.calls[0]?.[0]).toBe('./sa.json');
+	});
+
+	it('passes an omitted credentialFilePath to authentication as undefined so google-auth falls back to the environment and ADC', async () => {
+		const { authentication } = await import('@d-zero/google-auth');
+
+		await report({
+			filePath: baseParams.filePath,
+			sheetUrl: baseParams.sheetUrl,
+			configPath: null,
+			all: true,
+		});
+
+		expect(vi.mocked(authentication)).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(authentication).mock.calls[0]?.[0]).toBeUndefined();
+	});
+
 	it('skips enquirer prompt when all=true', async () => {
 		const promptSpy = vi.spyOn(enquirer, 'prompt');
 
