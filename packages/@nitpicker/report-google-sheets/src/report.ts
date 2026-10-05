@@ -86,8 +86,15 @@ export interface ReportParams {
 	 * cached from an earlier Spreadsheet-only run must be deleted to re-authorize.
 	 */
 	readonly sheetUrl: string;
-	/** Path to the OAuth2 credentials JSON file. */
-	readonly credentialFilePath: string;
+	/**
+	 * Path to the credentials JSON file (OAuth2 Desktop, service account, or
+	 * authorized user — detected by `@d-zero/google-auth` from the contents).
+	 * When omitted, `@d-zero/google-auth` resolves `GOOGLE_AUTH_CREDENTIALS`
+	 * and then Application Default Credentials. This package never reads the
+	 * environment itself; the CLI's `report`/`pipeline` commands settle the
+	 * `./credentials.json` fallback before calling here.
+	 */
+	readonly credentialFilePath?: string;
 	/** Path to the nitpicker config file, or `null` for defaults. */
 	readonly configPath: string | null;
 	/** When `true`, generate all sheets without interactive prompt. */
@@ -171,6 +178,15 @@ export interface ReportParams {
  *   sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
  *   credentialFilePath: './credentials.json',
  *   configPath: './nitpicker.config.json',
+ * });
+ * ```
+ * @example
+ * ```ts
+ * // Omit `credentialFilePath` to use GOOGLE_AUTH_CREDENTIALS, then ADC.
+ * await report({
+ *   filePath: './output.nitpicker',
+ *   sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
+ *   configPath: null,
  * });
  * ```
  * @example
