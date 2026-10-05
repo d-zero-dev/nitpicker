@@ -8,12 +8,14 @@ import type {
 	TechnologyCount,
 } from './types.js';
 import type { ArchiveAccessor, ErrorKind, PageSource } from '@nitpicker/crawler';
+import type { Knex } from 'knex';
 
 import { classifyErrorKind, isWithinOutageWindow } from '@nitpicker/crawler';
 
+import { applyPageListUniverse } from './apply-page-list-universe.js';
 import { classifyContentType } from './classify-content-type.js';
+import { computeFromListAllowedPageIds } from './compute-from-list-allowed-page-ids.js';
 import { countConsoleLogsByType } from './count-console-logs-by-type.js';
-import { excludeSkippedPages } from './exclude-skipped-pages.js';
 import { listAllOutageWindows } from './list-all-outage-windows.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
@@ -28,10 +30,24 @@ import { resolveFailedPageMessages } from './resolve-failed-page-messages.js';
  * `IS NOT NULL` on the id column is equivalent to
  * `IS NOT NULL AND != ''` on the raw text.
  *
- * Every count excludes `alias_of_id`-having rows the same way it already
- * excludes `redirect_dest_id`-having rows — a page merged into another via
- * URL-normalization is no more "its own page" for counting purposes than an
- * HTTP redirect source is.
+ * **Row universe = the Page List's.** Every aggregation is constrained by
+ * `applyPageListUniverse`, the same predicate `buildViewerReadModel` uses to
+ * decide which rows `viewer_pages` admits, so Summary counts and Page List
+ * counts agree structurally. Concretely: scraped rows that are crawl targets,
+ * external, or redirect sources; `alias_of_id`-having rows (merged into
+ * another page via URL normalization) and skipped rows never count; and on a
+ * `fromList` archive (`config.fromList`) internal rows count only when they
+ * are one of `config.roots` or the page a root redirects/aliases to
+ * (`computeFromListAllowedPageIds`) — a page a crawler bug scraped despite
+ * `--list` stays out of the totals. External rows are never restricted
+ * by that rule. The rule also scopes `technologyDistribution` and
+ * `consoleLogCounts`, which are joined to `content_items` for it.
+ *
+ * Redirect-source rows therefore count as pages (their status 3xx shows in
+ * `statusDistribution`), but they own no content: their Content-Type reads
+ * as `null` (category `unknown`, like their `viewer_pages` row) and they stay
+ * out of the `metadataFulfillment` denominator. Internal pages the crawl only
+ * fetched incidentally (`is_target = 0`, not a redirect source) do not count.
  *
  * `status = 404` rows are excluded from every page/content total and from
  * `contentTypeDistribution` regardless of provenance — no page exists behind
@@ -71,13 +87,31 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	const { baseUrl, roots, excludes, excludeKeywords, excludeUrls, maxExcludedDepth } =
 		config;
 
-	const consoleLogCountsPromise = countConsoleLogsByType(knex);
-	const failedPageIdRowsPromise = knex('content_items')
-		.select('id')
-		.where('scraped', 1)
-		.where('status', -1)
-		.whereNull('redirect_dest_id')
-		.whereNull('alias_of_id') as Promise<{ id: number }[]>;
+	// `fromList` archives only: internal rows are restricted to the operator's
+	// list (plus redirect/alias destinations), exactly like `viewer_pages`.
+	// `null` = no restriction.
+	const allowedInternalPageIds = config.fromList
+		? await computeFromListAllowedPageIds({
+				knex,
+				roots,
+				disableQueries: config.disableQueries,
+			})
+		: null;
+	/**
+	 * Constrains a `content_items` query to the Page List row universe.
+	 * @param qb - The query to constrain, with `content_items` aliased as `ci`.
+	 */
+	const applyUniverse = (qb: Knex.QueryBuilder): void => {
+		applyPageListUniverse(qb, { alias: 'ci', allowedInternalPageIds });
+	};
+
+	const consoleLogCountsPromise = countConsoleLogsByType(knex, {
+		scopePages: applyUniverse,
+	});
+	const failedPageIdRowsPromise = knex('content_items as ci')
+		.select('ci.id as id')
+		.where('ci.status', -1)
+		.modify(applyUniverse) as Promise<{ id: number }[]>;
 	const failedPageMessagesPromise = failedPageIdRowsPromise.then((rows) =>
 		resolveFailedPageMessages(
 			accessor,
@@ -103,12 +137,14 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 				'ci.source as source',
 			)
 			.count('ci.id as count')
-			.where('ci.scraped', 1)
-			.whereNull('ci.redirect_dest_id')
-			.whereNull('ci.alias_of_id')
-			.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
+			.modify(applyUniverse)
+			// A redirect-source row owns no content (its Content-Type is read as
+			// `null`, like `viewer_pages` does), so it counts as an HTML-or-null
+			// page whatever stale `content_type_id` it still carries.
 			.where((qb) => {
-				qb.whereNull('ctr.raw').orWhere('ctr.raw', 'text/html');
+				qb.whereNotNull('ci.redirect_dest_id')
+					.orWhereNull('ctr.raw')
+					.orWhere('ctr.raw', 'text/html');
 			})
 			// `source` in the grouping key only serves the 404 seed/non-seed
 			// split below — for every other status the JS accumulator merges
@@ -159,34 +195,44 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 					'COUNT(CASE WHEN "pm"."og_image_url_id" IS NOT NULL THEN 1 END) as hasOgImage',
 				),
 			)
-			.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
-			.whereNull('ci.redirect_dest_id')
-			.whereNull('ci.alias_of_id') as Promise<Record<string, number>[]>,
+			.modify(applyUniverse)
+			.where({ 'ci.is_external': 0, 'ctr.raw': 'text/html' })
+			// Redirect sources carry no metadata of their own, so they stay out
+			// of the fulfillment denominator even though they count as pages.
+			.whereNull('ci.redirect_dest_id') as Promise<Record<string, number>[]>,
 		knex('content_items as ci')
 			.leftJoin('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
-			.select('ctr.raw as contentType', 'ci.is_external as isExternal')
+			.select(
+				'ctr.raw as contentType',
+				'ci.is_external as isExternal',
+				knex.raw('("ci"."redirect_dest_id" IS NOT NULL) as isRedirectSource'),
+			)
 			.count('ci.id as count')
-			.where('ci.scraped', 1)
-			.whereNull('ci.redirect_dest_id')
-			.whereNull('ci.alias_of_id')
-			.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
+			.modify(applyUniverse)
 			// No page exists behind a 404 URL, whatever its provenance, so
 			// content totals skip them entirely. NULL-status legacy rows are
 			// not 404s and stay counted.
 			.where((qb) => {
 				qb.whereNull('ci.status').orWhereNot('ci.status', 404);
 			})
-			.groupBy('ctr.raw', 'ci.is_external') as Promise<
+			.groupBy(
+				'ctr.raw',
+				'ci.is_external',
+				knex.raw('("ci"."redirect_dest_id" IS NOT NULL)'),
+			) as Promise<
 			{
 				contentType: string | null;
 				isExternal: 0 | 1;
+				isRedirectSource: number;
 				count: number | string;
 			}[]
 		>,
-		knex('page_technologies')
-			.select('technology')
-			.countDistinct({ pageCount: 'pageId' })
-			.groupBy('technology') as Promise<
+		knex('page_technologies as pt')
+			.join('content_items as ci', 'ci.id', 'pt.pageId')
+			.modify(applyUniverse)
+			.select('pt.technology as technology')
+			.countDistinct({ pageCount: 'pt.pageId' })
+			.groupBy('pt.technology') as Promise<
 			{ technology: string; pageCount: number | string }[]
 		>,
 		failedPageIdRowsPromise,
@@ -323,7 +369,9 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 	let internalContents = 0;
 	let externalContents = 0;
 	for (const row of contentTypeRows) {
-		const category = classifyContentType(row.contentType);
+		// A redirect source owns no content, so its Content-Type reads as
+		// `null` (category `unknown`) — same as its `viewer_pages` row.
+		const category = classifyContentType(row.isRedirectSource ? null : row.contentType);
 		const bucket = contentTypeAcc.get(category) ?? { internal: 0, external: 0 };
 		const n = Number(row.count);
 		if (row.isExternal === 1) {

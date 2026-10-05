@@ -23,7 +23,8 @@ vi.mock('./precomputed-disk-cache.js', () => ({
 	),
 }));
 
-const { getSummary, getSummaryFastPath } = await import('@nitpicker/query');
+const { getSummary, getSummaryFastPath, VIEWER_READ_MODEL_SCHEMA_VERSION } =
+	await import('@nitpicker/query');
 const { getOrComputeOnDisk } = await import('./precomputed-disk-cache.js');
 
 afterEach(() => {
@@ -171,6 +172,16 @@ describe('getCachedSummary', () => {
 		const recovered = await getCachedSummary(context);
 		expect(recovered.baseUrl).toBe('recovered');
 		expect(getSummaryFastPath).toHaveBeenCalledTimes(2);
+	});
+
+	it('keys the on-disk artefact by the read model schema version so a Summary row-universe change never replays an old summary.json', async () => {
+		vi.mocked(getSummaryFastPath).mockResolvedValueOnce(makeSummary('versioned'));
+
+		await getCachedSummary(makeContext('archive_versioned'));
+
+		expect(vi.mocked(getOrComputeOnDisk).mock.calls[0]?.[1]).toBe(
+			`summary-v${VIEWER_READ_MODEL_SCHEMA_VERSION}`,
+		);
 	});
 
 	it('passes an isValid guard to getOrComputeOnDisk that rejects a disk cache missing exclude-setting fields (issue #261)', async () => {

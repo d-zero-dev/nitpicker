@@ -602,6 +602,13 @@ export interface TechnologyCount {
 
 /**
  * Site-wide summary statistics for a crawled archive.
+ *
+ * Every page/content count is taken over the same row universe the Page
+ * List (`viewer_pages`) is built from, so Summary and Page List agree: on a
+ * `fromList` archive internal rows count only when they are a root (or the
+ * page a root redirects/aliases to), redirect-source rows count as pages
+ * (Content-Type `unknown`, outside the metadata denominator), and internal
+ * pages fetched only incidentally do not count. See `getSummary`.
  */
 export interface SummaryResult {
 	/** The base URL of the crawled site. Equals `roots[0]` for multi-root archives. */

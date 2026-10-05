@@ -6,10 +6,11 @@ import type { Knex } from 'knex';
 import { decodeURISafely } from '@d-zero/shared/decode-uri-safely';
 import { tryParseUrl } from '@d-zero/shared/parse-url';
 
+import { applyPageListUniverse } from '../apply-page-list-universe.js';
 import { buildHeaderPresenceSelects } from '../build-header-presence-selects.js';
 import { classifyContentType } from '../classify-content-type.js';
+import { computeFromListAllowedPageIds } from '../compute-from-list-allowed-page-ids.js';
 import { computeIsolatedClusters } from '../compute-isolated-clusters.js';
-import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 
@@ -29,7 +30,6 @@ import { computeDisplayTitleByPageId } from './compute-display-title-by-page-id.
 import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
 import { computeDuplicateGroupRows } from './compute-duplicate-group-rows.js';
 import { computeErrorKindInsertRows } from './compute-error-kind-insert-rows.js';
-import { computeFromListAllowedPageIds } from './compute-from-list-allowed-page-ids.js';
 import { computeGraphReadModelRows } from './compute-graph-read-model-rows.js';
 import { computeHeaderCheckInsertRows } from './compute-header-check-insert-rows.js';
 import { computeImageInsertRows } from './compute-image-insert-rows.js';
@@ -744,9 +744,11 @@ function toViewerPageInsertRow(
  * restricted by this rule, and neither are the derived tables that
  * independently re-scan `content_items` rather than reusing `sourceRows`
  * (`viewer_header_checks`/`viewer_duplicate_groups`/
- * `viewer_duplicate_group_pages`/`viewer_mismatches`/`viewer_summary`) —
- * Pages is the one view an operator expects to match their list; every
- * other view keeps showing everything the crawl actually collected.
+ * `viewer_duplicate_group_pages`/`viewer_mismatches`) — those keep showing
+ * everything the crawl actually collected. `viewer_summary` is the
+ * exception: it comes from `getSummary`, which applies the same row
+ * universe and `fromList` scope as this scan (`applyPageListUniverse` +
+ * `computeFromListAllowedPageIds`), so Summary and Page List counts agree.
  *
  * `viewer_page_anchors` is created but left with zero rows: populating it
  * requires real pagination-cursor math tied to a specific page size/page
@@ -873,7 +875,7 @@ export async function buildViewerReadModel(
 		// as the `viewer_url_refs` INSERT just above.
 		const allowedInternalPageIds = config.fromList
 			? await computeFromListAllowedPageIds({
-					trx,
+					knex: trx,
 					roots: config.roots,
 					disableQueries: config.disableQueries,
 				})
@@ -973,15 +975,12 @@ export async function buildViewerReadModel(
 					'redirect_dest_vur.url',
 					'redirect_dest_ur.url',
 				)
-				.where('ci.scraped', 1)
-				.where((qb) =>
-					qb
-						.where('ci.is_target', 1)
-						.orWhere('ci.is_external', 1)
-						.orWhereNotNull('ci.redirect_dest_id'),
-				)
-				.whereNull('ci.alias_of_id')
-				.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
+				// The row universe is shared with `getSummary` so Summary counts
+				// and Page List counts agree structurally. The `fromList` allow-list
+				// is deliberately NOT passed here: this scan runs once per keyset
+				// chunk, and re-parsing a large JSON array per chunk costs more than
+				// the JS `Set` check in the loop below.
+				.modify((qb) => applyPageListUniverse(qb, { alias: 'ci' }))
 				.andWhere('ci.id', '>', lastSourceId)
 				.orderBy('ci.id', 'asc')
 				.limit(SOURCE_READ_CHUNK_SIZE)

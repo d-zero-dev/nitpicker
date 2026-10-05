@@ -250,7 +250,7 @@ describe('computeFromListAllowedPageIds', () => {
 
 	it('includes a root with no redirect/alias as itself', async () => {
 		const allowed = await computeFromListAllowedPageIds({
-			trx: knex,
+			knex,
 			roots: ['https://example.com/a'],
 			disableQueries: false,
 		});
@@ -260,7 +260,7 @@ describe('computeFromListAllowedPageIds', () => {
 
 	it('resolves a redirecting root to its destination, admitting both the root and the destination', async () => {
 		const allowed = await computeFromListAllowedPageIds({
-			trx: knex,
+			knex,
 			roots: ['https://example.com/b'],
 			disableQueries: false,
 		});
@@ -271,7 +271,7 @@ describe('computeFromListAllowedPageIds', () => {
 
 	it('resolves one further hop when the redirect destination is itself a non-representative alias-group member', async () => {
 		const allowed = await computeFromListAllowedPageIds({
-			trx: knex,
+			knex,
 			roots: ['https://example.com/d'],
 			disableQueries: false,
 		});
@@ -282,7 +282,7 @@ describe('computeFromListAllowedPageIds', () => {
 
 	it('resolves a root that is itself an alias-group member (no redirect)', async () => {
 		const allowed = await computeFromListAllowedPageIds({
-			trx: knex,
+			knex,
 			roots: ['https://example.com/g'],
 			disableQueries: false,
 		});
@@ -292,7 +292,7 @@ describe('computeFromListAllowedPageIds', () => {
 
 	it('normalizes an auth-bearing, unordered-query root to match the stored (auth-stripped, query-sorted) URL', async () => {
 		const allowed = await computeFromListAllowedPageIds({
-			trx: knex,
+			knex,
 			roots: ['https://user:pass@example.com/query?b=1&a=2'],
 			disableQueries: false,
 		});
@@ -301,7 +301,7 @@ describe('computeFromListAllowedPageIds', () => {
 
 	it('returns an empty set when every root fails to normalize to an HTTP(S) URL', async () => {
 		const allowed = await computeFromListAllowedPageIds({
-			trx: knex,
+			knex,
 			roots: ['not a url at all', 'mailto:someone@example.com'],
 			disableQueries: false,
 		});
@@ -314,7 +314,7 @@ describe('computeFromListAllowedPageIds', () => {
 			(_, i) => `https://example.com/nonexistent-${i}`,
 		);
 		const allowed = await computeFromListAllowedPageIds({
-			trx: knex,
+			knex,
 			roots: [...noise, 'https://example.com/a'],
 			disableQueries: false,
 		});

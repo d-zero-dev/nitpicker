@@ -3120,4 +3120,26 @@ describe('buildViewerReadModel: fromList page scope', () => {
 		expect(urls).toContain('https://example.com/final');
 		expect(urls).not.toContain('https://example.com/hop1');
 	});
+
+	it('scopes viewer_summary to the same internal rows as viewer_pages', async () => {
+		await buildViewerReadModel(archive);
+		const knex = archive.getKnex();
+
+		const pageCounts = (await knex('viewer_pages')
+			.select('is_external as isExternal')
+			.count('page_id as count')
+			.groupBy('is_external')) as { isExternal: number; count: number | string }[];
+		const internalPageRows = Number(
+			pageCounts.find((r) => r.isExternal === 0)?.count ?? 0,
+		);
+
+		const [summary] = await knex('viewer_summary').select('*');
+		// a, redirect-root, off-list-destination, multi-hop-root, final — not b, not hop1.
+		expect(summary.internal_pages).toBe(5);
+		expect(summary.external_pages).toBe(1);
+		expect(summary.total_pages).toBe(6);
+		// The Summary internal count and the Page List's internal row count are
+		// the same number (no 404 rows in this fixture).
+		expect(summary.internal_pages).toBe(internalPageRows);
+	});
 });

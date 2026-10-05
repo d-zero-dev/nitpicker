@@ -2,13 +2,13 @@ import type { Knex } from 'knex';
 
 import { eachSplitted } from '@nitpicker/crawler';
 
-import { normalizeArchiveUrl } from '../normalize-archive-url.js';
-import { SQLITE_IN_CHUNK } from '../sqlite-in-chunk.js';
+import { normalizeArchiveUrl } from './normalize-archive-url.js';
+import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 
 /** Named parameters for {@link computeFromListAllowedPageIds}. */
 export interface ComputeFromListAllowedPageIdsOptions {
-	/** The open transaction to query through. */
-	readonly trx: Knex;
+	/** The Knex instance (or open transaction) to query through. */
+	readonly knex: Knex;
 	/**
 	 * `Config.roots` verbatim — the `--list`/`--list-file` URLs the crawl was
 	 * started from, stored in `withoutHash` form (auth preserved, see
@@ -29,7 +29,8 @@ interface RootRow {
 
 /**
  * Computes the set of internal `content_items.id` values a `fromList`
- * archive's `viewer_pages` is allowed to surface: each root URL's own row,
+ * archive's page universe (`viewer_pages` and `getSummary`) is allowed to
+ * surface: each root URL's own row,
  * plus the page its redirect (and, if that destination is itself a
  * non-representative alias-group member, its alias) resolves to.
  *
@@ -54,27 +55,27 @@ interface RootRow {
  * itself an alias-group member (no redirect involved) resolves via its own
  * `alias_of_id`.
  * @param options - See {@link ComputeFromListAllowedPageIdsOptions}.
- * @param options.trx - The open transaction to query through.
+ * @param options.knex - The Knex instance (or open transaction) to query through.
  * @param options.roots - The `--list`/`--list-file` root URLs, verbatim.
  * @param options.disableQueries - Forwarded to `normalizeArchiveUrl`.
  * @returns The allowed `content_items.id` set. **Empty when every root
  *   failed to normalize to an HTTP(S) URL** — unlike
  *   `applyEqualityOrInFilter`'s "empty array/set means no filter" contract,
- *   an empty result here means "match nothing": the caller
- *   (`build-viewer-read-model.ts`) treats a non-null result as "restrict
+ *   an empty result here means "match nothing": the callers
+ *   (`build-viewer-read-model.ts`, `get-summary.ts`) treat a non-null result as "restrict
  *   internal rows to this set", so silently falling back to "no
  *   restriction" on a degenerate `roots` value would be a fail-open, not a
  *   fail-safe.
  * @example
  * const allowed = await computeFromListAllowedPageIds({
- *   trx,
+ *   knex: accessor.getKnex(),
  *   roots: config.roots,
  *   disableQueries: config.disableQueries,
  * });
  * // allowed.has(row.id) === true for a root URL's own row or its redirect target
  */
 export async function computeFromListAllowedPageIds({
-	trx,
+	knex,
 	roots,
 	disableQueries,
 }: ComputeFromListAllowedPageIdsOptions): Promise<ReadonlySet<number>> {
@@ -88,7 +89,7 @@ export async function computeFromListAllowedPageIds({
 
 	const allowedIds = new Set<number>();
 	await eachSplitted(normalizedRoots, SQLITE_IN_CHUNK, async (chunk) => {
-		const rows: RootRow[] = await trx('content_items as root')
+		const rows: RootRow[] = await knex('content_items as root')
 			.join('url_refs as ur', 'ur.id', 'root.url_id')
 			.leftJoin(
 				'content_items as redirect_target',

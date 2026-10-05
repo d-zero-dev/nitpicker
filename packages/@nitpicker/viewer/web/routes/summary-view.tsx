@@ -73,8 +73,9 @@ export function SummaryView() {
 			    - Internal contents: every in-scope URL the crawl reached
 			      (HTML + PDF + CSV + ZIP + ...). This is the "how much stuff
 			      is under your domains" number.
-			    - Internal pages: just the HTML pages — what was rendered + had
-			      metadata extracted. Always ≤ internalContents.
+			    - Internal pages: just the HTML pages (plus redirect sources, which
+			      the Page List also lists) — the rows the Page List shows. Always
+			      ≤ internalContents.
 			    - External contents: every outbound link found (any MIME). */}
 			<div className="cards">
 				<SummaryCard

@@ -91,6 +91,18 @@ describe('countConsoleLogsByType', () => {
 		const counts = await countConsoleLogsByType(archive.getKnex());
 		expect(counts).toEqual({ pageerror: 1, error: 3, warn: 1 });
 	});
+
+	it('counts only the logs of pages the scopePages callback admits', async () => {
+		const knex = archive.getKnex();
+		const pageA = (await knex('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.where('ur.url', 'https://example.com/a')
+			.first('ci.id as id')) as { id: number };
+		const counts = await countConsoleLogsByType(knex, {
+			scopePages: (qb) => qb.where('ci.id', pageA.id),
+		});
+		expect(counts).toEqual({ pageerror: 0, error: 2, warn: 1 });
+	});
 });
 
 describe('countConsoleLogsByType: archive predating the page_console_logs table', () => {

@@ -1,7 +1,11 @@
 import type { ArchiveContext } from './types.js';
 import type { SummaryResult } from '@nitpicker/query';
 
-import { getSummary, getSummaryFastPath } from '@nitpicker/query';
+import {
+	getSummary,
+	getSummaryFastPath,
+	VIEWER_READ_MODEL_SCHEMA_VERSION,
+} from '@nitpicker/query';
 
 import { getOrComputeOnDisk } from './precomputed-disk-cache.js';
 import { createPromiseLru } from './promise-lru.js';
@@ -13,6 +17,15 @@ import { createPromiseLru } from './promise-lru.js';
  * its memory footprint at a small fixed multiple.
  */
 const MAX_ENTRIES = 4;
+
+/**
+ * On-disk artefact name of the cached summary. Carries the read model schema
+ * version because the archive's content-hash cache key does not change on a
+ * nitpicker upgrade: without it, a `summary.json` written by a build with a
+ * different Summary row universe would be replayed forever. A schema bump therefore starts a fresh artefact; the old
+ * file is orphaned, not read.
+ */
+const SUMMARY_ARTEFACT_NAME = `summary-v${VIEWER_READ_MODEL_SCHEMA_VERSION}`;
 
 /**
  * Shared LRU of `getSummaryFastPath` promises keyed by `archiveId`. The
@@ -76,7 +89,7 @@ export async function getCachedSummary(context: ArchiveContext): Promise<Summary
 		const accessor = context.manager.get(context.archiveId);
 		return getOrComputeOnDisk(
 			accessor.tmpDir,
-			'summary',
+			SUMMARY_ARTEFACT_NAME,
 			() => getSummaryFastPath(accessor),
 			isCompleteSummaryResult,
 		);
