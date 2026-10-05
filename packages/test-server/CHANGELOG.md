@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
+
+### Bug Fixes
+
+- **test-server:** repair the two E2E failures left by the Summary scope change ([0f23d59](https://github.com/d-zero-dev/nitpicker/commit/0f23d59d335fc26678b8503071b283d87017bdec)), closes [#401](https://github.com/d-zero-dev/nitpicker/issues/401)
+
+### Features
+
+- **crawler,cli:** run page template classification as a standard crawl-end step ([1d810df](https://github.com/d-zero-dev/nitpicker/commit/1d810df0eacf6e96ee4f5e6b62f8e8d365d53de4))
+
 ## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
 
 **Note:** Version bump only for package test-server

@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
+
+### Features
+
+- **cli:** mention stored template names in the --templates help ([c57c961](https://github.com/d-zero-dev/nitpicker/commit/c57c961e582c0171fd9d8c59a912993844b7831f))
+- **report-google-sheets:** create a Spreadsheet from a Drive folder URL ([cfb985f](https://github.com/d-zero-dev/nitpicker/commit/cfb985f7f69d1d895d9d13cf7aed32108eb80858))
+- **report-google-sheets:** make credentialFilePath optional ([2f66679](https://github.com/d-zero-dev/nitpicker/commit/2f6667910fb4f68219c467889bc6941f57f97010))
+
 ## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
 
 **Note:** Version bump only for package @nitpicker/report-google-sheets

@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
+
+### Bug Fixes
+
+- **cli:** render viewer archive extraction progress on a single Lanes line ([d5e5ebc](https://github.com/d-zero-dev/nitpicker/commit/d5e5ebc498482f0db00b16c8ec415528d70084b9))
+
+### Features
+
+- **cli:** add concat/split commands ([7a82a30](https://github.com/d-zero-dev/nitpicker/commit/7a82a307576cd00df88095e0974178758b4ec0e2))
+- **cli:** mention stored template names in the --templates help ([c57c961](https://github.com/d-zero-dev/nitpicker/commit/c57c961e582c0171fd9d8c59a912993844b7831f))
+- **cli:** resolve --credentials from GOOGLE_AUTH_CREDENTIALS when omitted ([84c6a46](https://github.com/d-zero-dev/nitpicker/commit/84c6a46b4c2677232f6a7c288e04cf4f73327692)), closes [#398](https://github.com/d-zero-dev/nitpicker/issues/398)
+- **crawler,cli:** run page template classification as a standard crawl-end step ([1d810df](https://github.com/d-zero-dev/nitpicker/commit/1d810df0eacf6e96ee4f5e6b62f8e8d365d53de4))
+- **viewer:** link technologies to a filtered Pages list instead of an inline list ([8f31603](https://github.com/d-zero-dev/nitpicker/commit/8f316032b4206e5fa4a2d985305dbed17cbd8cbe))
+
 ## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
 
 **Note:** Version bump only for package @nitpicker/cli

@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
+
+### Features
+
+- **core:** pass the detected main-content element to page-cluster ([8a7b80c](https://github.com/d-zero-dev/nitpicker/commit/8a7b80cf5249fee06c85c7888695360d84ae294d))
+- **crawler,cli:** run page template classification as a standard crawl-end step ([1d810df](https://github.com/d-zero-dev/nitpicker/commit/1d810df0eacf6e96ee4f5e6b62f8e8d365d53de4))
+
 ## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
 
 **Note:** Version bump only for package @nitpicker/core

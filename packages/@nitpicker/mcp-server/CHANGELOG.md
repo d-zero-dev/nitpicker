@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
+
+### Bug Fixes
+
+- **query:** scope Summary to the Page List row universe ([945e692](https://github.com/d-zero-dev/nitpicker/commit/945e692c189d8a690fe9274c0b34174e65a077a6)), closes [#370](https://github.com/d-zero-dev/nitpicker/issues/370)
+
 ## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
 
 **Note:** Version bump only for package @nitpicker/mcp-server

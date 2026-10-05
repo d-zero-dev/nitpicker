@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
+
+### Bug Fixes
+
+- **query:** scope Summary to the Page List row universe ([945e692](https://github.com/d-zero-dev/nitpicker/commit/945e692c189d8a690fe9274c0b34174e65a077a6)), closes [#370](https://github.com/d-zero-dev/nitpicker/issues/370)
+
+### Features
+
+- **crawler,cli:** run page template classification as a standard crawl-end step ([1d810df](https://github.com/d-zero-dev/nitpicker/commit/1d810df0eacf6e96ee4f5e6b62f8e8d365d53de4))
+- **query:** expose template labels on clusters, page lists and page detail ([6eaafac](https://github.com/d-zero-dev/nitpicker/commit/6eaafacd3b74c0ec7a3e07ec640be0c8d7bdef4f))
+- **viewer:** link technologies to a filtered Pages list instead of an inline list ([8f31603](https://github.com/d-zero-dev/nitpicker/commit/8f316032b4206e5fa4a2d985305dbed17cbd8cbe))
+
 ## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
 
 **Note:** Version bump only for package @nitpicker/query

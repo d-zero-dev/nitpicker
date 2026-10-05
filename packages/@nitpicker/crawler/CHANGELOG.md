@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
+
+### Features
+
+- **crawler,cli:** run page template classification as a standard crawl-end step ([1d810df](https://github.com/d-zero-dev/nitpicker/commit/1d810df0eacf6e96ee4f5e6b62f8e8d365d53de4))
+- **crawler:** add ATTACH-based archive transfer engine for concat/split ([6dd7f64](https://github.com/d-zero-dev/nitpicker/commit/6dd7f64f43a02c24758e63f4225c53d7829b7de9))
+- **crawler:** persist stable, human-facing labels for template clusters ([bf6ca9c](https://github.com/d-zero-dev/nitpicker/commit/bf6ca9c1d0823299d7509124a422c55ea0e258de))
+
 ## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
 
 ### Bug Fixes

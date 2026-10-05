@@ -3,6 +3,55 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
+
+### Bug Fixes
+
+- **cli:** render viewer archive extraction progress on a single Lanes line ([d5e5ebc](https://github.com/d-zero-dev/nitpicker/commit/d5e5ebc498482f0db00b16c8ec415528d70084b9))
+- **github:** move split.e2e.ts to the retry-exclude e2e shard ([254306f](https://github.com/d-zero-dev/nitpicker/commit/254306fdf4ff4532c92d6d54e9b01b9b9a5f4efa))
+- **query:** scope Summary to the Page List row universe ([945e692](https://github.com/d-zero-dev/nitpicker/commit/945e692c189d8a690fe9274c0b34174e65a077a6)), closes [#370](https://github.com/d-zero-dev/nitpicker/issues/370)
+- **test-server:** repair the two E2E failures left by the Summary scope change ([0f23d59](https://github.com/d-zero-dev/nitpicker/commit/0f23d59d335fc26678b8503071b283d87017bdec)), closes [#401](https://github.com/d-zero-dev/nitpicker/issues/401)
+- **viewer:** align the status error breakdown with its parent bars ([51e0a32](https://github.com/d-zero-dev/nitpicker/commit/51e0a32bccc4a0bab4fb591fc4ae0987be4b6e7b))
+- **viewer:** balance plain table column widths ([af4c9c9](https://github.com/d-zero-dev/nitpicker/commit/af4c9c9fe211d6d5166adecb62041a6cfa5a56fc))
+- **viewer:** bring badge, link and dim text colors up to WCAG AA contrast ([b50ae49](https://github.com/d-zero-dev/nitpicker/commit/b50ae49d02153ca9dd3187d7a2cbdc2164b361de))
+- **viewer:** drop the top margin of a heading that opens its container ([1d30b9d](https://github.com/d-zero-dev/nitpicker/commit/1d30b9d86385cb8f43dcd074300d3529cfce6915))
+- **viewer:** give page-detail entry lists room between items ([1dd18d2](https://github.com/d-zero-dev/nitpicker/commit/1dd18d2bfc5da6644d706f5a054dd29d89e9edca))
+- **viewer:** keep every heading level larger than the body text ([cd0bba1](https://github.com/d-zero-dev/nitpicker/commit/cd0bba18c76dc8869fdec1aff92d50e2eacfd7f5))
+- **viewer:** move the technology stack's view-all link beside its heading ([8ec3f91](https://github.com/d-zero-dev/nitpicker/commit/8ec3f912d419098688d67cf91ef55f890e2fa614))
+- **viewer:** render the fill of ratio bars ([13495d4](https://github.com/d-zero-dev/nitpicker/commit/13495d49b2148ce79091e85b8a5445d8ff2068ef))
+- **viewer:** render the foundation report table through the real StaticTable ([0e9f942](https://github.com/d-zero-dev/nitpicker/commit/0e9f942e56f70283496bf6366b3889ac429240b5))
+- **viewer:** show a disclosure chevron on expandable table rows ([6dfc0f2](https://github.com/d-zero-dev/nitpicker/commit/6dfc0f254d16234bb395e6d9908ac06ba82db6be))
+- **viewer:** size ratio-bar labels to their content instead of a fixed width ([8d49985](https://github.com/d-zero-dev/nitpicker/commit/8d4998594b2a091725568305b878251923835104))
+- **viewer:** stop the directory tree host heading from overriding the heading scale ([545d057](https://github.com/d-zero-dev/nitpicker/commit/545d0574e7c38feef43dcee3700c6127a250b76e))
+- **viewer:** style the bare tables that rendered without any CSS ([d7ba7cf](https://github.com/d-zero-dev/nitpicker/commit/d7ba7cff0c08dc25ef07ca243ff012d5b43403a3))
+- **viewer:** tidy detail-grid rows, wrapping and narrow layout ([8ccd6f1](https://github.com/d-zero-dev/nitpicker/commit/8ccd6f11e9b3483832320bdfa8e5b8583521b35c))
+
+### Features
+
+- **cli:** add concat/split commands ([7a82a30](https://github.com/d-zero-dev/nitpicker/commit/7a82a307576cd00df88095e0974178758b4ec0e2))
+- **cli:** mention stored template names in the --templates help ([c57c961](https://github.com/d-zero-dev/nitpicker/commit/c57c961e582c0171fd9d8c59a912993844b7831f))
+- **cli:** resolve --credentials from GOOGLE_AUTH_CREDENTIALS when omitted ([84c6a46](https://github.com/d-zero-dev/nitpicker/commit/84c6a46b4c2677232f6a7c288e04cf4f73327692)), closes [#398](https://github.com/d-zero-dev/nitpicker/issues/398)
+- **core:** pass the detected main-content element to page-cluster ([8a7b80c](https://github.com/d-zero-dev/nitpicker/commit/8a7b80cf5249fee06c85c7888695360d84ae294d))
+- **crawler,cli:** run page template classification as a standard crawl-end step ([1d810df](https://github.com/d-zero-dev/nitpicker/commit/1d810df0eacf6e96ee4f5e6b62f8e8d365d53de4))
+- **crawler:** add ATTACH-based archive transfer engine for concat/split ([6dd7f64](https://github.com/d-zero-dev/nitpicker/commit/6dd7f64f43a02c24758e63f4225c53d7829b7de9))
+- **crawler:** persist stable, human-facing labels for template clusters ([bf6ca9c](https://github.com/d-zero-dev/nitpicker/commit/bf6ca9c1d0823299d7509124a422c55ea0e258de))
+- **query:** expose template labels on clusters, page lists and page detail ([6eaafac](https://github.com/d-zero-dev/nitpicker/commit/6eaafacd3b74c0ec7a3e07ec640be0c8d7bdef4f))
+- **report-google-sheets:** create a Spreadsheet from a Drive folder URL ([cfb985f](https://github.com/d-zero-dev/nitpicker/commit/cfb985f7f69d1d895d9d13cf7aed32108eb80858))
+- **report-google-sheets:** make credentialFilePath optional ([2f66679](https://github.com/d-zero-dev/nitpicker/commit/2f6667910fb4f68219c467889bc6941f57f97010))
+- **viewer:** cover bare elements in foundation and color-code console types ([177e345](https://github.com/d-zero-dev/nitpicker/commit/177e3452c498b5411b9a7212abf2d909874699a8))
+- **viewer:** emphasize the target URL and collapse the exclusions on the summary ([be19ffe](https://github.com/d-zero-dev/nitpicker/commit/be19ffe082a4b9b75e97d3c54195935d6d747cec))
+- **viewer:** fix the heading scale, enrich bare lists and add foundation stories ([5f76b62](https://github.com/d-zero-dev/nitpicker/commit/5f76b62673c2f3ffd06cfe10317f05ab0b6b0432))
+- **viewer:** group template clusters by landmark with a summary panel ([f1c5518](https://github.com/d-zero-dev/nitpicker/commit/f1c5518fbd4531dad7139e949404854e114fafcb))
+- **viewer:** group template clusters by Pass-0 block instead of landmark ([78a465e](https://github.com/d-zero-dev/nitpicker/commit/78a465e77f5d944d4b5d531833045e40565c5412))
+- **viewer:** label the internal -1 status as a fetch error ([c775fa8](https://github.com/d-zero-dev/nitpicker/commit/c775fa861705a42713d2f3adc86ecb39bcc34ca0))
+- **viewer:** link technologies to a filtered Pages list instead of an inline list ([8f31603](https://github.com/d-zero-dev/nitpicker/commit/8f316032b4206e5fa4a2d985305dbed17cbd8cbe))
+- **viewer:** open non-navigating URLs in a new window with an icon ([a354c1c](https://github.com/d-zero-dev/nitpicker/commit/a354c1c29031a65fcb9f766b332055922fdd864b))
+- **viewer:** present template clusters as named cards with property headers ([b6a4819](https://github.com/d-zero-dev/nitpicker/commit/b6a4819ccc958862a3fcc1fa8c1d8017ab5eb273))
+- **viewer:** set cluster identifiers in code and turn counts into property cards ([1c50452](https://github.com/d-zero-dev/nitpicker/commit/1c5045234941acf6eb24ba4c432e02d15e1dae19))
+- **viewer:** show template labels instead of stylesheet/directory headings ([8f56eff](https://github.com/d-zero-dev/nitpicker/commit/8f56effd25c6afeba9e320db9ff8c3b3213e3fc6))
+- **viewer:** split the status distribution into responses and fetch errors ([8e9a6b9](https://github.com/d-zero-dev/nitpicker/commit/8e9a6b972cf17609b59fb5e64616f7e88c62460b))
+- **viewer:** widen the heading scale so each level is a distinct tier ([5e24ce3](https://github.com/d-zero-dev/nitpicker/commit/5e24ce368648b5e84c37a9aacc76899604074a6b))
+
 ## [0.22.2](https://github.com/d-zero-dev/nitpicker/compare/v0.22.1...v0.22.2) (2026-09-29)
 
 ### Bug Fixes
