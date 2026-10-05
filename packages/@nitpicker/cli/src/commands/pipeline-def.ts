@@ -213,10 +213,9 @@ export const commandDef = {
 		credentials: {
 			shortFlag: 'C',
 			type: 'string',
-			default: './credentials.json',
 			valueName: 'path',
 			group: 'Report options',
-			desc: 'Path to credentials file (keep this file secure and out of version control)',
+			desc: 'Path to credentials file. When omitted, falls back to the GOOGLE_AUTH_CREDENTIALS environment variable, then ./credentials.json if it exists, then Application Default Credentials (keep this file secure and out of version control)',
 		},
 		config: {
 			shortFlag: 'c',

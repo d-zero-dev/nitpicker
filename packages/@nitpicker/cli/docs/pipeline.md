@@ -60,12 +60,12 @@ crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の�
 
 ### report系
 
-| オプション            | 型      | 説明                                                                    |
-| --------------------- | ------- | ----------------------------------------------------------------------- |
-| `--sheet`, `-S`       | string  | Google Sheets URLまたはDriveフォルダURL。指定時だけreportステップを実行 |
-| `--credentials`, `-C` | string  | 認証情報ファイル。既定は `./credentials.json`                           |
-| `--config`, `-c`      | string  | 設定ファイルパス                                                        |
-| `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約                                |
+| オプション            | 型      | 説明                                                                                                    |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `--sheet`, `-S`       | string  | Google Sheets URLまたはDriveフォルダURL。指定時だけreportステップを実行                                 |
+| `--credentials`, `-C` | string  | 認証情報ファイル。未指定時は `GOOGLE_AUTH_CREDENTIALS` → `./credentials.json`（存在時）→ ADC の順に解決 |
+| `--config`, `-c`      | string  | 設定ファイルパス                                                                                        |
+| `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約                                                                |
 
 ### 共通
 

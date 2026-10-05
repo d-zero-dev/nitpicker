@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
 import { readUrlListFile } from '../read-url-list-file.js';
 import { verbosely as verboselyFn } from '../report/debug.js';
+import { resolveCredentialFilePath } from '../report/resolve-credential-file-path.js';
 
 import { report } from './report.js';
 
@@ -36,6 +37,10 @@ vi.mock('@nitpicker/report-html', () => ({
 
 vi.mock('../report/debug.js', () => ({
 	verbosely: vi.fn(),
+}));
+
+vi.mock('../report/resolve-credential-file-path.js', () => ({
+	resolveCredentialFilePath: vi.fn(),
 }));
 
 vi.mock('../format-cli-error.js', () => ({
@@ -70,6 +75,9 @@ describe('report command', () => {
 		// `undefined` and would throw before any assertion ran.
 		vi.mocked(runReport).mockResolvedValue();
 		vi.mocked(runHtmlReport).mockResolvedValue();
+		// Passthrough by default so the fixtures' explicit `--credentials`
+		// value reaches `runReport` unchanged; fallback cases override it.
+		vi.mocked(resolveCredentialFilePath).mockImplementation((explicit) => explicit);
 		originalIsTTY = process.stdout.isTTY;
 		exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
 			throw new ExitError(code as number);
@@ -445,6 +453,62 @@ describe('report command', () => {
 			}),
 		);
 		expect(runReport).not.toHaveBeenCalled();
+		expect(resolveCredentialFilePath).not.toHaveBeenCalled();
+	});
+
+	it('forwards an explicit --credentials value to the resolver', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: './sa.json',
+			config: undefined,
+			all: undefined,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(resolveCredentialFilePath).toHaveBeenCalledWith('./sa.json');
+		expect(runReport).toHaveBeenCalledWith(
+			expect.objectContaining({ credentialFilePath: './sa.json' }),
+		);
+	});
+
+	it('passes the resolved credential path to the Sheets reporter when --credentials is omitted', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		vi.mocked(resolveCredentialFilePath).mockReturnValue('/run/secrets/google.json');
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: undefined,
+			config: undefined,
+			all: undefined,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(resolveCredentialFilePath).toHaveBeenCalledWith(undefined);
+		expect(runReport).toHaveBeenCalledWith(
+			expect.objectContaining({ credentialFilePath: '/run/secrets/google.json' }),
+		);
+	});
+
+	it('passes undefined to the Sheets reporter when no credential file resolves', async () => {
+		Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
+		vi.mocked(resolveCredentialFilePath).mockReturnValue();
+
+		await report(['test.nitpicker'], {
+			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
+			credentials: undefined,
+			config: undefined,
+			all: undefined,
+			verbose: undefined,
+			silent: undefined,
+		});
+
+		expect(runReport).toHaveBeenCalledWith(
+			expect.objectContaining({ credentialFilePath: undefined }),
+		);
 	});
 
 	it('rejects selecting both Sheets and HTML outputs', async () => {

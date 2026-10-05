@@ -92,6 +92,26 @@ describe('report CLI flag parsing (parseCli integration)', () => {
 		expect(result.flags.dedupeResources).toBe(false);
 	});
 
+	it('leaves credentials undefined when --credentials is omitted', () => {
+		const result = runReportParse([
+			'./archive.nitpicker',
+			'-S',
+			'https://docs.google.com/spreadsheets/d/x',
+		]);
+		expect(result.flags.credentials).toBeUndefined();
+	});
+
+	it('passes --credentials through as given', () => {
+		const result = runReportParse([
+			'./archive.nitpicker',
+			'-S',
+			'https://docs.google.com/spreadsheets/d/x',
+			'-C',
+			'./sa.json',
+		]);
+		expect(result.flags.credentials).toBe('./sa.json');
+	});
+
 	it('keeps other flags untouched when --dedupe-resources is set', () => {
 		const result = runReportParse([
 			'./archive.nitpicker',
@@ -124,6 +144,15 @@ describe('pipeline CLI flag parsing (parseCli integration)', () => {
 			'https://docs.google.com/spreadsheets/d/x',
 		]);
 		expect(result.flags.dedupeResources).toBe(true);
+	});
+
+	it('leaves credentials undefined when --credentials is omitted', () => {
+		const result = runPipelineParse([
+			'https://example.com/',
+			'-S',
+			'https://docs.google.com/spreadsheets/d/x',
+		]);
+		expect(result.flags.credentials).toBeUndefined();
 	});
 
 	it('interprets --no-dedupe-resources as false (raw mode opt-out)', () => {
