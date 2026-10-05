@@ -50,5 +50,13 @@
  * `IMAGE_SCAN_CODE` copied verbatim from `page_meta`, unlike the `?? 0`
  * count columns — `null` distinguishes "scan never attempted" from `0`
  * ("ok"), the same reasoning as the source `page_meta` columns).
+ *
+ * 34 -> 35 (Summary row universe = Page List row universe): `viewer_summary`
+ * (populated from `getSummary`) now counts exactly the rows `viewer_pages`
+ * admits (`applyPageListUniverse`) — a `fromList` archive's internal counts
+ * are restricted to `config.roots` and their redirect/alias destinations,
+ * redirect-source rows are counted (status 3xx, Content-Type `unknown`),
+ * and internal pages that were only fetched incidentally (`is_target = 0`)
+ * are no longer counted. `viewer_pages` itself is unchanged.
  */
-export const VIEWER_READ_MODEL_SCHEMA_VERSION = 34;
+export const VIEWER_READ_MODEL_SCHEMA_VERSION = 35;

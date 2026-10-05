@@ -1048,6 +1048,41 @@ describe('getSummary: console log counts (issue #228)', () => {
 			ignoreRobots: false,
 		});
 
+		// The page must be a real scraped crawl target: console logs only count
+		// for pages inside the Page List row universe.
+		await archive.setPage({
+			url: parseUrl('https://example.com/a')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: {
+				lang: 'ja',
+				title: 'A',
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
 		await archive.setConsoleLogs(
 			'https://example.com/a',
 			[],
