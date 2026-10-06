@@ -1,5 +1,9 @@
 import type createLighthousePlugin from './lighthouse-plugin.js';
 
+import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const killMock = vi.fn();
@@ -169,6 +173,52 @@ describe('analyze-lighthouse plugin', () => {
 		).rejects.toThrow();
 
 		expect(killMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('launches Chrome with a userDataDir created under os.tmpdir() (macOS chrome-launcher would otherwise use /var/folders via mktemp)', async () => {
+		lighthouseMock.mockResolvedValue(null);
+
+		const plugin = pluginFactory({}, '');
+		const url = new URL('https://example.com');
+		await plugin.eachPage!({ url, html: '', window: {} as never, num: 0, total: 1 });
+
+		const options = launchMock.mock.calls[0]![0] as {
+			userDataDir: string;
+			chromeFlags: string[];
+		};
+		expect(options.chromeFlags).toEqual(['--headless']);
+		expect(path.dirname(options.userDataDir)).toBe(tmpdir());
+		expect(path.basename(options.userDataDir)).toMatch(/^nitpicker-lighthouse-/);
+	});
+
+	it('removes the userDataDir after Chrome is killed', async () => {
+		lighthouseMock.mockResolvedValue(null);
+		let existedDuringRun = false;
+		killMock.mockImplementationOnce(() => {
+			const options = launchMock.mock.calls[0]![0] as { userDataDir: string };
+			existedDuringRun = existsSync(options.userDataDir);
+		});
+
+		const plugin = pluginFactory({}, '');
+		const url = new URL('https://example.com');
+		await plugin.eachPage!({ url, html: '', window: {} as never, num: 0, total: 1 });
+
+		const options = launchMock.mock.calls[0]![0] as { userDataDir: string };
+		expect(existedDuringRun).toBe(true);
+		expect(existsSync(options.userDataDir)).toBe(false);
+	});
+
+	it('removes the userDataDir when chromeLauncher.launch() itself fails', async () => {
+		launchMock.mockRejectedValue(new Error('Chrome not found'));
+
+		const plugin = pluginFactory({}, '');
+		const url = new URL('https://example.com');
+		await expect(
+			plugin.eachPage!({ url, html: '', window: {} as never, num: 0, total: 1 }),
+		).rejects.toThrow('Chrome not found');
+
+		const options = launchMock.mock.calls[0]![0] as { userDataDir: string };
+		expect(existsSync(options.userDataDir)).toBe(false);
 	});
 
 	it('does not call chrome.kill() when chromeLauncher.launch() itself fails', async () => {

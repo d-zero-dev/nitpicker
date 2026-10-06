@@ -1,6 +1,10 @@
 import type { LHReport } from './types.js';
 import type { Config } from 'lighthouse';
 
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { definePlugin } from '@nitpicker/core';
 import { toError } from '@nitpicker/types/to-error';
 import * as chromeLauncher from 'chrome-launcher';
@@ -12,15 +16,31 @@ import { ReportUtils } from 'lighthouse/report/renderer/report-utils.js';
  * does, but tagged with `Symbol.asyncDispose` so callers can use `await
  * using` instead of a manual `try`/`finally` around `chrome.kill()` —
  * `chrome-launcher`'s own `LaunchedChrome` type has no dispose protocol.
- * @param args - The same arguments accepted by `chromeLauncher.launch`.
+ *
+ * The Chrome profile directory is created here under `os.tmpdir()` and passed
+ * as `userDataDir`, instead of letting `chrome-launcher` create one. On macOS
+ * `chrome-launcher` shells out to `mktemp -d -t`, which ignores `$TMPDIR` and
+ * always picks the per-user `/var/folders/...` directory, so the launch fails
+ * in sandboxes that only allow writing to `$TMPDIR` / `/tmp`. A caller-supplied
+ * `userDataDir` is never removed by `chrome-launcher`, so dispose removes it.
+ * @param options - The same options accepted by `chromeLauncher.launch`
+ *   (`userDataDir` is supplied by this function).
  */
 async function launchDisposableChrome(
-	...args: Parameters<typeof chromeLauncher.launch>
+	options: Omit<chromeLauncher.Options, 'userDataDir'>,
 ): Promise<chromeLauncher.LaunchedChrome & AsyncDisposable> {
-	const chrome = await chromeLauncher.launch(...args);
+	const userDataDir = await mkdtemp(path.join(tmpdir(), 'nitpicker-lighthouse-'));
+	const removeUserDataDir = () => rm(userDataDir, { recursive: true, force: true });
+	const chrome = await chromeLauncher
+		.launch({ ...options, userDataDir })
+		.catch(async (error: unknown) => {
+			await removeUserDataDir();
+			throw error;
+		});
 	return Object.assign(chrome, {
 		async [Symbol.asyncDispose]() {
 			await chrome.kill();
+			await removeUserDataDir();
 		},
 	});
 }
