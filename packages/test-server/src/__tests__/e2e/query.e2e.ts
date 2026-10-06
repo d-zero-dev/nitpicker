@@ -75,6 +75,82 @@ async function runCli(args: string[], cwd: string): Promise<CliResult> {
 	});
 }
 
+describe('query search-html / pages-by-resource / resource-hosts / links (e2e)', () => {
+	// The unit specs cover each query function against a real `Archive`; this
+	// proves the built CLI binary wires the new sub-commands and flags
+	// end to end (stdout stays pure JSON — progress goes to stderr).
+	let cwd: string;
+
+	beforeAll(async () => {
+		cwd = path.join(os.tmpdir(), `nitpicker-e2e-query-search-${crypto.randomUUID()}`);
+		await fs.mkdir(cwd, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
+	});
+
+	it('search-html scans stored HTML without analyze and reports scan totals', async () => {
+		const { exitCode, stdout } = await runCli(
+			['query', FIXTURE, 'search-html', '--pattern', '/<html/i', '--limit', '0'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(0);
+		const output = JSON.parse(stdout) as {
+			items: unknown[];
+			total: number;
+			scannedSnapshots: number;
+			candidatePages: number;
+		};
+		expect(output.items).toEqual([]);
+		expect(output.candidatePages).toBeGreaterThan(0);
+		expect(output.scannedSnapshots).toBeGreaterThan(0);
+		expect(output.total).toBeGreaterThan(0);
+	});
+
+	it('search-html returns snippets for matching pages', async () => {
+		const { exitCode, stdout } = await runCli(
+			['query', FIXTURE, 'search-html', '--pattern', '<html', '--limit', '1'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(0);
+		const output = JSON.parse(stdout) as {
+			items: { url: string; matchCount: number; snippet: string }[];
+		};
+		expect(output.items).toHaveLength(1);
+		expect(output.items[0]!.snippet).toContain('<html');
+		expect(output.items[0]!.matchCount).toBeGreaterThan(0);
+	});
+
+	it('search-html rejects an invalid regular expression with exit code 1', async () => {
+		const { exitCode, stdout } = await runCli(
+			['query', FIXTURE, 'search-html', '--pattern', '/(/'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(stdout).toBe('');
+	});
+
+	it('pages-by-resource requires a resource filter', async () => {
+		const { exitCode } = await runCli(['query', FIXTURE, 'pages-by-resource'], cwd);
+
+		expect(exitCode).toBe(1);
+	});
+
+	it('resource-hosts and links (type omitted) return JSON', async () => {
+		const hosts = await runCli(['query', FIXTURE, 'resource-hosts'], cwd);
+		expect(hosts.exitCode).toBe(0);
+		expect(JSON.parse(hosts.stdout)).toHaveProperty('items');
+
+		const links = await runCli(['query', FIXTURE, 'links', '--limit', '1'], cwd);
+		expect(links.exitCode).toBe(0);
+		expect(JSON.parse(links.stdout)).toHaveProperty('total');
+	});
+});
+
 describe('query match-urls (e2e)', () => {
 	// `match-url-list.spec.ts` and `dispatch-query.spec.ts` already cover
 	// every branch of this diagnostic subcommand against a real `Archive`
