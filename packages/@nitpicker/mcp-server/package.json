@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/mcp-server",
-	"version": "0.23.0",
+	"version": "0.23.1",
 	"description": "MCP server for querying .nitpicker archive files via AI assistants",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",

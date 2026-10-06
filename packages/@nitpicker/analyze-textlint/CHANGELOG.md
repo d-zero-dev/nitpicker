@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.23.1](https://github.com/d-zero-dev/nitpicker/compare/v0.23.0...v0.23.1) (2026-10-06)
+
+**Note:** Version bump only for package @nitpicker/analyze-textlint
+
 # [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
 
 **Note:** Version bump only for package @nitpicker/analyze-textlint
