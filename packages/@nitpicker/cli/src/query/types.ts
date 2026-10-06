@@ -35,7 +35,10 @@ export type QuerySubCommand =
 	| 'page-console-logs'
 	| 'duplicate-clusters'
 	| 'dedupe-cap-events'
-	| 'match-urls';
+	| 'match-urls'
+	| 'search-html'
+	| 'pages-by-resource'
+	| 'resource-hosts';
 
 /**
  * List of all valid query sub-command names.
@@ -75,4 +78,7 @@ export const VALID_SUB_COMMANDS = [
 	'duplicate-clusters',
 	'dedupe-cap-events',
 	'match-urls',
+	'search-html',
+	'pages-by-resource',
+	'resource-hosts',
 ] as const satisfies readonly QuerySubCommand[];

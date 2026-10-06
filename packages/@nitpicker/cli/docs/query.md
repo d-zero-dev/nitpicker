@@ -141,14 +141,21 @@ npx @nitpicker/cli query ./site.nitpicker html --url https://example.com/ --max-
 ```sh
 npx @nitpicker/cli query ./site.nitpicker links --type broken --pretty
 npx @nitpicker/cli query ./site.nitpicker links --type external --include-redirect-sources --pretty
+npx @nitpicker/cli query ./site.nitpicker links --dest-url-pattern '%.pdf' --pretty
 ```
 
-| オプション                   | 型               | 説明                                                  |
-| ---------------------------- | ---------------- | ----------------------------------------------------- |
-| `--type`                     | string, required | `broken` / `external`                                 |
-| `--include-redirect-sources` | boolean          | redirect-source行を含め、redirect解決前のリンクを見る |
-| `--limit`, `-l`              | number           | 最大取得件数                                          |
-| `--offset`, `-o`             | number           | スキップ件数                                          |
+| オプション                   | 型      | 説明                                                                                  |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------- |
+| `--type`                     | string  | `broken` / `external` / `all`（既定 `all`）                                           |
+| `--url-pattern`              | string  | SQL LIKEパターン。リンク元またはリンク先URLに一致                                     |
+| `--source-url-pattern`       | string  | SQL LIKEパターン。リンク元ページURLだけに一致                                         |
+| `--dest-url-pattern`         | string  | SQL LIKEパターン。redirect解決後のリンク先URLだけに一致                               |
+| `--status`                   | number  | リンク先のHTTP statusで完全一致                                                       |
+| `--sort-by`                  | string  | `sourceUrl` / `destUrl` / `status` / `isExternal` / `textContent`（既定 `sourceUrl`） |
+| `--sort-order`               | string  | `asc` / `desc`                                                                        |
+| `--include-redirect-sources` | boolean | redirect-source行を含め、redirect解決前のリンクを見る                                 |
+| `--limit`, `-l`              | number  | 最大取得件数                                                                          |
+| `--offset`, `-o`             | number  | スキップ件数                                                                          |
 
 既定ではredirect先のcanonical destinationまで解決して判定します。`--include-redirect-sources` は診断用です。
 
@@ -156,14 +163,77 @@ npx @nitpicker/cli query ./site.nitpicker links --type external --include-redire
 
 ```sh
 npx @nitpicker/cli query ./site.nitpicker resources --content-type image/ --pretty
+npx @nitpicker/cli query ./site.nitpicker resources --content-type-category font --sort-by referrerCount --sort-order desc --pretty
 ```
 
-| オプション       | 型      | 説明                          |
-| ---------------- | ------- | ----------------------------- |
-| `--content-type` | string  | content type prefixで絞り込み |
-| `--is-external`  | boolean | external/internalで絞り込み   |
-| `--limit`, `-l`  | number  | 最大取得件数                  |
-| `--offset`, `-o` | number  | スキップ件数                  |
+| オプション                | 型      | 説明                                                                                                                    |
+| ------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `--url-pattern`           | string  | SQL LIKEパターンでリソースURLを絞り込み                                                                                 |
+| `--status`                | number  | HTTP statusで完全一致                                                                                                   |
+| `--content-type`          | string  | content type prefixで絞り込み                                                                                           |
+| `--content-type-category` | string  | Content-Typeカテゴリで絞り込み（`font` / `css` / `javascript` / `image` など。`pages` と同じ分類）                      |
+| `--is-external`           | boolean | external/internalで絞り込み                                                                                             |
+| `--sort-by`               | string  | `url` / `status` / `statusText` / `contentType` / `contentLength` / `isExternal` / `referrerCount` / `compress` / `cdn` |
+| `--sort-order`            | string  | `asc` / `desc`                                                                                                          |
+| `--limit`, `-l`           | number  | 最大取得件数                                                                                                            |
+| `--offset`, `-o`          | number  | スキップ件数                                                                                                            |
+
+アーカイブに保存されるのはリソースのメタデータ（URL・Content-Type・status・サイズ等）だけで、CSS/JS/フォントの本文は保存されません。「フォントを使っているか」は、ブラウザが実際に取得したフォントファイルの有無（`--content-type-category font`）で判定します。
+
+### `pages-by-resource`
+
+```sh
+npx @nitpicker/cli query ./site.nitpicker pages-by-resource --content-type-category font --pretty
+npx @nitpicker/cli query ./site.nitpicker pages-by-resource --url-pattern '%fonts.example.net%' --resources-limit 5 --pretty
+```
+
+| オプション                | 型      | 説明                                                                                 |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `--url-pattern`           | string  | SQL LIKEパターンでリソースURLを絞り込み（※`--content-type-category` とどちらか必須） |
+| `--content-type-category` | string  | Content-Typeカテゴリで絞り込み（※`--url-pattern` とどちらか必須）                    |
+| `--is-external`           | boolean | external/internalのリソースに限定                                                    |
+| `--status`                | number  | リソースのHTTP statusで完全一致                                                      |
+| `--resources-limit`       | number  | ページごとに添える一致リソースURLのサンプル数（既定 20）                             |
+| `--limit`, `-l`           | number  | 最大取得件数                                                                         |
+| `--offset`, `-o`          | number  | スキップ件数                                                                         |
+
+条件に一致するリソースを読み込んでいるページを返す、`resources` の逆引きです。各ページに `matchedResourceCount` と一致リソースURLのサンプル（`matchedResources`）が付きます。完全一致のリソースURLから引く場合は `resource-referrers` を使います。
+
+### `resource-hosts`
+
+```sh
+npx @nitpicker/cli query ./site.nitpicker resource-hosts --is-external --sort-by pageCount --pretty
+```
+
+| オプション       | 型      | 説明                                                |
+| ---------------- | ------- | --------------------------------------------------- |
+| `--is-external`  | boolean | external/internalのリソースに限定                   |
+| `--sort-by`      | string  | `resourceCount`（既定・降順）/ `pageCount` / `host` |
+| `--sort-order`   | string  | `asc` / `desc`                                      |
+| `--limit`, `-l`  | number  | 最大取得件数                                        |
+| `--offset`, `-o` | number  | スキップ件数                                        |
+
+リソースをホスト（host + port）単位で集計し、リソース数・参照ページ数・Content-Typeカテゴリ内訳（`categories`）を返します。サードパーティ依存の棚卸し用です。`data:` URIのリソースはホストを持たないため含みません。
+
+### `search-html`
+
+```sh
+npx @nitpicker/cli query ./site.nitpicker search-html --pattern 'fonts.example.org' --pretty
+npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*:\s*"?Sample/i' --directory /blog --limit 0
+```
+
+| オプション         | 型               | 説明                                                                              |
+| ------------------ | ---------------- | --------------------------------------------------------------------------------- |
+| `--pattern`        | string, required | 通常の文字列はリテラル部分一致、`/pattern/flags`（flagsは `g` `i` `m`）は正規表現 |
+| `--url-pattern`    | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                    |
+| `--directory`      | string           | ディレクトリprefixでスキャン対象ページを絞り込み                                  |
+| `--snippet-length` | number           | スニペットの文字数（既定 160）                                                    |
+| `--limit`, `-l`    | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                               |
+| `--offset`, `-o`   | number           | スキップ件数                                                                      |
+
+保存済みのHTMLスナップショット（`html` サブコマンドが返すもの）の生マークアップを検索します。analyzeプラグインの実行は不要で、アーカイブへの書き込みもありません。`<script>` `<style>` やインラインstyle・全属性も対象です（DOMのテキストノードだけを見る `analyze-search` とは別物）。
+
+結果は `{ items: [{ url, matchCount, snippet }], total, offset, limit, scannedSnapshots, candidatePages }` です。全ユニークHTMLを展開する線形スキャンなので、大きなアーカイブでは時間がかかります（stderrに進捗が出ます）。まず `--limit 0` で `total` を確認するのが安全です。`candidatePages` が0、またはページ数より極端に少ない場合はHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。CSS/JSファイルの本文は保存されていないため検索できません。
 
 ### `images`
 

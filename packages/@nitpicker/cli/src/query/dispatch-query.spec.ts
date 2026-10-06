@@ -22,6 +22,20 @@ vi.mock('@nitpicker/query', () => ({
 	}),
 	getPageHtml: vi.fn().mockResolvedValue({ html: '<html></html>', truncated: false }),
 	listLinks: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+	searchHtml: vi.fn().mockResolvedValue({
+		items: [],
+		total: 0,
+		offset: 0,
+		limit: 100,
+		scannedSnapshots: 0,
+		candidatePages: 0,
+	}),
+	listPagesByResource: vi
+		.fn()
+		.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
+	getResourceHostInventory: vi
+		.fn()
+		.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
 	listResources: vi
 		.fn()
 		.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
@@ -259,6 +273,41 @@ describe('dispatchQuery', () => {
 		const result = await dispatchQuery(mockAccessor, 'resources', emptyFlags);
 		expect(result).toEqual({ items: [], total: 0, offset: 0, limit: 100 });
 		expect(listResources).toHaveBeenCalledWith(mockAccessor, expect.any(Object));
+	});
+
+	it('dispatches search-html and forwards onProgress', async () => {
+		const { searchHtml } = await import('@nitpicker/query');
+		const onProgress = vi.fn();
+		await dispatchQuery(
+			mockAccessor,
+			'search-html',
+			{ pattern: 'font-family' } as never,
+			onProgress,
+		);
+		expect(searchHtml).toHaveBeenCalledWith(
+			mockAccessor,
+			expect.objectContaining({ pattern: 'font-family', onProgress }),
+		);
+	});
+
+	it('dispatches pages-by-resource sub-command', async () => {
+		const { listPagesByResource } = await import('@nitpicker/query');
+		await dispatchQuery(mockAccessor, 'pages-by-resource', {
+			urlPattern: '%example.net%',
+		} as never);
+		expect(listPagesByResource).toHaveBeenCalledWith(
+			mockAccessor,
+			expect.objectContaining({ urlPattern: '%example.net%' }),
+		);
+	});
+
+	it('dispatches resource-hosts sub-command', async () => {
+		const { getResourceHostInventory } = await import('@nitpicker/query');
+		await dispatchQuery(mockAccessor, 'resource-hosts', { isExternal: true } as never);
+		expect(getResourceHostInventory).toHaveBeenCalledWith(
+			mockAccessor,
+			expect.objectContaining({ isExternal: true }),
+		);
 	});
 
 	it('dispatches images sub-command', async () => {

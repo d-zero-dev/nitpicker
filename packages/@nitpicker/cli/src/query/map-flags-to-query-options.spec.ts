@@ -129,15 +129,116 @@ describe('mapFlagsToQueryOptions', () => {
 		});
 	});
 
-	it('requires --type for links', () => {
-		expect(() => mapFlagsToQueryOptions('links', {})).toThrow(
-			'--type is required for the links sub-command',
-		);
+	it('accepts links without --type (all links)', () => {
+		expect(mapFlagsToQueryOptions('links', {})).toMatchObject({ type: undefined });
+		expect(mapFlagsToQueryOptions('links', { type: 'all' })).toMatchObject({
+			type: 'all',
+		});
 	});
 
 	it('throws for invalid links type', () => {
 		expect(() => mapFlagsToQueryOptions('links', { type: 'invalid' })).toThrow(
-			'Invalid --type value',
+			'Invalid --type value: invalid. Must be one of: broken, external, all',
+		);
+	});
+
+	it('maps the links URL / status / sort flags', () => {
+		expect(
+			mapFlagsToQueryOptions('links', {
+				destUrlPattern: '%.pdf',
+				sourceUrlPattern: '%/blog/%',
+				urlPattern: '%x%',
+				status: 404,
+				sortBy: 'destUrl',
+				sortOrder: 'desc',
+			}),
+		).toMatchObject({
+			destUrlPattern: '%.pdf',
+			sourceUrlPattern: '%/blog/%',
+			urlPattern: '%x%',
+			status: 404,
+			sortBy: 'destUrl',
+			sortOrder: 'desc',
+		});
+	});
+
+	it('throws for invalid links sortBy / sortOrder', () => {
+		expect(() => mapFlagsToQueryOptions('links', { sortBy: 'title' })).toThrow(
+			'Invalid --sortBy value: title. Must be one of: sourceUrl, destUrl, status, isExternal, textContent',
+		);
+		expect(() => mapFlagsToQueryOptions('links', { sortOrder: 'up' })).toThrow(
+			'Invalid --sortOrder value: up. Must be one of: asc, desc',
+		);
+	});
+
+	it('maps resources filter and sort flags, validating category and sortBy', () => {
+		expect(
+			mapFlagsToQueryOptions('resources', {
+				urlPattern: '%fonts%',
+				status: 200,
+				contentTypeCategory: 'font',
+				sortBy: 'referrerCount',
+				sortOrder: 'desc',
+			}),
+		).toMatchObject({
+			urlPattern: '%fonts%',
+			status: 200,
+			contentTypeCategory: 'font',
+			sortBy: 'referrerCount',
+			sortOrder: 'desc',
+		});
+		expect(() =>
+			mapFlagsToQueryOptions('resources', { contentTypeCategory: 'woff' }),
+		).toThrow('Invalid --contentTypeCategory value: woff');
+		expect(() => mapFlagsToQueryOptions('resources', { sortBy: 'title' })).toThrow(
+			'Invalid --sortBy value: title',
+		);
+	});
+
+	it('requires --pattern for search-html and rejects an invalid regular expression', () => {
+		expect(() => mapFlagsToQueryOptions('search-html', {})).toThrow(
+			'--pattern is required for the search-html sub-command',
+		);
+		expect(() => mapFlagsToQueryOptions('search-html', { pattern: '/(/' })).toThrow(
+			'Invalid --pattern value: /(/',
+		);
+	});
+
+	it('maps search-html flags correctly', () => {
+		expect(
+			mapFlagsToQueryOptions('search-html', {
+				pattern: '/font-family/i',
+				directory: '/blog/',
+				snippetLength: 80,
+				limit: 5,
+			}),
+		).toMatchObject({
+			pattern: '/font-family/i',
+			directory: '/blog/',
+			snippetLength: 80,
+			limit: 5,
+		});
+	});
+
+	it('requires --urlPattern or --contentTypeCategory for pages-by-resource', () => {
+		expect(() => mapFlagsToQueryOptions('pages-by-resource', {})).toThrow(
+			'--urlPattern or --contentTypeCategory is required for the pages-by-resource sub-command.',
+		);
+		expect(
+			mapFlagsToQueryOptions('pages-by-resource', {
+				contentTypeCategory: 'font',
+				resourcesLimit: 3,
+				isExternal: true,
+			}),
+		).toMatchObject({ contentTypeCategory: 'font', resourcesLimit: 3, isExternal: true });
+	});
+
+	it('maps resource-hosts flags and validates sortBy', () => {
+		expect(
+			mapFlagsToQueryOptions('resource-hosts', { isExternal: true, sortBy: 'pageCount' }),
+		).toMatchObject({ isExternal: true, sortBy: 'pageCount' });
+		expect(() => mapFlagsToQueryOptions('resource-hosts', { sortBy: 'url' })).toThrow(
+			'Invalid --sortBy value: url. Must be one of: resourceCount, pageCount, host',
 		);
 	});
 
@@ -466,6 +567,8 @@ describe('mapFlagsToQueryOptions', () => {
 			'get-isolated-cluster': { representativeUrl: 'https://example.com/a' },
 			'page-console-logs': { url: 'https://example.com/a' },
 			'match-urls': { urls: 'urls.txt' },
+			'search-html': { pattern: 'font-family' },
+			'pages-by-resource': { contentTypeCategory: 'font' },
 		};
 
 		// One valid non-default value per flag, used to probe whether the
@@ -511,6 +614,11 @@ describe('mapFlagsToQueryOptions', () => {
 			includeRedirectSources: true,
 			pretty: true,
 			urls: 'other-urls.txt',
+			pattern: '/other/i',
+			snippetLength: 77,
+			resourcesLimit: 7,
+			sourceUrlPattern: '%/source/%',
+			destUrlPattern: '%/dest/%',
 		};
 
 		// Sub-commands that validate enum-shaped flags need probe values from
@@ -520,6 +628,7 @@ describe('mapFlagsToQueryOptions', () => {
 			'console-logs': { sortBy: 'text', type: 'error' },
 			'pages-by-jsonld-type': { type: 'BlogPosting' },
 			'count-pages-by-jsonld-type': { type: 'BlogPosting' },
+			'resource-hosts': { sortBy: 'pageCount' },
 		};
 
 		for (const subCommand of VALID_SUB_COMMANDS) {
