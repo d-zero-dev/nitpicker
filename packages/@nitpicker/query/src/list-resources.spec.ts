@@ -137,6 +137,29 @@ describe('listResources', () => {
 		expect(result.items[0]!.url).toBe('https://example.com/style.css');
 	});
 
+	it('contentTypeCategory でカテゴリ分類に一致するリソースだけを返す', async () => {
+		const css = await listResources(archive, { contentTypeCategory: 'css' });
+		expect(css.items.map((item) => item.url)).toEqual(['https://example.com/style.css']);
+
+		const javascript = await listResources(archive, {
+			contentTypeCategory: 'javascript',
+		});
+		expect(javascript.items.map((item) => item.url)).toEqual([
+			'https://cdn.example.com/app.js',
+		]);
+
+		const font = await listResources(archive, { contentTypeCategory: 'font' });
+		expect(font.total).toBe(0);
+	});
+
+	it('urlPattern と contentTypeCategory は AND で効く', async () => {
+		const result = await listResources(archive, {
+			urlPattern: '%cdn.example.com%',
+			contentTypeCategory: 'css',
+		});
+		expect(result.total).toBe(0);
+	});
+
 	it('ページネーションが機能する', async () => {
 		const result = await listResources(archive, { limit: 1, offset: 0 });
 		expect(result.items).toHaveLength(1);

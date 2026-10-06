@@ -352,6 +352,37 @@ describe('listLinks', () => {
 		});
 	});
 
+	it('type 省略時は all として broken / external を含む全リンクを返す', async () => {
+		const all = await listLinks(archive, {});
+		const urls = all.items.map((item) => item.destUrl);
+		expect(urls).toContain('https://example.com/broken');
+		expect(urls).toContain('https://example.net');
+		expect(urls).toContain('https://example.com/forbidden');
+
+		const explicit = await listLinks(archive, { type: 'all' });
+		expect(explicit.total).toBe(all.total);
+		const broken = await listLinks(archive, { type: 'broken' });
+		expect(all.total).toBeGreaterThan(broken.total);
+	});
+
+	it('destUrlPattern はリンク先 URL だけを絞り、sourceUrlPattern はリンク元だけを絞る', async () => {
+		const byDest = await listLinks(archive, { destUrlPattern: '%/forbidden' });
+		expect(byDest.items.map((item) => item.destUrl)).toEqual([
+			'https://example.com/forbidden',
+		]);
+
+		const bySourceMiss = await listLinks(archive, {
+			destUrlPattern: '%/forbidden',
+			sourceUrlPattern: '%/nowhere',
+		});
+		expect(bySourceMiss.total).toBe(0);
+
+		const bySourceHit = await listLinks(archive, {
+			sourceUrlPattern: 'https://example.com',
+		});
+		expect(bySourceHit.total).toBeGreaterThan(0);
+	});
+
 	it('status でリンク先をフィルタする', async () => {
 		const result = await listLinks(archive, { type: 'external', status: 404 });
 		expect(result.items).toHaveLength(0);

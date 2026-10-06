@@ -6,6 +6,7 @@ import type {
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { applyListOrder } from './apply-list-order.js';
+import { applyCategoryFilter } from './content-type-rules.js';
 import { paginateQuery } from './paginate-query.js';
 
 /**
@@ -52,6 +53,9 @@ export async function listResources(
 	}
 	if (options.contentType) {
 		baseQuery.where('ctr.raw', 'like', `${options.contentType}%`);
+	}
+	if (options.contentTypeCategory) {
+		applyCategoryFilter(baseQuery, options.contentTypeCategory);
 	}
 	if (options.isExternal != null) {
 		baseQuery.where('ri.is_external', options.isExternal ? 1 : 0);
