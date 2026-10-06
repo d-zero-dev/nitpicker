@@ -268,9 +268,9 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で34個のツールが返される', async () => {
+	it('ListTools で37個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(34);
+		expect(result.tools).toHaveLength(37);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('list_inbound_links');
@@ -294,6 +294,9 @@ describe('createServer', () => {
 		expect(names).toContain('list_network_outages');
 		expect(names).toContain('list_console_logs');
 		expect(names).toContain('get_page_console_logs');
+		expect(names).toContain('search_html');
+		expect(names).toContain('list_pages_by_resource');
+		expect(names).toContain('get_resource_host_inventory');
 	});
 
 	it('toolDefinitions の数と ListTools の数が一致する', async () => {
@@ -531,6 +534,88 @@ describe('createServer', () => {
 		const data = JSON.parse(result.content[0]!.text);
 		expect(Array.isArray(data.items)).toBe(true);
 		expect(data.items.length).toBe(1);
+	});
+
+	it('list_links は type 省略で全リンクを返し、destUrlPattern で絞れる', async () => {
+		const all = await callTool(server, 'list_links', { archiveId });
+		expect(all.isError).toBeUndefined();
+		expect(JSON.parse(all.content[0]!.text).total).toBeGreaterThan(0);
+
+		const filtered = await callTool(server, 'list_links', {
+			archiveId,
+			destUrlPattern: '%/about',
+		});
+		const data = JSON.parse(filtered.content[0]!.text);
+		expect(data.items.map((item: { destUrl: string }) => item.destUrl)).toEqual([
+			'https://example.com/about',
+		]);
+	});
+
+	it('list_resources は contentTypeCategory / urlPattern で絞れ、不正な category はエラー', async () => {
+		const css = await callTool(server, 'list_resources', {
+			archiveId,
+			contentTypeCategory: 'css',
+			urlPattern: '%style.css',
+		});
+		expect(JSON.parse(css.content[0]!.text).total).toBe(1);
+
+		const font = await callTool(server, 'list_resources', {
+			archiveId,
+			contentTypeCategory: 'font',
+		});
+		expect(JSON.parse(font.content[0]!.text).total).toBe(0);
+
+		const invalid = await callTool(server, 'list_resources', {
+			archiveId,
+			contentTypeCategory: 'woff',
+		});
+		expect(invalid.isError).toBe(true);
+		expect(invalid.content[0]!.text).toContain('Invalid contentTypeCategory');
+	});
+
+	it('list_pages_by_resource はリソースを読み込むページを返し、条件なしはエラー', async () => {
+		const result = await callTool(server, 'list_pages_by_resource', {
+			archiveId,
+			contentTypeCategory: 'css',
+		});
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(2);
+		expect(data.items[0].matchedResources).toEqual(['https://example.com/style.css']);
+
+		const missing = await callTool(server, 'list_pages_by_resource', { archiveId });
+		expect(missing.isError).toBe(true);
+		expect(missing.content[0]!.text).toContain('urlPattern or contentTypeCategory');
+	});
+
+	it('get_resource_host_inventory はホスト別に集計する', async () => {
+		const result = await callTool(server, 'get_resource_host_inventory', { archiveId });
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.items).toEqual([
+			expect.objectContaining({
+				host: 'example.com',
+				resourceCount: 1,
+				pageCount: 2,
+				categories: { css: 1 },
+			}),
+		]);
+	});
+
+	it('search_html は保存済み HTML を検索し、pattern 必須', async () => {
+		const result = await callTool(server, 'search_html', {
+			archiveId,
+			pattern: '<h1>About</h1>',
+		});
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.total).toBe(1);
+		expect(data.items[0]).toMatchObject({
+			url: 'https://example.com/about',
+			matchCount: 1,
+		});
+		expect(data.candidatePages).toBe(2);
+
+		const missing = await callTool(server, 'search_html', { archiveId });
+		expect(missing.isError).toBe(true);
+		expect(missing.content[0]!.text).toContain('Missing required argument: pattern');
 	});
 
 	it('get_resource_referrers でリソースの参照元ページを返す', async () => {
