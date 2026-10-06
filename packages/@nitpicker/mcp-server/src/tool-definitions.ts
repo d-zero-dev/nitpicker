@@ -323,7 +323,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'get_violations',
 		description:
-			'Get analysis violations from plugins (axe, markuplint, textlint, lighthouse). Filter by validator, severity, or rule. Use for accessibility and code quality reports.',
+			'Get analysis violations from plugins (axe, markuplint, textlint). Filter by validator, severity, or rule. Use for accessibility and code quality reports.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -333,8 +333,7 @@ export const toolDefinitions: Tool[] = [
 				},
 				validator: {
 					type: 'string',
-					description:
-						'Filter by validator name (e.g., "axe", "markuplint", "textlint", "lighthouse")',
+					description: 'Filter by validator name (e.g., "axe", "markuplint", "textlint")',
 				},
 				severity: { type: 'string', description: 'Filter by severity level' },
 				rule: { type: 'string', description: 'Filter by rule ID' },

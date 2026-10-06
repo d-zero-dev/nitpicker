@@ -66,7 +66,7 @@ yarn lint                                          # lint + prettier + cspell
     - peer dependency で結ばれた別ベンダーのパッケージ
     - `resolutions` で固定しているパッケージとその利用側（現在は `google-auth-library`）
     - 自前の `@d-zero/*` パッケージ群（configs と runtime で分ける）
-    - 併用が前提のツール群（`lighthouse` + `chrome-launcher`、`knex` + `libsql` など）
+    - 併用が前提のツール群（`knex` + `libsql` など）
   - 判断基準は「**片方だけバージョンが上がった状態でビルドと型チェックが通るか**」。通らないなら同じ `groupName` にまとめる
 - グループ化を怠ると、Renovate が個別に PR を作り、片方だけマージされた中間状態で CI が赤になる。結果として**両方の PR がマージできなくなる**
 - グルーピングの現状は `git branch -r --list 'origin/renovate/*'` で確認できる。`*-monorepo` サフィックスのブランチは `group:monorepos` による自動グループ

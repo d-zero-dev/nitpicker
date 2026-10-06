@@ -19,7 +19,7 @@ function createPlugin(name: string): Plugin {
 
 const plugins: Plugin[] = [
 	createPlugin('@nitpicker/analyze-axe'),
-	createPlugin('@nitpicker/analyze-lighthouse'),
+	createPlugin('@nitpicker/analyze-markuplint'),
 	createPlugin('@nitpicker/analyze-textlint'),
 ];
 
@@ -112,13 +112,13 @@ describe('selectPlugins', () => {
 		const promptPlugins = vi.fn();
 		const result = await selectPlugins({
 			all: false,
-			pluginFlags: ['@nitpicker/analyze-lighthouse'],
+			pluginFlags: ['@nitpicker/analyze-markuplint'],
 			plugins,
 			isTTY: false,
 			promptPlugins,
 		});
 
-		expect(result).toEqual(['@nitpicker/analyze-lighthouse']);
+		expect(result).toEqual(['@nitpicker/analyze-markuplint']);
 		expect(promptPlugins).not.toHaveBeenCalled();
 	});
 

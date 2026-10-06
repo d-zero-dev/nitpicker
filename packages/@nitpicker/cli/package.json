@@ -39,7 +39,6 @@
 		"@d-zero/roar": "2.2.1",
 		"@d-zero/shared": "0.23.0",
 		"@nitpicker/analyze-axe": "0.23.0",
-		"@nitpicker/analyze-lighthouse": "0.23.0",
 		"@nitpicker/analyze-markuplint": "0.23.0",
 		"@nitpicker/analyze-search": "0.23.0",
 		"@nitpicker/analyze-textlint": "0.23.0",

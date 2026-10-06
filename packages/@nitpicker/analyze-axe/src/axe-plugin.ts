@@ -19,7 +19,7 @@ type Options = {
 	lang?: string;
 	/**
 	 * Reserved for config-file schema compatibility with other analyze
-	 * plugins (e.g. `@nitpicker/analyze-lighthouse`, `@nitpicker/analyze-markuplint`,
+	 * plugins (e.g. `@nitpicker/analyze-markuplint`,
 	 * which forward this field to their underlying tool's own config).
 	 * Currently unused: this plugin only derives axe-core configuration from
 	 * `lang`.

@@ -346,7 +346,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			violations: {
 				title: 'Violations',
 				description:
-					'Findings from analyze plugins (axe, markuplint, textlint, Lighthouse). Filter by validator or severity.',
+					'Findings from analyze plugins (axe, markuplint, textlint). Filter by validator or severity.',
 				colSeverity: 'Severity',
 				colValidator: 'Validator',
 				colRule: 'Rule',
@@ -893,7 +893,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			violations: {
 				title: '違反',
 				description:
-					'analyze プラグイン（axe・markuplint・textlint・Lighthouse）の検出結果。バリデータや重要度で絞り込めます。',
+					'analyze プラグイン（axe・markuplint・textlint）の検出結果。バリデータや重要度で絞り込めます。',
 				colSeverity: '重要度',
 				colValidator: 'バリデータ',
 				colRule: 'ルール',

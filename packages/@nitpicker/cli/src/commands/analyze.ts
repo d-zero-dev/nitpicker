@@ -30,7 +30,7 @@ type AnalyzeFlags = InferFlags<typeof commandDef.flags>;
  * display, and writes results back to the archive.
  *
  * WHY enquirer prompt: Allows users to selectively run expensive plugins
- * (e.g. Lighthouse) without re-running everything. The `--all` flag
+ * without re-running everything. The `--all` flag
  * bypasses the prompt for CI/automation use cases. The `--plugin` flag
  * allows specifying individual plugins without interaction.
  *

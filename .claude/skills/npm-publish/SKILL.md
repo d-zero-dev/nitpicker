@@ -19,7 +19,6 @@ Lerna **fixed モード**のため、全パッケージが同一バージョン�
 | npm パッケージ名                  |
 | --------------------------------- |
 | `@nitpicker/analyze-axe`          |
-| `@nitpicker/analyze-lighthouse`   |
 | `@nitpicker/analyze-markuplint`   |
 | `@nitpicker/analyze-search`       |
 | `@nitpicker/analyze-textlint`     |

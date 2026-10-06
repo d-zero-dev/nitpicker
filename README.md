@@ -45,7 +45,6 @@ CLI の詳細な使い方と全オプションは [@nitpicker/cli README](./pack
 | [@nitpicker/viewer](./packages/@nitpicker/viewer/README.md)                             | `.nitpicker` アーカイブを閲覧するローカルビューア       |
 | [@nitpicker/types](./packages/@nitpicker/types/README.md)                               | 共有TypeScript型定義                                    |
 | [@nitpicker/analyze-axe](./packages/@nitpicker/analyze-axe/README.md)                   | axe-coreによるアクセシビリティ分析プラグイン            |
-| [@nitpicker/analyze-lighthouse](./packages/@nitpicker/analyze-lighthouse/README.md)     | Lighthouseによるパフォーマンス分析プラグイン            |
 | [@nitpicker/analyze-markuplint](./packages/@nitpicker/analyze-markuplint/README.md)     | markuplintによるHTML検証プラグイン                      |
 | [@nitpicker/analyze-textlint](./packages/@nitpicker/analyze-textlint/README.md)         | textlintによる日本語文章校正プラグイン                  |
 | [@nitpicker/analyze-search](./packages/@nitpicker/analyze-search/README.md)             | キーワード・CSSセレクタ検索プラグイン                   |

@@ -128,7 +128,7 @@ export interface AnalyzePlugin<T extends string = string> {
 	 * Maximum number of pages this plugin processes in parallel.
 	 *
 	 * Each plugin is allocated its own {@link ../worker/worker-pool.ts!WorkerPool}
-	 * sized to this value. Heavy plugins (e.g. Lighthouse, which spawns a
+	 * sized to this value. Heavy plugins (e.g. one that spawns a
 	 * full Chrome instance per page) should set a small number; lightweight
 	 * DOM-only plugins can leave it unset.
 	 *

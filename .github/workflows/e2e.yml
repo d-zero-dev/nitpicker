@@ -16,7 +16,6 @@ on:
   pull_request:
     paths:
       - 'packages/@nitpicker/analyze-axe/**'
-      - 'packages/@nitpicker/analyze-lighthouse/**'
       - 'packages/@nitpicker/analyze-markuplint/**'
       - 'packages/@nitpicker/analyze-search/**'
       - 'packages/@nitpicker/analyze-textlint/**'
