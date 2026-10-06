@@ -90,7 +90,30 @@ export const commandDef = {
 		urlPattern: {
 			type: 'string',
 			valueName: 'pattern',
-			desc: 'URL pattern to filter (SQL LIKE pattern)',
+			desc: 'URL pattern to filter (SQL LIKE pattern). For pages-by-resource it matches the resource URL; for links, source or destination',
+		},
+		sourceUrlPattern: {
+			type: 'string',
+			valueName: 'pattern',
+			desc: 'links: SQL LIKE pattern restricted to the source page URL',
+		},
+		destUrlPattern: {
+			type: 'string',
+			valueName: 'pattern',
+			desc: 'links: SQL LIKE pattern restricted to the (redirect-resolved) destination URL',
+		},
+		pattern: {
+			type: 'string',
+			valueName: 'string|/regex/flags',
+			desc: 'search-html: text to find in the stored HTML. A plain string is a literal substring; /pattern/flags (g, i, m) is a regular expression',
+		},
+		snippetLength: {
+			type: 'number',
+			desc: 'search-html: snippet window size in characters. Defaults to 160.',
+		},
+		resourcesLimit: {
+			type: 'number',
+			desc: 'pages-by-resource: matched resource URL sample size per page. Defaults to 20.',
 		},
 		directory: {
 			type: 'string',
@@ -100,7 +123,7 @@ export const commandDef = {
 		sortBy: {
 			type: 'string',
 			valueName: 'field',
-			desc: 'Field to sort by (url, status, title for pages; totalCount, pageCount, text, type for console-logs)',
+			desc: 'Field to sort by (url, status, title for pages; sourceUrl, destUrl, status, isExternal, textContent for links; url, status, statusText, contentType, contentLength, isExternal, referrerCount, compress, cdn for resources; resourceCount, pageCount, host for resource-hosts; totalCount, pageCount, text, type for console-logs)',
 		},
 		sortOrder: {
 			type: 'string',
@@ -110,7 +133,7 @@ export const commandDef = {
 		type: {
 			type: 'string',
 			valueName: 'type',
-			desc: 'Filter type: broken, external (links); canonical, og:title, og:description (mismatches); a console message type e.g. error, warn, pageerror (console-logs); or a JSON-LD type name (pages-by-jsonld-type, count-pages-by-jsonld-type)',
+			desc: 'Filter type: broken, external, all (links; default all); canonical, og:title, og:description (mismatches); a console message type e.g. error, warn, pageerror (console-logs); or a JSON-LD type name (pages-by-jsonld-type, count-pages-by-jsonld-type)',
 		},
 		contentType: {
 			type: 'string',
@@ -120,7 +143,7 @@ export const commandDef = {
 		contentTypeCategory: {
 			type: 'string',
 			valueName: 'category',
-			desc: 'Filter pages by Content-Type category (html, pdf, csv, word, excel, powerpoint, image, css, javascript, json, xml, font, audio, video, archive, text, other, unknown)',
+			desc: 'Filter pages or resources by Content-Type category (html, pdf, csv, word, excel, powerpoint, image, css, javascript, json, xml, font, audio, video, archive, text, other, unknown)',
 		},
 		missingAlt: {
 			type: 'boolean',
@@ -247,14 +270,59 @@ export const commandDef = {
 			flags: ['url', 'maxLength'],
 		},
 		links: {
-			desc: 'List broken or external links',
-			usage: '<file> links --type <broken|external> [options]',
-			flags: ['type', 'includeRedirectSources', 'limit', 'offset'],
+			desc: 'List links (all by default, or only broken / external), filterable by source / destination URL pattern and status',
+			usage: '<file> links [--type <broken|external|all>] [options]',
+			flags: [
+				'type',
+				'urlPattern',
+				'sourceUrlPattern',
+				'destUrlPattern',
+				'status',
+				'sortBy',
+				'sortOrder',
+				'includeRedirectSources',
+				'limit',
+				'offset',
+			],
 		},
 		resources: {
-			desc: 'List fetched resources (CSS, JS, images, …)',
+			desc: 'List fetched resources (CSS, JS, images, fonts, …)',
 			usage: '<file> resources [options]',
-			flags: ['contentType', 'isExternal', 'limit', 'offset'],
+			flags: [
+				'urlPattern',
+				'status',
+				'contentType',
+				'contentTypeCategory',
+				'isExternal',
+				'sortBy',
+				'sortOrder',
+				'limit',
+				'offset',
+			],
+		},
+		'pages-by-resource': {
+			desc: 'List pages that load resources matching a URL pattern and/or Content-Type category (e.g. every page loading a web font)',
+			usage:
+				'<file> pages-by-resource (--urlPattern <pattern> | --contentTypeCategory <category>) [options]',
+			flags: [
+				'urlPattern',
+				'contentTypeCategory',
+				'isExternal',
+				'status',
+				'resourcesLimit',
+				'limit',
+				'offset',
+			],
+		},
+		'resource-hosts': {
+			desc: 'Aggregate sub-resources by serving host (resource / page counts and Content-Type category mix)',
+			usage: '<file> resource-hosts [options]',
+			flags: ['isExternal', 'sortBy', 'sortOrder', 'limit', 'offset'],
+		},
+		'search-html': {
+			desc: 'Search the stored HTML snapshots of all pages for a string or /regex/ (raw markup incl. <script>, <style> and attributes; no analyze step needed)',
+			usage: '<file> search-html --pattern <string|/regex/flags> [options]',
+			flags: ['pattern', 'urlPattern', 'directory', 'snippetLength', 'limit', 'offset'],
 		},
 		images: {
 			desc: 'List images, optionally filtered to missing alt/dimensions or oversized files',

@@ -3,10 +3,31 @@ import type { commandDef } from '../commands/query-def.js';
 import type { InferFlags } from '@d-zero/roar';
 import type { ContentTypeCategory } from '@nitpicker/query';
 
+import { strToRegex } from '@d-zero/shared/str-to-regex';
 import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query';
 
 /** Parsed flag values for the query CLI command. */
 type QueryFlags = InferFlags<typeof commandDef.flags>;
+
+/**
+ * Throws a user-friendly error when an enum-shaped flag is set to a value
+ * outside `allowed`; an omitted flag is accepted.
+ * @param name - The flag name without leading dashes (e.g. `sortBy`).
+ * @param value - The raw flag value.
+ * @param allowed - The accepted values.
+ * @throws {Error} If `value` is set but not in `allowed`.
+ */
+function assertEnumFlag(
+	name: string,
+	value: string | undefined,
+	allowed: readonly string[],
+): void {
+	if (value != null && !allowed.includes(value)) {
+		throw new Error(
+			`Invalid --${name} value: ${value}. Must be one of: ${allowed.join(', ')}`,
+		);
+	}
+}
 
 /**
  * Validates the `--contentTypeCategory` flag against {@link CONTENT_TYPE_CATEGORIES}.
@@ -109,27 +130,103 @@ export function mapFlagsToQueryOptions(
 			return { url: flags.url, maxLength: flags.maxLength };
 		}
 		case 'links': {
-			if (!flags.type) {
+			if (flags.type != null && !['broken', 'external', 'all'].includes(flags.type)) {
 				throw new Error(
-					'--type is required for the links sub-command. Must be one of: broken, external',
+					`Invalid --type value: ${flags.type}. Must be one of: broken, external, all`,
 				);
 			}
-			if (!['broken', 'external'].includes(flags.type)) {
-				throw new Error(
-					`Invalid --type value: ${flags.type}. Must be one of: broken, external`,
-				);
-			}
+			assertEnumFlag('sortBy', flags.sortBy, [
+				'sourceUrl',
+				'destUrl',
+				'status',
+				'isExternal',
+				'textContent',
+			]);
+			assertEnumFlag('sortOrder', flags.sortOrder, ['asc', 'desc']);
 			return {
-				type: flags.type as 'broken' | 'external',
+				type: flags.type as 'broken' | 'external' | 'all' | undefined,
+				urlPattern: flags.urlPattern,
+				sourceUrlPattern: flags.sourceUrlPattern,
+				destUrlPattern: flags.destUrlPattern,
+				status: flags.status,
+				sortBy: flags.sortBy,
+				sortOrder: flags.sortOrder,
 				includeRedirectSources: flags.includeRedirectSources,
 				limit: flags.limit,
 				offset: flags.offset,
 			};
 		}
 		case 'resources': {
+			assertEnumFlag('sortBy', flags.sortBy, [
+				'url',
+				'status',
+				'statusText',
+				'contentType',
+				'contentLength',
+				'isExternal',
+				'referrerCount',
+				'compress',
+				'cdn',
+			]);
+			assertEnumFlag('sortOrder', flags.sortOrder, ['asc', 'desc']);
 			return {
+				urlPattern: flags.urlPattern,
+				status: flags.status,
 				contentType: flags.contentType,
+				contentTypeCategory: parseContentTypeCategoryFlag(flags.contentTypeCategory),
 				isExternal: flags.isExternal,
+				sortBy: flags.sortBy,
+				sortOrder: flags.sortOrder,
+				limit: flags.limit,
+				offset: flags.offset,
+			};
+		}
+		case 'search-html': {
+			if (!flags.pattern) {
+				throw new Error(
+					'--pattern is required for the search-html sub-command. Use a plain string, or /regex/flags.',
+				);
+			}
+			try {
+				strToRegex(flags.pattern);
+			} catch (error) {
+				throw new Error(
+					`Invalid --pattern value: ${flags.pattern} (${error instanceof Error ? error.message : String(error)})`,
+					{ cause: error },
+				);
+			}
+			return {
+				pattern: flags.pattern,
+				urlPattern: flags.urlPattern,
+				directory: flags.directory,
+				snippetLength: flags.snippetLength,
+				limit: flags.limit,
+				offset: flags.offset,
+			};
+		}
+		case 'pages-by-resource': {
+			if (!flags.urlPattern && !flags.contentTypeCategory) {
+				throw new Error(
+					'--urlPattern or --contentTypeCategory is required for the pages-by-resource sub-command.',
+				);
+			}
+			return {
+				urlPattern: flags.urlPattern,
+				contentTypeCategory: parseContentTypeCategoryFlag(flags.contentTypeCategory),
+				isExternal: flags.isExternal,
+				status: flags.status,
+				resourcesLimit: flags.resourcesLimit,
+				limit: flags.limit,
+				offset: flags.offset,
+			};
+		}
+		case 'resource-hosts': {
+			assertEnumFlag('sortBy', flags.sortBy, ['resourceCount', 'pageCount', 'host']);
+			assertEnumFlag('sortOrder', flags.sortOrder, ['asc', 'desc']);
+			return {
+				isExternal: flags.isExternal,
+				sortBy: flags.sortBy,
+				sortOrder: flags.sortOrder,
 				limit: flags.limit,
 				offset: flags.offset,
 			};

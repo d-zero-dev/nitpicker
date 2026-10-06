@@ -78,14 +78,31 @@ export async function query(args: string[], flags: QueryFlags) {
 		}
 		const { archiveId, accessor } = openResult;
 		try {
-			// Plain stderr lines, not a `Lanes` line (issue #294): this fires
-			// strictly before the `console.log(output)` below, so there's no
-			// shared-region redraw conflict to guard against — just a single
-			// human-readable status line per `externalSortUrls` phase change,
-			// safe to interleave with anything.
-			const result = await dispatchQuery(accessor, subCommand, flags, (message) => {
-				process.stderr.write(`${message}\n`);
-			});
+			let result: unknown;
+			{
+				// `search-html` is a minutes-long linear scan, so it gets the same
+				// "no silent interval" treatment as archive extraction: a `Lanes`
+				// line on stderr, disposed (end of this block) before the
+				// `console.log(output)` below so its repaint loop can't corrupt
+				// the stdout write.
+				using scanLanes =
+					subCommand === 'search-html'
+						? new Lanes({ verbose: false, indent: '  ', stream: process.stderr })
+						: null;
+				scanLanes?.update(0, '%braille% Scanning HTML snapshots%dots%');
+				// Every other sub-command reports through plain stderr lines
+				// (issue #294): they fire strictly before the `console.log`, so
+				// there's no shared-region redraw conflict — just a single
+				// human-readable status line per `externalSortUrls` phase change,
+				// safe to interleave with anything.
+				result = await dispatchQuery(accessor, subCommand, flags, (message) => {
+					if (scanLanes) {
+						scanLanes.update(0, `%braille% ${message}`);
+					} else {
+						process.stderr.write(`${message}\n`);
+					}
+				});
+			}
 			const output = JSON.stringify(result, null, flags.pretty ? 2 : undefined);
 			// eslint-disable-next-line no-console
 			console.log(output);

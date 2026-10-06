@@ -6,6 +6,9 @@ import type {
 	ListPagesOptions,
 	ListLinksOptions,
 	ListResourcesOptions,
+	ListPagesByResourceOptions,
+	GetResourceHostInventoryOptions,
+	SearchHtmlOptions,
 	ListImagesOptions,
 	GetViolationsOptions,
 	GetDuplicatesFastPathOptions,
@@ -30,6 +33,7 @@ import {
 	getPageJsonLd,
 	getPageJsonLdOverview,
 	getPageTechnologies,
+	getResourceHostInventory,
 	getResourceReferrers,
 	getSummaryFastPath,
 	getTechnologyInventoryFastPath,
@@ -44,11 +48,13 @@ import {
 	listNetworkOutages,
 	listPages,
 	listPagesByJsonLdType,
+	listPagesByResource,
 	listPagesByTechnology,
 	listReconcileRuns,
 	listResources,
 	listUnusedResources,
 	matchUrlList,
+	searchHtml,
 } from '@nitpicker/query';
 
 import { readUrlListFile } from '../read-url-list-file.js';
@@ -67,11 +73,12 @@ type QueryFlags = InferFlags<typeof commandDef.flags>;
  * @param accessor - The opened archive accessor.
  * @param subCommand - The sub-command name.
  * @param flags - The parsed CLI flags.
- * @param onSortProgress - Forwarded to `pages`/`mismatches`' underlying
- *   `listPages`/`findMismatches` calls (issue #294) — see
- *   `ListPagesOptions.onSortProgress`. Called with human-readable status
- *   lines while a cold connection's `sortBy: 'url'` lazily builds the URL
- *   natural-sort TEMP table. Omit for silent (the default).
+ * @param onProgress - Receives human-readable status lines for long
+ *   phases. Forwarded as `onSortProgress` to `pages`/`mismatches`'
+ *   underlying `listPages`/`findMismatches` calls (issue #294, while a cold
+ *   connection's `sortBy: 'url'` lazily builds the URL natural-sort TEMP
+ *   table) and as `onProgress` to `search-html` (one line per scanned
+ *   chunk of HTML snapshots). Omit for silent (the default).
  * @returns The query result as a JSON-serializable value.
  * @throws {Error} If a required resource is not found (page-detail, html, resource-referrers).
  */
@@ -79,7 +86,7 @@ export async function dispatchQuery(
 	accessor: ArchiveAccessor,
 	subCommand: QuerySubCommand,
 	flags: QueryFlags,
-	onSortProgress?: (message: string) => void,
+	onProgress?: (message: string) => void,
 ): Promise<unknown> {
 	const options = mapFlagsToQueryOptions(subCommand, flags);
 
@@ -88,7 +95,10 @@ export async function dispatchQuery(
 			return getSummaryFastPath(accessor);
 		}
 		case 'pages': {
-			return listPages(accessor, { ...(options as ListPagesOptions), onSortProgress });
+			return listPages(accessor, {
+				...(options as ListPagesOptions),
+				onSortProgress: onProgress,
+			});
 		}
 		case 'page-detail': {
 			const { url } = options as { url: string };
@@ -132,6 +142,18 @@ export async function dispatchQuery(
 		case 'resources': {
 			return listResources(accessor, options as ListResourcesOptions);
 		}
+		case 'pages-by-resource': {
+			return listPagesByResource(accessor, options as ListPagesByResourceOptions);
+		}
+		case 'resource-hosts': {
+			return getResourceHostInventory(
+				accessor,
+				options as GetResourceHostInventoryOptions,
+			);
+		}
+		case 'search-html': {
+			return searchHtml(accessor, { ...(options as SearchHtmlOptions), onProgress });
+		}
 		case 'images': {
 			return getImagesFastPath(accessor, options as ListImagesOptions);
 		}
@@ -164,7 +186,10 @@ export async function dispatchQuery(
 			const { type, ...rest } = options as {
 				type: 'canonical' | 'og:title' | 'og:description';
 			} & FindMismatchesFastPathOptions;
-			return getMismatchesFastPath(accessor, type, { ...rest, onSortProgress });
+			return getMismatchesFastPath(accessor, type, {
+				...rest,
+				onSortProgress: onProgress,
+			});
 		}
 		case 'headers': {
 			return getHeaderChecksFastPath(

@@ -143,6 +143,30 @@ describe('query command', () => {
 		);
 	});
 
+	it('shows search-html scan progress on a Lanes line, starting before the first chunk', async () => {
+		mockLanesUpdate.mockClear();
+		const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+		vi.mocked(dispatchQueryFn).mockImplementationOnce(
+			(_accessor, _sub, _flags, onProgress) => {
+				onProgress?.('Scanning HTML snapshots: 500 / 1200');
+				return Promise.resolve({ items: [], total: 0 });
+			},
+		);
+
+		await query(['test.nitpicker', 'search-html'], { pattern: 'x' } as never);
+
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			0,
+			'%braille% Scanning HTML snapshots%dots%',
+		);
+		expect(mockLanesUpdate).toHaveBeenCalledWith(
+			0,
+			'%braille% Scanning HTML snapshots: 500 / 1200',
+		);
+		// The Lanes line replaces plain stderr lines for this sub-command.
+		expect(stderrSpy).not.toHaveBeenCalledWith('Scanning HTML snapshots: 500 / 1200\n');
+	});
+
 	it('exits with error when ArchiveManager.open fails', async () => {
 		const { ArchiveManager } = await import('@nitpicker/query');
 		vi.mocked(ArchiveManager).mockImplementationOnce(function (this: {

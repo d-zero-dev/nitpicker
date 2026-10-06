@@ -2207,8 +2207,11 @@ export interface InboundLinkList {
  * broken link on its own.
  */
 export interface ListLinksOptions {
-	/** Filter type for links. */
-	type: 'broken' | 'external';
+	/**
+	 * Filter type for links: `broken`, `external`, or `all` (no type
+	 * restriction). Defaults to `all`.
+	 */
+	type?: 'broken' | 'external' | 'all';
 	/** Maximum number of results. */
 	limit?: number;
 	/** Number of results to skip. */
@@ -2220,6 +2223,10 @@ export interface ListLinksOptions {
 	includeRedirectSources?: boolean;
 	/** URL pattern to search source or destination URLs. */
 	urlPattern?: string;
+	/** SQL LIKE pattern restricted to the source page URL. */
+	sourceUrlPattern?: string;
+	/** SQL LIKE pattern restricted to the (redirect-resolved) destination URL. */
+	destUrlPattern?: string;
 	/** Filter by destination HTTP status. */
 	status?: number;
 	/** Field to sort results by. */
@@ -2423,6 +2430,11 @@ export interface ListResourcesOptions {
 	status?: number;
 	/** Filter by content type prefix (e.g., "text/css", "application/javascript"). */
 	contentType?: string;
+	/**
+	 * Filter by Content-Type category (e.g. `font`, `css`, `javascript`),
+	 * classified by the same rules as the pages list. ANDed with `contentType`.
+	 */
+	contentTypeCategory?: ContentTypeCategory;
 	/** Filter by external (true) or internal (false) resources. */
 	isExternal?: boolean;
 	/** Field to sort results by. */
@@ -4023,4 +4035,142 @@ export interface UrlMatchResult {
 	 * when the matched row is not a redirect source, or when not found.
 	 */
 	redirectDestUrl: string | null;
+}
+
+/**
+ * Options for {@link import('./search-html.js').searchHtml}.
+ */
+export interface SearchHtmlOptions {
+	/**
+	 * Search pattern in `strToRegex` syntax: a plain string is matched as an
+	 * escaped literal substring, `/pattern/flags` (flags `g`/`i`/`m`) as a
+	 * regular expression.
+	 */
+	pattern: string;
+	/** SQL LIKE pattern restricting the page URLs to scan. */
+	urlPattern?: string;
+	/** Directory path prefix restricting the page URLs to scan. */
+	directory?: string;
+	/** Maximum number of matching pages to return (default 100; `0` returns only counts). */
+	limit?: number;
+	/** Number of matching pages to skip (default 0). */
+	offset?: number;
+	/** Snippet window size in characters (default 160). */
+	snippetLength?: number;
+	/**
+	 * Called after each scanned chunk with a human-readable status line
+	 * (`Scanning HTML snapshots: <done> / <total>`). Omit for silent.
+	 */
+	onProgress?: (message: string) => void;
+}
+
+/** One page whose stored HTML snapshot matched a {@link SearchHtmlOptions.pattern}. */
+export interface SearchHtmlItem {
+	/** The page URL. */
+	url: string;
+	/** Number of pattern occurrences in the page's HTML. */
+	matchCount: number;
+	/** Whitespace-collapsed window around the first occurrence. */
+	snippet: string;
+}
+
+/** Result of {@link import('./search-html.js').searchHtml}. */
+export interface SearchHtmlResult {
+	/** Matching pages in page-id order, sliced by `offset` / `limit`. */
+	items: SearchHtmlItem[];
+	/** Total number of matching pages (before `offset` / `limit`). */
+	total: number;
+	/** Applied offset. */
+	offset: number;
+	/** Applied limit. */
+	limit: number;
+	/** Number of distinct HTML snapshots that were decompressed and scanned. */
+	scannedSnapshots: number;
+	/** Number of in-scope pages that have a stored HTML snapshot. */
+	candidatePages: number;
+}
+
+/**
+ * Options for {@link import('./list-pages-by-resource.js').listPagesByResource}.
+ * At least one of `urlPattern` / `contentTypeCategory` is required.
+ */
+export interface ListPagesByResourceOptions {
+	/** SQL LIKE pattern matched against the resource URL. */
+	urlPattern?: string;
+	/** Restrict to resources of this Content-Type category (e.g. `font`). */
+	contentTypeCategory?: ContentTypeCategory;
+	/** Restrict to external (true) or internal (false) resources. */
+	isExternal?: boolean;
+	/** Restrict to resources with this HTTP status. */
+	status?: number;
+	/** Maximum number of pages (default 100). */
+	limit?: number;
+	/** Number of pages to skip (default 0). */
+	offset?: number;
+	/** Maximum matched resource URLs sampled per page (default 20). */
+	resourcesLimit?: number;
+}
+
+/** One page that loads at least one resource matching the filter. */
+export interface PageByResourceItem {
+	/** The page URL. */
+	url: string;
+	/** Number of distinct matching resources the page references. */
+	matchedResourceCount: number;
+	/** Sample of matching resource URLs, capped by `resourcesLimit`. */
+	matchedResources: string[];
+}
+
+/** Result of {@link import('./list-pages-by-resource.js').listPagesByResource}. */
+export interface PagesByResourceResult {
+	/** Pages ordered by page id. */
+	items: PageByResourceItem[];
+	/** Total number of pages with at least one matching resource. */
+	total: number;
+	/** Applied offset. */
+	offset: number;
+	/** Applied limit. */
+	limit: number;
+}
+
+/** Options for {@link import('./get-resource-host-inventory.js').getResourceHostInventory}. */
+export interface GetResourceHostInventoryOptions {
+	/** Restrict to external (true) or internal (false) resources. */
+	isExternal?: boolean;
+	/** Sort field (default `resourceCount`). */
+	sortBy?: 'resourceCount' | 'pageCount' | 'host';
+	/** Sort direction (default `desc` for counts, `asc` for host). */
+	sortOrder?: SortOrder;
+	/** Maximum number of hosts (default 100). */
+	limit?: number;
+	/** Number of hosts to skip (default 0). */
+	offset?: number;
+}
+
+/** One origin (host + port) that served sub-resources. */
+export interface ResourceHostEntry {
+	/** Resource host name. */
+	host: string;
+	/** Port, or `null` when the URL uses the scheme default. */
+	port: number | null;
+	/** Whether the resources are external to the crawl scope. */
+	isExternal: boolean;
+	/** Number of distinct resources served by this host. */
+	resourceCount: number;
+	/** Number of distinct pages referencing at least one of them. */
+	pageCount: number;
+	/** Resource count per Content-Type category (zero categories omitted). */
+	categories: Partial<Record<ContentTypeCategory, number>>;
+}
+
+/** Result of {@link import('./get-resource-host-inventory.js').getResourceHostInventory}. */
+export interface ResourceHostInventory {
+	/** Hosts, sorted and sliced. */
+	items: ResourceHostEntry[];
+	/** Total number of hosts. */
+	total: number;
+	/** Applied offset. */
+	offset: number;
+	/** Applied limit. */
+	limit: number;
 }

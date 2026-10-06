@@ -37,6 +37,12 @@ import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
  * from alias grouping, not redirect *destinations*). When
  * `includeRedirectSources: true`, all resolution is skipped and the literal
  * dest values are used.
+ *
+ * `type` selects the judgment: `broken`, `external`, or `all` (the default
+ * when omitted — every anchor edge, narrowed only by the URL / status
+ * filters). `urlPattern` matches source OR destination; `sourceUrlPattern`
+ * and `destUrlPattern` constrain one side each (e.g. "every link pointing at
+ * a PDF": `destUrlPattern: '%.pdf'`).
  * @param accessor - The archive accessor to query.
  * @param options - Filter and pagination options.
  * @returns Link analysis results with entries and total count.
@@ -50,7 +56,7 @@ import { ensureUrlSortTempTable } from './url-sort-temp-table.js';
  */
 export async function listLinks(
 	accessor: ArchiveAccessor,
-	options: ListLinksOptions,
+	options: ListLinksOptions = {},
 ): Promise<LinkAnalysisResult> {
 	const knex = accessor.getKnex();
 	await requireAliasOfIdColumn(knex);
@@ -120,8 +126,14 @@ export async function listLinks(
 
 	if (options.type === 'broken') {
 		baseQuery.whereRaw(`${statusExpression} = 404`);
-	} else {
+	} else if (options.type === 'external') {
 		baseQuery.whereRaw(`${isExternalExpression} = 1`);
+	}
+	if (options.sourceUrlPattern) {
+		baseQuery.where('source_ur.url', 'like', options.sourceUrlPattern);
+	}
+	if (options.destUrlPattern) {
+		baseQuery.whereRaw(`${destUrlExpression} like ?`, [options.destUrlPattern]);
 	}
 	if (options.urlPattern) {
 		const urlPattern = options.urlPattern;

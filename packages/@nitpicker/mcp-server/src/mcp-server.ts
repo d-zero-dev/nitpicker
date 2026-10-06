@@ -9,6 +9,7 @@ import {
 import {
 	ArchiveManager,
 	countPagesByJsonLdType,
+	CONTENT_TYPE_CATEGORIES,
 	countPagesByTechnology,
 	findDuplicateBodies,
 	getDuplicatesFastPath,
@@ -23,6 +24,7 @@ import {
 	getPageJsonLdOverview,
 	getPageMainContents,
 	getPageTechnologies,
+	getResourceHostInventory,
 	getResourceReferrers,
 	getSummaryFastPath,
 	getTechnologyInventoryFastPath,
@@ -37,9 +39,11 @@ import {
 	listNetworkOutages,
 	listPages,
 	listPagesByJsonLdType,
+	listPagesByResource,
 	listPagesByTechnology,
 	listResources,
 	listUnusedResources,
+	searchHtml,
 } from '@nitpicker/query';
 
 import { formatExtractProgressLine } from './format-extract-progress-line.js';
@@ -128,7 +132,35 @@ function optionalString(args: Record<string, unknown>, key: string): string | un
 }
 
 /** Valid link analysis types. */
-const VALID_LINK_TYPES = ['broken', 'external'] as const;
+const VALID_LINK_TYPES = ['broken', 'external', 'all'] as const;
+
+/** Valid sort directions. */
+const VALID_SORT_ORDERS = ['asc', 'desc'] as const;
+
+/** Valid `list_links` sort fields. */
+const VALID_LINK_SORT_FIELDS = [
+	'sourceUrl',
+	'destUrl',
+	'status',
+	'isExternal',
+	'textContent',
+] as const;
+
+/** Valid `list_resources` sort fields. */
+const VALID_RESOURCE_SORT_FIELDS = [
+	'url',
+	'status',
+	'statusText',
+	'contentType',
+	'contentLength',
+	'isExternal',
+	'referrerCount',
+	'compress',
+	'cdn',
+] as const;
+
+/** Valid `get_resource_host_inventory` sort fields. */
+const VALID_HOST_SORT_FIELDS = ['resourceCount', 'pageCount', 'host'] as const;
 
 /** Valid mismatch types. */
 const VALID_MISMATCH_TYPES = ['canonical', 'og:title', 'og:description'] as const;
@@ -155,6 +187,25 @@ function validateEnum<T extends string>(
 		);
 	}
 	return value as T;
+}
+
+/**
+ * Extracts an optional string argument that must be one of `allowed`.
+ * @param args - The arguments object.
+ * @param key - The argument key.
+ * @param allowed - The list of allowed values.
+ * @param label - A label for the argument (used in error messages).
+ * @returns The validated value, or `undefined` if not present.
+ * @throws {Error} If the value is present but not in the allowed list.
+ */
+function optionalEnum<T extends string>(
+	args: Record<string, unknown>,
+	key: string,
+	allowed: readonly T[],
+	label: string,
+): T | undefined {
+	const value = optionalString(args, key);
+	return value === undefined ? undefined : validateEnum(value, allowed, label);
 }
 
 /**
@@ -317,14 +368,20 @@ export function createServer() {
 					}
 					case 'list_links': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						const type = validateEnum(
-							requireString(args, 'type'),
-							VALID_LINK_TYPES,
-							'link type',
-						);
 						return jsonResult(
 							await listLinks(accessor, {
-								type,
+								type: optionalEnum(args, 'type', VALID_LINK_TYPES, 'link type'),
+								urlPattern: optionalString(args, 'urlPattern'),
+								sourceUrlPattern: optionalString(args, 'sourceUrlPattern'),
+								destUrlPattern: optionalString(args, 'destUrlPattern'),
+								status: optionalNumber(args, 'status'),
+								sortBy: optionalEnum(args, 'sortBy', VALID_LINK_SORT_FIELDS, 'sortBy'),
+								sortOrder: optionalEnum(
+									args,
+									'sortOrder',
+									VALID_SORT_ORDERS,
+									'sortOrder',
+								),
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 								includeRedirectSources: optionalBoolean(args, 'includeRedirectSources'),
@@ -333,7 +390,90 @@ export function createServer() {
 					}
 					case 'list_resources': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(await listResources(accessor, omit(args, 'archiveId')));
+						return jsonResult(
+							await listResources(accessor, {
+								urlPattern: optionalString(args, 'urlPattern'),
+								status: optionalNumber(args, 'status'),
+								contentType: optionalString(args, 'contentType'),
+								contentTypeCategory: optionalEnum(
+									args,
+									'contentTypeCategory',
+									CONTENT_TYPE_CATEGORIES,
+									'contentTypeCategory',
+								),
+								isExternal: optionalBoolean(args, 'isExternal'),
+								sortBy: optionalEnum(
+									args,
+									'sortBy',
+									VALID_RESOURCE_SORT_FIELDS,
+									'sortBy',
+								),
+								sortOrder: optionalEnum(
+									args,
+									'sortOrder',
+									VALID_SORT_ORDERS,
+									'sortOrder',
+								),
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'list_pages_by_resource': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						const urlPattern = optionalString(args, 'urlPattern');
+						const contentTypeCategory = optionalEnum(
+							args,
+							'contentTypeCategory',
+							CONTENT_TYPE_CATEGORIES,
+							'contentTypeCategory',
+						);
+						if (!urlPattern && !contentTypeCategory) {
+							throw new Error(
+								'At least one of urlPattern or contentTypeCategory is required.',
+							);
+						}
+						return jsonResult(
+							await listPagesByResource(accessor, {
+								urlPattern,
+								contentTypeCategory,
+								isExternal: optionalBoolean(args, 'isExternal'),
+								status: optionalNumber(args, 'status'),
+								resourcesLimit: optionalNumber(args, 'resourcesLimit'),
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'get_resource_host_inventory': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await getResourceHostInventory(accessor, {
+								isExternal: optionalBoolean(args, 'isExternal'),
+								sortBy: optionalEnum(args, 'sortBy', VALID_HOST_SORT_FIELDS, 'sortBy'),
+								sortOrder: optionalEnum(
+									args,
+									'sortOrder',
+									VALID_SORT_ORDERS,
+									'sortOrder',
+								),
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'search_html': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await searchHtml(accessor, {
+								pattern: requireString(args, 'pattern'),
+								urlPattern: optionalString(args, 'urlPattern'),
+								directory: optionalString(args, 'directory'),
+								snippetLength: optionalNumber(args, 'snippetLength'),
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
 					}
 					case 'list_images': {
 						const accessor = manager.get(requireString(args, 'archiveId'));

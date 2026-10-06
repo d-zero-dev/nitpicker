@@ -1,5 +1,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
+import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query';
+
 /**
  * All MCP tool definitions for the Nitpicker archive query server.
  * Each tool includes a name, description with LLM guidance, and JSON Schema
@@ -245,9 +247,37 @@ export const toolDefinitions: Tool[] = [
 				},
 				type: {
 					type: 'string',
-					enum: ['broken', 'external'],
+					enum: ['broken', 'external', 'all'],
 					description:
-						'Type of link analysis: broken (canonical destination is exactly HTTP 404) or external (anchor leaves the in-scope hostname). Judged against the redirect-resolved canonical destination by default.',
+						'Type of link analysis: broken (canonical destination is exactly HTTP 404), external (anchor leaves the in-scope hostname), or all (no type restriction — the default). Judged against the redirect-resolved canonical destination by default.',
+				},
+				urlPattern: {
+					type: 'string',
+					description:
+						'SQL LIKE pattern matched against the source URL OR the destination URL (e.g. "%/blog/%").',
+				},
+				sourceUrlPattern: {
+					type: 'string',
+					description: 'SQL LIKE pattern restricted to the source page URL.',
+				},
+				destUrlPattern: {
+					type: 'string',
+					description:
+						'SQL LIKE pattern restricted to the (redirect-resolved) destination URL. Example: "%.pdf" lists every link pointing at a PDF.',
+				},
+				status: {
+					type: 'number',
+					description: 'Filter by the destination HTTP status (exact match).',
+				},
+				sortBy: {
+					type: 'string',
+					enum: ['sourceUrl', 'destUrl', 'status', 'isExternal', 'textContent'],
+					description: 'Field to sort by (default: sourceUrl).',
+				},
+				sortOrder: {
+					type: 'string',
+					enum: ['asc', 'desc'],
+					description: 'Sort direction.',
 				},
 				includeRedirectSources: {
 					type: 'boolean',
@@ -257,13 +287,13 @@ export const toolDefinitions: Tool[] = [
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
 			},
-			required: ['archiveId', 'type'],
+			required: ['archiveId'],
 		},
 	},
 	{
 		name: 'list_resources',
 		description:
-			'List sub-resources (CSS, JS, images, fonts) with filtering by content type and origin. Shows compression and CDN status. Use for tech stack analysis, library detection (jQuery, React), and performance checks.',
+			'List sub-resources (CSS, JS, images, fonts) with filtering by URL pattern, status, content type (prefix or category) and origin. Shows compression, CDN status and referrer count. Use for tech stack analysis, library detection (jQuery, React), web font inventory (contentTypeCategory "font"), and performance checks. Only resource metadata is stored — CSS/JS bodies are not, so @font-face / font-family inside a stylesheet cannot be searched; font FILES the browser fetched are listed here, and `list_pages_by_resource` finds the pages that load them. To find which pages use a given resource, use `list_pages_by_resource` or `get_resource_referrers`.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -271,19 +301,155 @@ export const toolDefinitions: Tool[] = [
 					type: 'string',
 					description: 'The archive ID returned by open_archive',
 				},
+				urlPattern: {
+					type: 'string',
+					description:
+						'SQL LIKE pattern matched against the resource URL (e.g. "%fonts.example.net%", "%jquery%.js").',
+				},
+				status: { type: 'number', description: 'Filter by HTTP status (exact match).' },
 				contentType: {
 					type: 'string',
 					description:
 						'Filter by content type prefix (e.g., "text/css", "application/javascript")',
 				},
+				contentTypeCategory: {
+					type: 'string',
+					enum: [...CONTENT_TYPE_CATEGORIES],
+					description:
+						'Filter by Content-Type category (e.g. "font" covers font/*, application/font-*, application/vnd.ms-fontobject). ANDed with contentType.',
+				},
 				isExternal: {
 					type: 'boolean',
 					description: 'Filter by external (true) or internal (false)',
+				},
+				sortBy: {
+					type: 'string',
+					enum: [
+						'url',
+						'status',
+						'statusText',
+						'contentType',
+						'contentLength',
+						'isExternal',
+						'referrerCount',
+						'compress',
+						'cdn',
+					],
+					description: 'Field to sort by (default: url).',
+				},
+				sortOrder: {
+					type: 'string',
+					enum: ['asc', 'desc'],
+					description: 'Sort direction.',
 				},
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },
 			},
 			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'list_pages_by_resource',
+		description:
+			'List the pages that load at least one resource matching a URL pattern and/or Content-Type category — the reverse of `list_resources`. Answers "which pages use a web font" (contentTypeCategory "font"), "which pages load anything from fonts.example.net" (urlPattern "%fonts.example.net%"), or "which pages include jquery" (urlPattern "%jquery%"). Works on resource URLs/MIME types the browser actually fetched; resource bodies are not stored, so it cannot see @font-face rules that were never fetched. At least one of urlPattern / contentTypeCategory is required. Each page carries matchedResourceCount and a bounded sample of matched resource URLs (resourcesLimit). For an exact resource URL use `get_resource_referrers`.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				urlPattern: {
+					type: 'string',
+					description: 'SQL LIKE pattern matched against the resource URL.',
+				},
+				contentTypeCategory: {
+					type: 'string',
+					enum: [...CONTENT_TYPE_CATEGORIES],
+					description: 'Restrict to resources of this Content-Type category.',
+				},
+				isExternal: {
+					type: 'boolean',
+					description: 'Restrict to external (true) or internal (false) resources.',
+				},
+				status: { type: 'number', description: 'Restrict to this resource HTTP status.' },
+				resourcesLimit: {
+					type: 'number',
+					description: 'Max matched resource URLs sampled per page (default: 20)',
+				},
+				limit: { type: 'number', description: 'Max pages (default: 100)' },
+				offset: { type: 'number', description: 'Pages to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'get_resource_host_inventory',
+		description:
+			'Aggregate sub-resources by serving host (host + port): distinct resource count, distinct referencing page count, and the Content-Type category mix per host. Use for third-party dependency questions ("which external hosts does the site load scripts/fonts from?") in one call instead of paging through `list_resources`. Resources whose URL is a large data: URI have no host and are excluded.',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				isExternal: {
+					type: 'boolean',
+					description: 'Restrict to external (true) or internal (false) resources.',
+				},
+				sortBy: {
+					type: 'string',
+					enum: ['resourceCount', 'pageCount', 'host'],
+					description: 'Field to sort by (default: resourceCount, descending).',
+				},
+				sortOrder: {
+					type: 'string',
+					enum: ['asc', 'desc'],
+					description: 'Sort direction.',
+				},
+				limit: { type: 'number', description: 'Max hosts (default: 100)' },
+				offset: { type: 'number', description: 'Hosts to skip (default: 0)' },
+			},
+			required: ['archiveId'],
+		},
+	},
+	{
+		name: 'search_html',
+		description:
+			'Search the stored HTML snapshots of all pages for a string or regular expression, WITHOUT running an analyze plugin and without writing to the archive. The search runs on the raw markup `get_page_html` returns, so <script>, <style>, inline style and every attribute are searchable (e.g. `fonts.example.org`, `font-family`, `gtag(`, `/UA-\\d+-\\d+/`) — unlike the analyze-search plugin, which matches DOM text nodes only. `pattern` is a plain literal substring, or `/regex/flags` (flags g, i, m) for a regular expression. Returns matching pages in page-id order with matchCount and a whitespace-collapsed snippet around the first hit, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). This is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> search-html --pattern "..." | jq`. Cannot search CSS/JS file bodies (not stored).',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				pattern: {
+					type: 'string',
+					description:
+						'Literal substring, or /regex/flags (flags g, i, m) for a regular expression.',
+				},
+				urlPattern: {
+					type: 'string',
+					description: 'SQL LIKE pattern restricting the page URLs to scan.',
+				},
+				directory: {
+					type: 'string',
+					description:
+						'Directory path prefix restricting the page URLs to scan (e.g. "/blog").',
+				},
+				snippetLength: {
+					type: 'number',
+					description: 'Snippet window size in characters (default: 160)',
+				},
+				limit: {
+					type: 'number',
+					description: 'Max matching pages (default: 100). 0 returns only the counts.',
+				},
+				offset: { type: 'number', description: 'Matching pages to skip (default: 0)' },
+			},
+			required: ['archiveId', 'pattern'],
 		},
 	},
 	{
