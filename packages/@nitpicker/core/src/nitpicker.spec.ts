@@ -582,8 +582,8 @@ describe('analyze', () => {
 			configFilePath: '',
 		};
 		const pluginB = {
-			name: '@nitpicker/analyze-lighthouse',
-			module: '@nitpicker/analyze-lighthouse',
+			name: '@nitpicker/analyze-markuplint',
+			module: '@nitpicker/analyze-markuplint',
 			configFilePath: '',
 		};
 		const modA: AnalyzePlugin = {

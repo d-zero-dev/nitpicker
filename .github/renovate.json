@@ -100,10 +100,6 @@
 			"matchPackageNames": ["jsdom", "@types/jsdom"]
 		},
 		{
-			"groupName": "lighthouse",
-			"matchPackageNames": ["lighthouse", "chrome-launcher"]
-		},
-		{
 			"groupName": "vite",
 			"matchPackageNames": ["vite", "@vitejs/plugin-react"]
 		},

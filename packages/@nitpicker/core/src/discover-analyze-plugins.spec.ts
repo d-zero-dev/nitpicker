@@ -3,11 +3,14 @@ import { describe, it, expect } from 'vitest';
 import { discoverAnalyzePlugins } from './discover-analyze-plugins.js';
 
 describe('discoverAnalyzePlugins', () => {
-	it('returns all standard analyze plugins', () => {
+	it('returns exactly the standard analyze plugins', () => {
 		const plugins = discoverAnalyzePlugins();
-		expect(plugins.length).toBeGreaterThanOrEqual(5);
-		expect(plugins.map((p) => p.name)).toContain('@nitpicker/analyze-axe');
-		expect(plugins.map((p) => p.name)).toContain('@nitpicker/analyze-textlint');
+		expect(plugins.map((p) => p.name)).toEqual([
+			'@nitpicker/analyze-axe',
+			'@nitpicker/analyze-markuplint',
+			'@nitpicker/analyze-search',
+			'@nitpicker/analyze-textlint',
+		]);
 	});
 
 	it('returns plugins with empty default settings', () => {
