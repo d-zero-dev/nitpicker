@@ -162,6 +162,16 @@ export interface CrawlerOptions extends Required<
 	/** User-Agent string sent with HTTP requests. */
 	userAgent: string;
 
+	/**
+	 * Extra request headers (`--header` / `--authorization` / `--header-file`)
+	 * attached to in-scope requests only — HEAD/GET pre-flights and the
+	 * browser's page and sub-resource requests. Never sent to external URLs or
+	 * to a redirect hop that leaves the scope, never persisted (only the names
+	 * are, as `Config.requestHeaderNames`) and never logged (see
+	 * `redactRequestHeaders`). `undefined`/empty disables the feature.
+	 */
+	requestHeaders?: Readonly<Record<string, string>>;
+
 	/** Whether to ignore robots.txt restrictions. */
 	ignoreRobots: boolean;
 
@@ -709,4 +719,42 @@ export interface OutageSuspect {
 	readonly triggerErrorCount: number;
 	/** Distinct host count at trigger time (== `hostThreshold` or more). */
 	readonly triggerHostCount: number;
+}
+
+/**
+ * Parameters for `createScopedHeaderRequestHandler`.
+ */
+export interface CreateScopedHeaderRequestHandlerParams {
+	/** Extra request headers to attach to in-scope requests. */
+	readonly requestHeaders: Readonly<Record<string, string>>;
+	/** Whether a request URL is inside the crawl scope. */
+	readonly isInScope: (href: string) => boolean;
+	/**
+	 * Told when Chromium refuses to continue a request (e.g. a header it
+	 * considers invalid). The request is aborted afterwards. Never receives a
+	 * header value — only the error Puppeteer raised.
+	 */
+	readonly onError?: (error: unknown) => void;
+}
+
+/**
+ * Parameters for `createStripHeadersOnRedirect`.
+ */
+export interface CreateStripHeadersOnRedirectParams {
+	/** Names of the extra request headers to drop (case-insensitive). */
+	readonly headerNames: readonly string[];
+	/** Whether a redirect target (absolute URL) is inside the crawl scope. */
+	readonly isInScope: (href: string) => boolean;
+}
+
+/**
+ * Parameters for `applyRequestHeaderInterception`.
+ */
+export interface ApplyRequestHeaderInterceptionParams {
+	/** Extra request headers; `undefined` or empty leaves the page untouched. */
+	readonly requestHeaders: Readonly<Record<string, string>> | undefined;
+	/** Whether a request URL is inside the crawl scope. */
+	readonly isInScope: (href: string) => boolean;
+	/** Forwarded to the request handler's `onError`. */
+	readonly onError?: (error: unknown) => void;
 }

@@ -45,6 +45,13 @@ const robotsParser = require('robots-parser') as (
 /**
  * Fetches and parses the robots.txt file for a given origin URL.
  *
+ * Deliberately sends neither the user's extra request headers
+ * (`--header` / `--authorization`) nor Basic credentials: robots.txt is
+ * fetched per origin (external ones included), and a credential must stay
+ * inside the crawl scope. A protected site that answers 401 here is read as
+ * "no robots.txt" — everything allowed — which is the existing behaviour for
+ * a missing file.
+ *
  * Sends an HTTP(S) GET request to `{origin}/robots.txt` and parses the
  * response using `robots-parser`. Returns `null` if the server returns
  * a non-200 status code or if the request fails.

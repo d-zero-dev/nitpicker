@@ -14,6 +14,8 @@ import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
 import path from 'node:path';
 
+import { redactRequestHeaders } from '../utils/object/redact-request-headers.js';
+
 import { ArchiveAccessor } from './archive-accessor.js';
 import { acquireArchiveLock } from './archive-lock.js';
 import { computeArchiveCacheKey } from './cache/compute-archive-cache-key.js';
@@ -588,7 +590,7 @@ export default class Archive extends ArchiveAccessor {
 	 * @param config - The configuration object to store.
 	 */
 	async setConfig(config: Config) {
-		dbLog('Set config: %O', config);
+		dbLog('Set config: %O', redactRequestHeaders(config));
 		return this.#db.setConfig(config);
 	}
 	/**
@@ -723,7 +725,7 @@ export default class Archive extends ArchiveAccessor {
 	 * @param patch - Partial {@link Config} fields to overwrite. `undefined` values are ignored.
 	 */
 	async updateConfig(patch: Partial<Config>) {
-		dbLog('Update config: %O', patch);
+		dbLog('Update config: %O', redactRequestHeaders(patch));
 		await this.#db.updateConfig(patch);
 	}
 	/**

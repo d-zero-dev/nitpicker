@@ -38,6 +38,7 @@ import { classifyErrorKind } from '../classify-error-kind.js';
 import { crawlerLog } from '../debug.js';
 
 import { applyCrawlRuntimeOptionsPatch } from './apply-crawl-runtime-options-patch.js';
+import { applyRequestHeaderInterception } from './apply-request-header-interception.js';
 import { buildJsRedirectEdge } from './build-js-redirect-edge.js';
 import { buildRedirectEvent } from './build-redirect-event.js';
 import { captureCustomElements } from './capture-custom-elements.js';
@@ -308,6 +309,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			disableQueries: options?.disableQueries ?? false,
 			verbose: options?.verbose ?? false,
 			userAgent: options?.userAgent || `Nitpicker/${pkg.version}`,
+			requestHeaders: options?.requestHeaders,
 			ignoreRobots: options?.ignoreRobots ?? false,
 			mainContentSelector: options?.mainContentSelector ?? null,
 			lookupResource: options?.lookupResource ?? null,
@@ -1036,6 +1038,19 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 				break;
 			}
 		}
+	}
+	/**
+	 * Whether an absolute URL falls inside the crawl scope. The predicate
+	 * behind every "may the extra request headers go here?" decision: HEAD/GET
+	 * redirect hops and the browser's per-request interception both use it, so
+	 * there is a single definition of the boundary (`findScopeEntry`).
+	 * An unparseable URL is treated as out of scope (fail closed).
+	 * @param href - Absolute URL to classify.
+	 * @returns `true` when the URL belongs to a scope entry.
+	 */
+	#isInScope(href: string): boolean {
+		const parsed = parseUrl(href);
+		return parsed !== null && findScopeEntry(parsed, this.#scope, this.#options) !== null;
 	}
 	/**
 	 * Undo cache damage from the outage window `[startedAt, endedAt]`:
@@ -1974,6 +1989,8 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 						method: 'GET',
 						options: { titleBytesLimit: 16_384 },
 						userAgent: this.#options.userAgent,
+						requestHeaders: this.#options.requestHeaders,
+						isInScope: (href) => this.#isInScope(href),
 					});
 					return {
 						type: 'success',
@@ -2190,6 +2207,8 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 					url,
 					isExternal,
 					userAgent: this.#options.userAgent,
+					requestHeaders: this.#options.requestHeaders,
+					isInScope: (href) => this.#isInScope(href),
 					timeout: timeoutMs,
 				});
 				// Mark host alive the MOMENT an HTTP response is observed,
@@ -2300,6 +2319,21 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 			update('Creating page%dots%');
 			page = await browser.newPage();
 			await page.setUserAgent(this.#options.userAgent);
+			// Extra request headers (`--header` / `--authorization`) ride on a
+			// per-request interception, NOT `page.setExtraHTTPHeaders`: the latter
+			// stamps every request the page issues — third-party sub-resources and
+			// external redirect targets included — and would hand a bearer token to
+			// every CDN the page touches. Interception is enabled only when headers
+			// were given AND the page is in scope: an external page has nothing in
+			// scope to attach to, so interception would only add a CDP round-trip
+			// per request.
+			if (!isExternal) {
+				await applyRequestHeaderInterception(page, {
+					requestHeaders: this.#options.requestHeaders,
+					isInScope: (href) => this.#isInScope(href),
+					onError: (error) => crawlerLog('Request header interception failed: %O', error),
+				});
+			}
 			// HTTP-auth handling — two cooperating pieces, BOTH required:
 			//
 			// 1. `page.authenticate({user, pass})` (always, even with empty

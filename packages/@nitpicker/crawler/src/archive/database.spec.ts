@@ -2271,6 +2271,7 @@ describe('Config', () => {
 			userAgent: 'NitpickerBot/1.0',
 			ignoreRobots: true,
 			mainContentSelector: '#main',
+			requestHeaderNames: ['Authorization', 'X-Api-Key'],
 			createdCwd: '/home/user/project',
 		};
 
@@ -2316,11 +2317,92 @@ describe('Config', () => {
 			'userAgent',
 			'ignoreRobots',
 			'mainContentSelector',
+			'requestHeaderNames',
 			'createdCwd',
 		];
 
 		for (const key of expectedKeys) {
 			expect(retrieved).toHaveProperty(key);
+		}
+	});
+
+	it('ランタイム専用の requestHeaders（値）は allowlist で落ち、info に保存されない', async () => {
+		const dbPath = path.resolve(workingDir, 'config-request-headers-test.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			const config = {
+				version: '0.13.0',
+				name: 'test-crawl',
+				baseUrl: 'https://example.com',
+				roots: ['https://example.com'],
+				recursive: true,
+				interval: 0,
+				image: true,
+				fetchExternal: true,
+				parallels: 1,
+				excludes: [],
+				excludeKeywords: [],
+				excludeUrls: [],
+				maxExcludedDepth: 10,
+				retry: 3,
+				fromList: false,
+				disableQueries: false,
+				userAgent: 'ua',
+				ignoreRobots: false,
+				requestHeaderNames: ['Authorization'],
+				// Runtime-only splat, exactly as `CrawlerOrchestrator` spreads its
+				// wider options into `setConfig` / `updateConfig`.
+				requestHeaders: { Authorization: 'Bearer very-secret-token' },
+			} as Config;
+
+			await db.setConfig(config);
+			await db.updateConfig({
+				requestHeaders: { 'X-Api-Key': 'another-secret' },
+			} as Partial<Config>);
+			const retrieved = await db.getConfig();
+
+			expect(retrieved.requestHeaderNames).toEqual(['Authorization']);
+			expect(JSON.stringify(retrieved)).not.toContain('very-secret-token');
+			expect(JSON.stringify(retrieved)).not.toContain('another-secret');
+			expect(retrieved).not.toHaveProperty('requestHeaders');
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
+		}
+	});
+
+	it('requestHeaderNames が未設定の info 行は空配列として読める', async () => {
+		const dbPath = path.resolve(workingDir, 'config-no-header-names-test.sqlite');
+		await removeIfExists(dbPath);
+		const db = await Database.connect({ filename: dbPath });
+		try {
+			await db.setConfig({
+				version: '0.13.0',
+				name: 'legacy',
+				baseUrl: 'https://example.com',
+				roots: ['https://example.com'],
+				recursive: true,
+				interval: 0,
+				image: true,
+				fetchExternal: true,
+				parallels: 1,
+				excludes: [],
+				excludeKeywords: [],
+				excludeUrls: [],
+				maxExcludedDepth: 10,
+				retry: 3,
+				fromList: false,
+				disableQueries: false,
+				userAgent: 'ua',
+				ignoreRobots: false,
+			});
+
+			const retrieved = await db.getConfig();
+			expect(retrieved.requestHeaderNames).toEqual([]);
+		} finally {
+			await db.destroy();
+			await removeIfExists(dbPath);
 		}
 	});
 

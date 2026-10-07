@@ -6,7 +6,7 @@ import { getJSON } from '../../get-json.js';
 
 /**
  * Retrieves the full crawl configuration from the `info` table.
- * Deserializes JSON-encoded fields (`roots`, `excludes`, `excludeKeywords`, `excludeUrls`).
+ * Deserializes JSON-encoded fields (`roots`, `excludes`, `excludeKeywords`, `excludeUrls`, `requestHeaderNames`).
  * @param knex - Knex query builder connected to the archive DB.
  * @returns The parsed {@link Config} object.
  * @throws {Error} If no configuration is found in the database.
@@ -22,6 +22,7 @@ export async function getConfig(knex: Knex): Promise<Config> {
 		excludeKeywords: getJSON<string[]>(config.excludeKeywords, []),
 		excludeUrls: getJSON<string[]>(config.excludeUrls, []),
 		roots: getJSON<string[]>(config.roots, []),
+		requestHeaderNames: getJSON<string[]>(config.requestHeaderNames, []),
 		retry: config.retry ?? 3,
 		maxExcludedDepth: config.maxExcludedDepth ?? 0,
 	};

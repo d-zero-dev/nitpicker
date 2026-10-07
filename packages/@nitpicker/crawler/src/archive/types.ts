@@ -88,6 +88,17 @@ export interface Config extends Required<Pick<ParseURLOptions, 'disableQueries'>
 	mainContentSelector?: string | null;
 
 	/**
+	 * Names (never values) of the extra request headers the crawl was started
+	 * with (`--header` / `--authorization` / `--header-file`). Header values
+	 * are credentials and are deliberately NOT persisted — `.nitpicker` files
+	 * are shared between users. The names exist only so a later
+	 * `--resume` / `--append` / `--retry-failed` / `--recrawl` / `--inventory`
+	 * run can warn that the operator did not re-supply them. Empty/omitted
+	 * means no extra headers were used.
+	 */
+	requestHeaderNames?: string[];
+
+	/**
 	 * The `process.cwd()` recorded when this session's stub (tmpDir) was
 	 * created by `CrawlerOrchestrator.crawling` / `.append` / `.inventory` /
 	 * `.recrawl` / `.retryFailed` — NOT written by `.resume` itself, which

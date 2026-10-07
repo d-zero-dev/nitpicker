@@ -52,6 +52,23 @@ describe('mergeArchiveConfigs', () => {
 		expect(merged.name).toBe('merged');
 	});
 
+	it('unions requestHeaderNames across sources and tolerates sources without any', () => {
+		const merged = mergeArchiveConfigs(
+			[
+				makeConfig({ requestHeaderNames: ['Authorization'] }),
+				makeConfig({ requestHeaderNames: ['X-Api-Key', 'Authorization'] }),
+				makeConfig(),
+			],
+			'merged',
+		);
+		expect(merged.requestHeaderNames).toEqual(['Authorization', 'X-Api-Key']);
+	});
+
+	it('yields an empty requestHeaderNames when no source recorded any', () => {
+		const merged = mergeArchiveConfigs([makeConfig(), makeConfig()], 'merged');
+		expect(merged.requestHeaderNames).toEqual([]);
+	});
+
 	it('takes scalar settings from the first source', () => {
 		const merged = mergeArchiveConfigs(
 			[makeConfig({ parallels: 2 }), makeConfig({ parallels: 8 })],

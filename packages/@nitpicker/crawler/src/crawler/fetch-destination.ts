@@ -1,12 +1,17 @@
 import type { PageData } from '@d-zero/beholder';
 import type { ExURL } from '@d-zero/shared/parse-url';
-import type { FollowResponse, RedirectableRequest } from 'follow-redirects';
+import type {
+	FollowOptions,
+	FollowResponse,
+	RedirectableRequest,
+} from 'follow-redirects';
 import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
 
 import { delay } from '@d-zero/shared/delay';
 import { raceWithTimeout } from '@d-zero/shared/race-with-timeout';
 import redirects from 'follow-redirects';
 
+import { createStripHeadersOnRedirect } from './create-strip-headers-on-redirect.js';
 import { decodeAuthCredential } from './decode-auth-credential.js';
 import { destinationCache } from './destination-cache.js';
 import NetTimeoutError from './net-timeout-error.js';
@@ -36,12 +41,41 @@ export interface FetchDestinationParams {
 	/** User-Agent string to send with the request. */
 	readonly userAgent?: string;
 	/**
+	 * Extra request headers (`--header` / `--authorization`) to send. Applied
+	 * only when the URL is in scope (`isExternal === false`) and dropped again
+	 * if a redirect leaves the scope (see `isInScope`). A header named
+	 * `Authorization` wins over the Basic credentials embedded in the URL,
+	 * because Node ignores `auth` when an `Authorization` header is present.
+	 */
+	readonly requestHeaders?: Readonly<Record<string, string>>;
+	/**
+	 * Whether a redirect target (absolute URL) is inside the crawl scope.
+	 * Required for `requestHeaders` to survive any redirect safely: when it is
+	 * omitted, `requestHeaders` are stripped on every redirect hop (fail closed).
+	 */
+	readonly isInScope?: (href: string) => boolean;
+	/**
 	 * Race timeout for the network request in milliseconds. Defaults to
 	 * {@link DEFAULT_HEAD_TIMEOUT_MS} (10s). `Crawler.#sendHeadRequest` passes
 	 * a longer value on later retry attempts so a slow-but-reachable server
 	 * gets another chance before being given up on.
 	 */
 	readonly timeout?: number;
+}
+
+/**
+ * Parameters for the internal single-request helper: the shared request
+ * parameters of {@link FetchDestinationParams}, with the already-resolved
+ * method and title limit.
+ */
+interface FetchHeadParams extends Pick<
+	FetchDestinationParams,
+	'url' | 'isExternal' | 'userAgent' | 'requestHeaders' | 'isInScope' | 'timeout'
+> {
+	/** The HTTP method (`"HEAD"` or `"GET"`). */
+	readonly method: string;
+	/** Reads up to this many body bytes to extract `<title>`; `undefined` for a metadata-only request. */
+	readonly titleBytesLimit?: number;
 }
 
 /**
@@ -62,7 +96,16 @@ export interface FetchDestinationParams {
 export async function fetchDestination(
 	params: FetchDestinationParams,
 ): Promise<PageData> {
-	const { url, isExternal, method = 'HEAD', options, userAgent, timeout } = params;
+	const {
+		url,
+		isExternal,
+		method = 'HEAD',
+		options,
+		userAgent,
+		requestHeaders,
+		isInScope,
+		timeout,
+	} = params;
 	const titleBytesLimit = options?.titleBytesLimit;
 	const cacheKey = titleBytesLimit == null ? url.withoutHash : `${url.withoutHash}:title`;
 
@@ -82,14 +125,16 @@ export async function fetchDestination(
 	// alive after the race settles.
 	const { result: challengeResult, timeout: timedOut } = await raceWithTimeout(
 		() =>
-			_fetchHead(
+			_fetchHead({
 				url,
 				isExternal,
-				effectiveMethod,
+				method: effectiveMethod,
 				titleBytesLimit,
 				userAgent,
+				requestHeaders,
+				isInScope,
 				timeout,
-			).catch((error: unknown) =>
+			}).catch((error: unknown) =>
 				error instanceof Error ? error : new Error(String(error)),
 			),
 		raceTimeoutMs,
@@ -113,6 +158,8 @@ export async function fetchDestination(
 				isExternal,
 				method: 'GET',
 				userAgent,
+				requestHeaders,
+				isInScope,
 				timeout,
 			});
 			// GET succeeded — that is the canonical answer for this URL, so
@@ -156,24 +203,30 @@ export async function fetchDestination(
  *
  * Handles both HTTP and HTTPS protocols via `follow-redirects`, tracks redirect chains,
  * and falls back to GET on certain status codes (405, 501, 503).
- * @param url - The extended URL to request.
- * @param isExternal - Whether the URL is external to the crawl scope.
- * @param method - The HTTP method (`"HEAD"` or `"GET"`).
- * @param titleBytesLimit - When set, reads up to this many bytes from the response body
+ * @param params - Request parameters.
+ * @param params.url - The extended URL to request.
+ * @param params.isExternal - Whether the URL is external to the crawl scope.
+ * @param params.method - The HTTP method (`"HEAD"` or `"GET"`).
+ * @param params.titleBytesLimit - When set, reads up to this many bytes from the response body
  *   to extract a `<title>` tag, then destroys the connection.
- * @param userAgent - Optional User-Agent string to send with the request.
- * @param timeout - Optional race timeout in ms, forwarded to GET fallback so the
+ * @param params.userAgent - Optional User-Agent string to send with the request.
+ * @param params.requestHeaders - Optional extra headers, sent only for in-scope URLs.
+ * @param params.isInScope - Scope predicate used to drop `requestHeaders` on out-of-scope redirects.
+ * @param params.timeout - Optional race timeout in ms, forwarded to GET fallback so the
  *   second pass keeps the same budget as the original HEAD attempt.
  * @returns A promise resolving to {@link PageData} with response metadata.
  */
-async function _fetchHead(
-	url: ExURL,
-	isExternal: boolean,
-	method: string,
-	titleBytesLimit?: number,
-	userAgent?: string,
-	timeout?: number,
-) {
+async function _fetchHead(params: FetchHeadParams) {
+	const {
+		url,
+		isExternal,
+		method,
+		titleBytesLimit,
+		userAgent,
+		requestHeaders,
+		isInScope,
+		timeout,
+	} = params;
 	return new Promise<PageData>((resolve, reject) => {
 		const hostHeader = url.port ? `${url.hostname}:${url.port}` : url.hostname;
 		// `trackRedirects` makes follow-redirects populate `res.redirects` with the
@@ -182,7 +235,8 @@ async function _fetchHead(
 		// chain in `redirectPaths` and for the #73 convergence dedup, which decides
 		// whether a redirect destination was already rendered *before* launching
 		// the browser.
-		const request: RequestOptions & { trackRedirects: boolean } = {
+		const request: RequestOptions &
+			FollowOptions<RequestOptions> & { trackRedirects: boolean } = {
 			protocol: url.protocol,
 			hostname: url.hostname,
 			port: url.port || undefined,
@@ -218,6 +272,29 @@ async function _fetchHead(
 			// mirroring what Node's own `urlToOptions` does for
 			// `http.request(url)` (see `decode-auth-credential.ts`).
 			request.auth = `${decodeAuthCredential(url.username)}:${decodeAuthCredential(url.password)}`;
+		}
+
+		// Extra headers are a scope-bound credential: never sent to an external
+		// URL, and dropped again if a redirect hop leaves the scope. Applied after
+		// `request.auth` is set so the explicit `Authorization` header wins.
+		const extraHeaderNames = requestHeaders ? Object.keys(requestHeaders) : [];
+		if (!isExternal && requestHeaders && extraHeaderNames.length > 0) {
+			// Case-insensitive replace: the base headers use fixed casings
+			// (`Accept`, `User-Agent`), so a plain `Object.assign` of `accept`
+			// would leave both keys and Node would send both.
+			// The object literal above is always the plain-object form, never `string[]`.
+			const baseHeaders = request.headers as Record<string, unknown>;
+			const overridden = new Set(extraHeaderNames.map((name) => name.toLowerCase()));
+			for (const key of Object.keys(baseHeaders)) {
+				if (overridden.has(key.toLowerCase())) {
+					delete baseHeaders[key];
+				}
+			}
+			Object.assign(baseHeaders, requestHeaders);
+			request.beforeRedirect = createStripHeadersOnRedirect({
+				headerNames: extraHeaderNames,
+				isInScope: isInScope ?? (() => false),
+			});
 		}
 
 		let req: RedirectableRequest<ClientRequest, IncomingMessage>;
@@ -301,6 +378,9 @@ async function _fetchHead(
 								url,
 								isExternal,
 								method: 'GET',
+								userAgent,
+								requestHeaders,
+								isInScope,
 								timeout,
 							});
 						} catch (error) {
@@ -322,6 +402,9 @@ async function _fetchHead(
 								url,
 								isExternal,
 								method: 'GET',
+								userAgent,
+								requestHeaders,
+								isInScope,
 								timeout,
 							});
 						} catch (error) {
@@ -346,6 +429,9 @@ async function _fetchHead(
 								url,
 								isExternal,
 								method: 'GET',
+								userAgent,
+								requestHeaders,
+								isInScope,
 								timeout,
 							});
 						} catch (error) {
