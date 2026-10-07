@@ -6,7 +6,7 @@ import type { OpenResult } from '@nitpicker/query';
 import path from 'node:path';
 
 import { Lanes } from '@d-zero/dealer';
-import { ArchiveManager } from '@nitpicker/query';
+import { ArchiveManager, compileSelector } from '@nitpicker/query';
 
 import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { formatCliError } from '../format-cli-error.js';
@@ -56,6 +56,15 @@ export async function query(args: string[], flags: QueryFlags) {
 		: path.resolve(process.cwd(), filePath);
 
 	try {
+		// An invalid or unsupported selector is detected before the archive is
+		// extracted: opening a large `.nitpicker` takes minutes, and a typo
+		// should not cost that. (A missing `--selector` is reported by the
+		// flag mapper once the archive is open, like every other required flag;
+		// an empty one is a selector and fails here.)
+		if (subCommand === 'match-selector' && flags.selector !== undefined) {
+			compileSelector(flags.selector);
+		}
+
 		// The extraction Lanes is scoped to this block (issue #294), not
 		// the rest of the function: it must be disposed before
 		// `dispatchQuery`'s result is printed via `console.log`, or its
@@ -80,13 +89,13 @@ export async function query(args: string[], flags: QueryFlags) {
 		try {
 			let result: unknown;
 			{
-				// `search-html` is a minutes-long linear scan, so it gets the same
-				// "no silent interval" treatment as archive extraction: a `Lanes`
-				// line on stderr, disposed (end of this block) before the
-				// `console.log(output)` below so its repaint loop can't corrupt
-				// the stdout write.
+				// `search-html` and `match-selector` are minutes-long linear scans, so
+				// they get the same "no silent interval" treatment as archive
+				// extraction: a `Lanes` line on stderr, disposed (end of this block)
+				// before the `console.log(output)` below so its repaint loop can't
+				// corrupt the stdout write.
 				using scanLanes =
-					subCommand === 'search-html'
+					subCommand === 'search-html' || subCommand === 'match-selector'
 						? new Lanes({ verbose: false, indent: '  ', stream: process.stderr })
 						: null;
 				scanLanes?.update(0, '%braille% Scanning HTML snapshots%dots%');

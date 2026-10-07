@@ -37,6 +37,7 @@ export type QuerySubCommand =
 	| 'dedupe-cap-events'
 	| 'match-urls'
 	| 'search-html'
+	| 'match-selector'
 	| 'pages-by-resource'
 	| 'resource-hosts';
 
@@ -79,6 +80,7 @@ export const VALID_SUB_COMMANDS = [
 	'dedupe-cap-events',
 	'match-urls',
 	'search-html',
+	'match-selector',
 	'pages-by-resource',
 	'resource-hosts',
 ] as const satisfies readonly QuerySubCommand[];

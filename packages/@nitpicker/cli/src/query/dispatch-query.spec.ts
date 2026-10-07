@@ -79,6 +79,7 @@ vi.mock('@nitpicker/query', () => ({
 	listConsoleLogs: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	getPageConsoleLogs: vi.fn().mockResolvedValue([]),
 	matchUrlList: vi.fn().mockResolvedValue([]),
+	matchSelector: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	ArchiveManager: vi.fn(),
 }));
 
@@ -288,6 +289,30 @@ describe('dispatchQuery', () => {
 			mockAccessor,
 			expect.objectContaining({ pattern: 'font-family', onProgress }),
 		);
+	});
+
+	it('dispatches match-selector and forwards onProgress', async () => {
+		const { matchSelector } = await import('@nitpicker/query');
+		const onProgress = vi.fn();
+		const result = await dispatchQuery(
+			mockAccessor,
+			'match-selector',
+			{ selector: 'nav a', limit: 3 } as never,
+			onProgress,
+		);
+		expect(result).toEqual({ items: [], total: 0 });
+		expect(matchSelector).toHaveBeenCalledWith(mockAccessor, {
+			selector: 'nav a',
+			limit: 3,
+			offset: undefined,
+			onProgress,
+		});
+	});
+
+	it('match-selector sub-command throws when --selector is missing', async () => {
+		await expect(
+			dispatchQuery(mockAccessor, 'match-selector', {} as never),
+		).rejects.toThrow('--selector is required for the match-selector sub-command');
 	});
 
 	it('dispatches pages-by-resource sub-command', async () => {

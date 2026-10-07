@@ -62,6 +62,7 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `console-logs`               | 捕捉したconsoleログ・ページエラー（内容ごとに全ページ横断で集約）      |
 | `page-console-logs`          | 指定URLのconsoleログ・ページエラー明細                                 |
 | `match-urls`                 | URLリストとアーカイブの突合診断（`report --urls` の未マッチ調査用）    |
+| `match-selector`             | 保存済みHTMLにCSSセレクタに一致する要素を持つページを列挙              |
 
 ## サブコマンド別オプション
 
@@ -234,6 +235,39 @@ npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*
 保存済みのHTMLスナップショット（`html` サブコマンドが返すもの）の生マークアップを検索します。analyzeプラグインの実行は不要で、アーカイブへの書き込みもありません。`<script>` `<style>` やインラインstyle・全属性も対象です（DOMのテキストノードだけを見る `analyze-search` とは別物）。
 
 結果は `{ items: [{ url, matchCount, snippet }], total, offset, limit, scannedSnapshots, candidatePages }` です。全ユニークHTMLを展開する線形スキャンなので、大きなアーカイブでは時間がかかります（stderrに進捗が出ます）。まず `--limit 0` で `total` を確認するのが安全です。`candidatePages` が0、またはページ数より極端に少ない場合はHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。CSS/JSファイルの本文は保存されていないため検索できません。
+
+### `match-selector`
+
+```sh
+npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'nav > a[href^="/products/"]' --pretty
+npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'img:not([alt]), a[target="_blank"]:not([rel~="noopener"])' --limit 0
+```
+
+| オプション       | 型               | 説明                                                |
+| ---------------- | ---------------- | --------------------------------------------------- |
+| `--selector`     | string, required | CSSセレクタ（カンマ区切りリスト可。対応文法は下記） |
+| `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ |
+| `--offset`, `-o` | number           | スキップ件数                                        |
+
+保存済みのHTMLスナップショットに、セレクタに一致する要素を1つ以上持つページを返します。ページ単位の存在判定で、一致要素の位置や個数は返しません。analyzeプラグインの実行は不要で、アーカイブへの書き込みもありません（`analyze-search` はjsdomで全ページのDOMを構築しますが、本コマンドはDOMを作りません）。
+
+**対応するセレクタ**: 複合セレクタ（`*` / タグ / `.class` / `#id` / `[attr]` `[attr=v]` `[attr~=v]` `[attr|=v]` `[attr^=v]` `[attr$=v]` `[attr*=v]`、`i` / `s` フラグ付き）、子孫結合子（`a b`）、子結合子（`a > b`）、`:first-child` `:nth-child(An+B)` `:first-of-type` `:nth-of-type(An+B)`、`:not(複合セレクタ)`、カンマ区切りリスト。
+
+**対応しないセレクタ**: 要素より後ろのマークアップが分からないと判定できないもの（`+` `~` 結合子、`:last-child` `:only-child` `:nth-last-*` `:has()`）、`:is()` `:where()`、`:root` `:empty` などの状態系疑似クラス、疑似要素、名前空間、`:nth-child()` の `of S`、`:not()` に渡すリスト・結合子・入れ子の `:not()`。これらは近似せず、対応文法の一覧つきのエラー（exit code 1）で拒否します。
+
+結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ）なので、`candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。stderrに進捗が出ます。
+
+`prefilteredSnapshots` と `tokenizedSnapshots` は判定の経路を示します。どのセレクタも、まず必要なリテラルが順に現れるかを `indexOf` で確認し、現れない文書はマークアップを一度も走査せずに却下します（`prefilteredSnapshots`）。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav` など）は正規表現1本で判定します。結合子・`:nth-*`・`<` `>` を含む属性値のセレクタと、`<template` を含む文書は開タグスタックで評価し、`tokenizedSnapshots` に数えます。
+
+MCPツールはありません（CLIのみ）。
+
+**判定の契約**: 結果は「保存文字列を次の規則で解釈した木」に対する判定で、元のDOMとの一致は保証しません（直列化は単射ではなく、たとえば `script` のテキストが `</script><img><script>` のDOMと、空の `script`・`img`・空の `script` が並ぶDOMは同じ文字列になります）。
+
+1. `<!--` から最初の `-->` まで、`<![CDATA[` から最初の `]]>` まで、`<!` から最初の `>` まではタグではない
+2. `script` `style` `xmp` `iframe` `noembed` `noframes` `plaintext` `noscript` は、開始タグだけを要素として判定し、`</名前` に続く空白・`/`・`>` までの内容はタグではない（終了タグが無ければ文書末尾まで。`plaintext` は常に末尾まで）。名前だけで判定し、`svg` 内などの名前空間は見ない。`noscript` はスクリプト有効で直列化されるため、中身はテキストとして扱う
+3. それ以外の開始タグ・終了タグを対応づけて木を作る。HTML5の暗黙閉じ規則は適用しない（`<p><div></div></p>` は `p > div` に一致する）。void要素と `/>` は子を持たない。スタック先頭と名前が違う終了タグは無視し、閉じられていない要素は書かれたとおり開いたままにする（`<div><b></div><p>` では `p` は `b` の子になる）。引用符つき属性値の中の `<` はタグの始まりではない
+4. `<template>` の子孫は探索しない（`querySelectorAll` が到達しないため）。`template` 要素自身は判定対象
+5. 属性値は `&amp;` `&lt;` `&gt;` `&quot;` `&nbsp;` だけを復号する。タグ名と属性名は大文字小文字を区別しない（DOMはHTML要素だけを区別しない扱いにするので、SVGの `linearGradient` は `lineargradient` でも一致する。DOMより広く一致する側に倒している）。属性値は `i` フラグがなければ区別するが、HTMLが区別しないと定める属性（`type` `rel` `lang` `target` `method` など）は `s` フラグがない限り区別しない。`~=` の区切りはASCII空白のみ。この規則は直列化出力の形（属性値は二重引用符、重複属性なし、`<br>` のように閉じる `/` を属性に書かない）を前提にし、それ以外の形では正規表現とスタックの結果が食い違いうる
 
 ### `images`
 
@@ -528,4 +562,5 @@ npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
 | `--representative-url`       | string  | `get-isolated-cluster`                                                                                                                               |
 | `--include-redirect-sources` | boolean | `links`                                                                                                                                              |
 | `--urls`                     | string  | `match-urls`                                                                                                                                         |
+| `--selector`                 | string  | `match-selector`                                                                                                                                     |
 | `--pretty`                   | boolean | JSON整形                                                                                                                                             |
