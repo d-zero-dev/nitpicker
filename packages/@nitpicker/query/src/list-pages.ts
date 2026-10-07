@@ -8,6 +8,7 @@ import type {
 import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { applyListOrder } from './apply-list-order.js';
+import { applyUrlDirectoryFilter } from './apply-url-directory-filter.js';
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { applyCategoryFilter } from './content-type-rules.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
@@ -277,10 +278,7 @@ export async function listPages(
 		});
 	}
 	if (options.directory) {
-		const dir = options.directory.endsWith('/')
-			? options.directory
-			: `${options.directory}/`;
-		baseQuery.where('ur.url', 'like', `%${dir}%`);
+		applyUrlDirectoryFilter(baseQuery, options.directory);
 	}
 	if (options.templateKey) {
 		// `pt` only exists in the FROM clause when `hasPageTemplates` — see

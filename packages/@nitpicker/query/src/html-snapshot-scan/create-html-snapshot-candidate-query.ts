@@ -1,6 +1,7 @@
 import type { HtmlSnapshotPageFilters } from './types.js';
 import type { Knex } from 'knex';
 
+import { applyUrlDirectoryFilter } from '../apply-url-directory-filter.js';
 import { excludeSkippedPages } from '../exclude-skipped-pages.js';
 
 /**
@@ -29,10 +30,7 @@ export function createHtmlSnapshotCandidateQuery(
 		query.where('ur.url', 'like', filters.urlPattern);
 	}
 	if (filters.directory) {
-		const dir = filters.directory.endsWith('/')
-			? filters.directory
-			: `${filters.directory}/`;
-		query.where('ur.url', 'like', `%${dir}%`);
+		applyUrlDirectoryFilter(query, filters.directory);
 	}
 	return query;
 }
