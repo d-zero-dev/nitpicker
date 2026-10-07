@@ -151,7 +151,11 @@ export const toolDefinitions: Tool[] = [
 					type: 'string',
 					description: 'URL pattern to search (SQL LIKE: use % as wildcard)',
 				},
-				directory: { type: 'string', description: 'Directory path prefix to filter by' },
+				directory: {
+					type: 'string',
+					description:
+						'Directory to filter by: the page itself and everything under it ("/blog" matches /blog and /blog/post, not /blogging or /en/blog/). A full URL ("https://example.com/blog") also restricts the host.',
+				},
 				sortBy: {
 					type: 'string',
 					enum: ['url', 'status', 'title'],
@@ -437,7 +441,7 @@ export const toolDefinitions: Tool[] = [
 				directory: {
 					type: 'string',
 					description:
-						'Directory path prefix restricting the page URLs to scan (e.g. "/blog").',
+						'Directory the scanned pages must be in or under, with the same meaning as list_pages (e.g. "/blog").',
 				},
 				snippetLength: {
 					type: 'number',
