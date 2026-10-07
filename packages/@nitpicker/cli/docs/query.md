@@ -264,7 +264,7 @@ npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'table:not([
 
 `prefilteredSnapshots` と `tokenizedSnapshots` は判定の経路を示します。どのセレクタも、まず必要なリテラルが順に現れるかを `indexOf` で確認し、現れない文書はマークアップを一度も走査せずに却下します（`prefilteredSnapshots`）。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav` など）は正規表現1本で判定します。結合子・`:nth-*`・`<` `>` を含む属性値のセレクタと、`<template` を含む文書は開タグスタックで評価し、`tokenizedSnapshots` に数えます。
 
-MCPツールはありません（CLIのみ）。
+MCPツール `match_selector` も同じ関数を呼び、同じ結果を返します（`selector` / `url-pattern` / `directory` / `limit` / `offset` に相当する引数を取ります）。非対応のセレクタは対応文法の一覧つきのエラー（`isError`）で拒否されます。
 
 **判定の契約**: 結果は「保存文字列を次の規則で解釈した木」に対する判定で、元のDOMとの一致は保証しません（直列化は単射ではなく、たとえば `script` のテキストが `</script><img><script>` のDOMと、空の `script`・`img`・空の `script` が並ぶDOMは同じ文字列になります）。
 

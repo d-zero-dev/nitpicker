@@ -43,6 +43,7 @@ import {
 	listPagesByTechnology,
 	listResources,
 	listUnusedResources,
+	matchSelector,
 	searchHtml,
 } from '@nitpicker/query';
 
@@ -470,6 +471,18 @@ export function createServer() {
 								urlPattern: optionalString(args, 'urlPattern'),
 								directory: optionalString(args, 'directory'),
 								snippetLength: optionalNumber(args, 'snippetLength'),
+								limit: optionalNumber(args, 'limit'),
+								offset: optionalNumber(args, 'offset'),
+							}),
+						);
+					}
+					case 'match_selector': {
+						const accessor = manager.get(requireString(args, 'archiveId'));
+						return jsonResult(
+							await matchSelector(accessor, {
+								selector: requireString(args, 'selector'),
+								urlPattern: optionalString(args, 'urlPattern'),
+								directory: optionalString(args, 'directory'),
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
