@@ -140,6 +140,7 @@ export type { ResolvedErrorKindsSort } from './resolve-error-kinds-sort.js';
 export { searchHtml } from './search-html.js';
 export { compileSelector } from './match-selector/compile-selector.js';
 export { matchSelector } from './match-selector/match-selector.js';
+export { SUPPORTED_SELECTOR_GRAMMAR } from './match-selector/supported-selector-grammar.js';
 export { UnsupportedSelectorError } from './match-selector/unsupported-selector-error.js';
 export { sortArrayItems } from './sort-array-items.js';
 export { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
