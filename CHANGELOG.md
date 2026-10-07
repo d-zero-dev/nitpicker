@@ -3,6 +3,29 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
+
+### Bug Fixes
+
+- **query:** match directory filters as path directories, not URL substrings ([81b2e19](https://github.com/d-zero-dev/nitpicker/commit/81b2e19ced5562fe7bfd9ca47336fc9721dc94b5)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+- **query:** tighten match-selector after review ([26d2ae6](https://github.com/d-zero-dev/nitpicker/commit/26d2ae6365e283a99b0c5db0942c9d5c962ca0a9))
+- **viewer:** ignore a whitespace-only directory on the live /api/pages path ([acf14e4](https://github.com/d-zero-dev/nitpicker/commit/acf14e4038676883443fccff7b27caede8b1a2f8)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+
+### Features
+
+- **cli:** add --header, --authorization and --header-file to crawl and pipeline ([8f13778](https://github.com/d-zero-dev/nitpicker/commit/8f13778f91c250f5c1e07aabb9bc8f81e6bdf4af))
+- **cli:** add --url-pattern and --directory to query match-selector ([2c77c75](https://github.com/d-zero-dev/nitpicker/commit/2c77c75e7d7a49f6c1db9b7b861b13b591ac27ae)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+- **cli:** add search-html, pages-by-resource and resource-hosts queries ([f20b957](https://github.com/d-zero-dev/nitpicker/commit/f20b95766223f87b5819b764e4c65639e871a17b))
+- **cli:** add the match-selector query sub-command ([4a96e13](https://github.com/d-zero-dev/nitpicker/commit/4a96e13746008b489e77bac48c1bad8307aa2da6))
+- **cli:** validate --directory before opening the archive and document its meaning ([b1ad235](https://github.com/d-zero-dev/nitpicker/commit/b1ad23560bd02e45a2c2cf90e0dc9107505e9270)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+- **crawler:** send extra request headers to in-scope requests only ([5f26bc3](https://github.com/d-zero-dev/nitpicker/commit/5f26bc342052c181f231e1d9f0b9cad34f9333ee))
+- **mcp-server:** expose HTML search, resource lookup and host inventory ([83e67d1](https://github.com/d-zero-dev/nitpicker/commit/83e67d1c0f722e016d426db3250120c7709f64dd))
+- **mcp-server:** expose match-selector as the match_selector tool ([921951e](https://github.com/d-zero-dev/nitpicker/commit/921951ea5ccf85053371e01fe12b9082bbf97450))
+- **query:** add HTML search, resource reverse lookup and host inventory ([784c370](https://github.com/d-zero-dev/nitpicker/commit/784c3701d7241c14eb8ff9d23de2d63fe64df2cc))
+- **query:** add matchSelector to list pages by CSS selector over stored HTML ([2f06808](https://github.com/d-zero-dev/nitpicker/commit/2f06808964984520f6721fc12b0ac7b9107fafdd))
+- **query:** export the supported selector grammar text ([6bd341f](https://github.com/d-zero-dev/nitpicker/commit/6bd341f6f73d4b14019b51db267fb0e8dd0c8af0))
+- **query:** narrow match-selector scans by URL pattern and directory ([e1d08e6](https://github.com/d-zero-dev/nitpicker/commit/e1d08e6850f8511f61aa8481465b729f9143297d)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+
 ## [0.23.1](https://github.com/d-zero-dev/nitpicker/compare/v0.23.0...v0.23.1) (2026-10-06)
 
 **Note:** Version bump only for package nitpicker-monorepo

@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
+
+### Bug Fixes
+
+- **query:** match directory filters as path directories, not URL substrings ([81b2e19](https://github.com/d-zero-dev/nitpicker/commit/81b2e19ced5562fe7bfd9ca47336fc9721dc94b5)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+- **query:** tighten match-selector after review ([26d2ae6](https://github.com/d-zero-dev/nitpicker/commit/26d2ae6365e283a99b0c5db0942c9d5c962ca0a9))
+
+### Features
+
+- **query:** add HTML search, resource reverse lookup and host inventory ([784c370](https://github.com/d-zero-dev/nitpicker/commit/784c3701d7241c14eb8ff9d23de2d63fe64df2cc))
+- **query:** add matchSelector to list pages by CSS selector over stored HTML ([2f06808](https://github.com/d-zero-dev/nitpicker/commit/2f06808964984520f6721fc12b0ac7b9107fafdd))
+- **query:** export the supported selector grammar text ([6bd341f](https://github.com/d-zero-dev/nitpicker/commit/6bd341f6f73d4b14019b51db267fb0e8dd0c8af0))
+- **query:** narrow match-selector scans by URL pattern and directory ([e1d08e6](https://github.com/d-zero-dev/nitpicker/commit/e1d08e6850f8511f61aa8481465b729f9143297d)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+
 # [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
 
 ### Bug Fixes

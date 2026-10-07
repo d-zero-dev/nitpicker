@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
+
+### Features
+
+- **cli:** add --header, --authorization and --header-file to crawl and pipeline ([8f13778](https://github.com/d-zero-dev/nitpicker/commit/8f13778f91c250f5c1e07aabb9bc8f81e6bdf4af))
+- **cli:** add --url-pattern and --directory to query match-selector ([2c77c75](https://github.com/d-zero-dev/nitpicker/commit/2c77c75e7d7a49f6c1db9b7b861b13b591ac27ae)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+- **cli:** add search-html, pages-by-resource and resource-hosts queries ([f20b957](https://github.com/d-zero-dev/nitpicker/commit/f20b95766223f87b5819b764e4c65639e871a17b))
+- **cli:** add the match-selector query sub-command ([4a96e13](https://github.com/d-zero-dev/nitpicker/commit/4a96e13746008b489e77bac48c1bad8307aa2da6))
+- **cli:** validate --directory before opening the archive and document its meaning ([b1ad235](https://github.com/d-zero-dev/nitpicker/commit/b1ad23560bd02e45a2c2cf90e0dc9107505e9270)), closes [#412](https://github.com/d-zero-dev/nitpicker/issues/412)
+
 ## [0.23.1](https://github.com/d-zero-dev/nitpicker/compare/v0.23.0...v0.23.1) (2026-10-06)
 
 **Note:** Version bump only for package @nitpicker/cli

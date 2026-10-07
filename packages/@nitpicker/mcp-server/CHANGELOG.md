@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
+
+### Features
+
+- **mcp-server:** expose HTML search, resource lookup and host inventory ([83e67d1](https://github.com/d-zero-dev/nitpicker/commit/83e67d1c0f722e016d426db3250120c7709f64dd))
+- **mcp-server:** expose match-selector as the match_selector tool ([921951e](https://github.com/d-zero-dev/nitpicker/commit/921951ea5ccf85053371e01fe12b9082bbf97450))
+
 ## [0.23.1](https://github.com/d-zero-dev/nitpicker/compare/v0.23.0...v0.23.1) (2026-10-06)
 
 **Note:** Version bump only for package @nitpicker/mcp-server

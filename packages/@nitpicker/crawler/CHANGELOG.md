@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
+
+### Features
+
+- **crawler:** send extra request headers to in-scope requests only ([5f26bc3](https://github.com/d-zero-dev/nitpicker/commit/5f26bc342052c181f231e1d9f0b9cad34f9333ee))
+
 # [0.23.0](https://github.com/d-zero-dev/nitpicker/compare/v0.22.2...v0.23.0) (2026-10-05)
 
 ### Features
