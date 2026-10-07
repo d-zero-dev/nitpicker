@@ -332,7 +332,7 @@ export const commandDef = {
 		'match-selector': {
 			desc: 'List pages whose stored HTML snapshot has an element matching a CSS selector (single-pass subset: no sibling combinators, :last-child or :has(); no analyze step needed)',
 			usage: "<file> match-selector --selector '<css>' [options]",
-			flags: ['selector', 'limit', 'offset'],
+			flags: ['selector', 'urlPattern', 'directory', 'limit', 'offset'],
 		},
 		images: {
 			desc: 'List images, optionally filtered to missing alt/dimensions or oversized files',

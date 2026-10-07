@@ -241,11 +241,14 @@ npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*
 ```sh
 npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'nav > a[href^="/products/"]' --pretty
 npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'img:not([alt]), a[target="_blank"]:not([rel~="noopener"])' --limit 0
+npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'table:not([class])' --directory /news --limit 0
 ```
 
 | オプション       | 型               | 説明                                                |
 | ---------------- | ---------------- | --------------------------------------------------- |
 | `--selector`     | string, required | CSSセレクタ（カンマ区切りリスト可。対応文法は下記） |
+| `--url-pattern`  | string           | SQL LIKEパターンでスキャン対象ページを絞り込み      |
+| `--directory`    | string           | ディレクトリprefixでスキャン対象ページを絞り込み    |
 | `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ |
 | `--offset`, `-o` | number           | スキップ件数                                        |
 
@@ -255,7 +258,7 @@ npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'img:not([al
 
 **対応しないセレクタ**: 要素より後ろのマークアップが分からないと判定できないもの（`+` `~` 結合子、`:last-child` `:only-child` `:nth-last-*` `:has()`）、`:is()` `:where()`、`:root` `:empty` などの状態系疑似クラス、疑似要素、名前空間、`:nth-child()` の `of S`、`:not()` に渡すリスト・結合子・入れ子の `:not()`。これらは近似せず、対応文法の一覧つきのエラー（exit code 1）で拒否します。
 
-結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ）なので、`candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。stderrに進捗が出ます。
+結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ。`--url-pattern` / `--directory` の絞り込みも同じ意味）で、絞り込むと `candidatePages` / `scannedSnapshots` / `total` は絞り込み後のページだけを数えます。絞り込みなしで `candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。stderrに進捗が出ます。
 
 `prefilteredSnapshots` と `tokenizedSnapshots` は判定の経路を示します。どのセレクタも、まず必要なリテラルが順に現れるかを `indexOf` で確認し、現れない文書はマークアップを一度も走査せずに却下します（`prefilteredSnapshots`）。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav` など）は正規表現1本で判定します。結合子・`:nth-*`・`<` `>` を含む属性値のセレクタと、`<template` を含む文書は開タグスタックで評価し、`tokenizedSnapshots` に数えます。
 

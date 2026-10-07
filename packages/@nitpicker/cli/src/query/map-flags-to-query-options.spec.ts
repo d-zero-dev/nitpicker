@@ -230,10 +230,18 @@ describe('mapFlagsToQueryOptions', () => {
 		expect(
 			mapFlagsToQueryOptions('match-selector', {
 				selector: 'nav > a[href^="/p"]',
+				urlPattern: '%/products/%',
+				directory: '/blog/',
 				limit: 5,
 				offset: 2,
 			}),
-		).toEqual({ selector: 'nav > a[href^="/p"]', limit: 5, offset: 2 });
+		).toEqual({
+			selector: 'nav > a[href^="/p"]',
+			urlPattern: '%/products/%',
+			directory: '/blog/',
+			limit: 5,
+			offset: 2,
+		});
 	});
 
 	it('requires --urlPattern or --contentTypeCategory for pages-by-resource', () => {
