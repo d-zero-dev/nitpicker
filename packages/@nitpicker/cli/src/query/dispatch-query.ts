@@ -9,6 +9,7 @@ import type {
 	ListPagesByResourceOptions,
 	GetResourceHostInventoryOptions,
 	SearchHtmlOptions,
+	MatchSelectorOptions,
 	ListImagesOptions,
 	GetViolationsOptions,
 	GetDuplicatesFastPathOptions,
@@ -55,6 +56,7 @@ import {
 	listUnusedResources,
 	matchUrlList,
 	searchHtml,
+	matchSelector,
 } from '@nitpicker/query';
 
 import { readUrlListFile } from '../read-url-list-file.js';
@@ -77,10 +79,11 @@ type QueryFlags = InferFlags<typeof commandDef.flags>;
  *   phases. Forwarded as `onSortProgress` to `pages`/`mismatches`'
  *   underlying `listPages`/`findMismatches` calls (issue #294, while a cold
  *   connection's `sortBy: 'url'` lazily builds the URL natural-sort TEMP
- *   table) and as `onProgress` to `search-html` (one line per scanned
- *   chunk of HTML snapshots). Omit for silent (the default).
+ *   table) and as `onProgress` to `search-html` and `match-selector` (one
+ *   line per scanned chunk of HTML snapshots). Omit for silent (the default).
  * @returns The query result as a JSON-serializable value.
  * @throws {Error} If a required resource is not found (page-detail, html, resource-referrers).
+ * @throws {UnsupportedSelectorError} If the `match-selector` selector is invalid or outside the supported grammar.
  */
 export async function dispatchQuery(
 	accessor: ArchiveAccessor,
@@ -153,6 +156,12 @@ export async function dispatchQuery(
 		}
 		case 'search-html': {
 			return searchHtml(accessor, { ...(options as SearchHtmlOptions), onProgress });
+		}
+		case 'match-selector': {
+			return matchSelector(accessor, {
+				...(options as MatchSelectorOptions),
+				onProgress,
+			});
 		}
 		case 'images': {
 			return getImagesFastPath(accessor, options as ListImagesOptions);

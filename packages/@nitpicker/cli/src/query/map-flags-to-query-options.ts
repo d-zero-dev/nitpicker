@@ -204,6 +204,18 @@ export function mapFlagsToQueryOptions(
 				offset: flags.offset,
 			};
 		}
+		case 'match-selector': {
+			if (!flags.selector) {
+				throw new Error(
+					'--selector is required for the match-selector sub-command. Pass a CSS selector, e.g. --selector \'nav > a[href^="/products/"]\'.',
+				);
+			}
+			return {
+				selector: flags.selector,
+				limit: flags.limit,
+				offset: flags.offset,
+			};
+		}
 		case 'pages-by-resource': {
 			if (!flags.urlPattern && !flags.contentTypeCategory) {
 				throw new Error(

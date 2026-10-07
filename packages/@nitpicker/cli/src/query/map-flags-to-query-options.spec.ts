@@ -220,6 +220,22 @@ describe('mapFlagsToQueryOptions', () => {
 		});
 	});
 
+	it('requires --selector for match-selector', () => {
+		expect(() => mapFlagsToQueryOptions('match-selector', {})).toThrow(
+			'--selector is required for the match-selector sub-command',
+		);
+	});
+
+	it('maps match-selector flags correctly', () => {
+		expect(
+			mapFlagsToQueryOptions('match-selector', {
+				selector: 'nav > a[href^="/p"]',
+				limit: 5,
+				offset: 2,
+			}),
+		).toEqual({ selector: 'nav > a[href^="/p"]', limit: 5, offset: 2 });
+	});
+
 	it('requires --urlPattern or --contentTypeCategory for pages-by-resource', () => {
 		expect(() => mapFlagsToQueryOptions('pages-by-resource', {})).toThrow(
 			'--urlPattern or --contentTypeCategory is required for the pages-by-resource sub-command.',
@@ -568,6 +584,7 @@ describe('mapFlagsToQueryOptions', () => {
 			'page-console-logs': { url: 'https://example.com/a' },
 			'match-urls': { urls: 'urls.txt' },
 			'search-html': { pattern: 'font-family' },
+			'match-selector': { selector: 'a' },
 			'pages-by-resource': { contentTypeCategory: 'font' },
 		};
 
@@ -615,6 +632,7 @@ describe('mapFlagsToQueryOptions', () => {
 			pretty: true,
 			urls: 'other-urls.txt',
 			pattern: '/other/i',
+			selector: 'p',
 			snippetLength: 77,
 			resourcesLimit: 7,
 			sourceUrlPattern: '%/source/%',

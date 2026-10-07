@@ -199,3 +199,177 @@ describe('query match-urls (e2e)', () => {
 		).toBe(false);
 	});
 });
+
+describe('query match-selector (e2e)', () => {
+	// The unit specs cover the selector engine and `matchSelector` against real
+	// archives; this proves the built CLI binary wires the flag, the progress
+	// line (stderr) and the pure-JSON stdout end to end. The fixture's two
+	// pages are `/` (an <a>, an <img> and a lazy <img> directly under <body>)
+	// and `/about` (an <a> directly under <body>).
+	let cwd: string;
+
+	beforeAll(async () => {
+		cwd = path.join(os.tmpdir(), `nitpicker-e2e-query-selector-${crypto.randomUUID()}`);
+		await fs.mkdir(cwd, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
+	});
+
+	/**
+	 * Runs `match-selector` against the fixture and returns its parsed JSON result.
+	 * @param selector - The selector.
+	 */
+	async function matchSelector(selector: string): Promise<{
+		items: { url: string }[];
+		prefilteredSnapshots: number;
+		tokenizedSnapshots: number;
+	}> {
+		const { exitCode, stdout } = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', selector],
+			cwd,
+		);
+		expect(exitCode).toBe(0);
+		return JSON.parse(stdout);
+	}
+
+	it('finds the page with a single-compound selector, decided without the open-element stack', async () => {
+		const result = await matchSelector('img[loading="lazy"]');
+
+		expect(result.items.map((item) => item.url)).toEqual(['http://localhost:49375']);
+		// `/about` has no `lazy`, so it is rejected on literals; the other is decided by the scan
+		expect(result).toMatchObject({ prefilteredSnapshots: 1, tokenizedSnapshots: 0 });
+	});
+
+	it('finds pages by a child combinator, decided on the open-element stack', async () => {
+		const result = await matchSelector('body > a');
+		expect(result.items.map((item) => item.url)).toEqual([
+			'http://localhost:49375',
+			'http://localhost:49375/about',
+		]);
+		expect(result.tokenizedSnapshots).toBe(2);
+
+		const deeper = await matchSelector('html[lang="en"] > head > title');
+		expect(deeper.items.map((item) => item.url)).toEqual([
+			'http://localhost:49375',
+			'http://localhost:49375/about',
+		]);
+	});
+
+	it('skips snapshots that lack a literal the selector needs', async () => {
+		// `/about` has no <img>, so only the top page is read by the stack
+		const result = await matchSelector('body > img');
+
+		expect(result.items.map((item) => item.url)).toEqual(['http://localhost:49375']);
+		expect(result).toMatchObject({ prefilteredSnapshots: 1, tokenizedSnapshots: 1 });
+	});
+
+	it('matches a selector list and sibling-position selectors', async () => {
+		const list = await matchSelector('a, img:first-of-type');
+		expect(list.items.map((item) => item.url)).toEqual([
+			'http://localhost:49375',
+			'http://localhost:49375/about',
+		]);
+
+		const position = await matchSelector('img:nth-of-type(2)');
+		expect(position.items.map((item) => item.url)).toEqual(['http://localhost:49375']);
+	});
+
+	it('matches an attribute value stored with escaped < and >', async () => {
+		const result = await matchSelector('img[src*="<rect"]');
+
+		expect(result.items.map((item) => item.url)).toEqual(['http://localhost:49375']);
+	});
+
+	it('returns no pages when nothing matches, and says how the answer was reached', async () => {
+		const { exitCode, stdout } = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', 'article'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(0);
+		expect(JSON.parse(stdout)).toMatchObject({
+			selector: 'article',
+			items: [],
+			total: 0,
+			scannedSnapshots: 2,
+			candidatePages: 2,
+			tokenizedSnapshots: 0,
+		});
+	});
+
+	it('slices the result with --limit and --offset', async () => {
+		const { exitCode, stdout } = await runCli(
+			[
+				'query',
+				FIXTURE,
+				'match-selector',
+				'--selector',
+				'a',
+				'--limit',
+				'1',
+				'--offset',
+				'1',
+			],
+			cwd,
+		);
+
+		expect(exitCode).toBe(0);
+		const output = JSON.parse(stdout) as { items: { url: string }[]; total: number };
+		expect(output.items.map((item) => item.url)).toEqual([
+			'http://localhost:49375/about',
+		]);
+		expect(output.total).toBe(2);
+	});
+
+	it.each([
+		['div[', 'syntax error'],
+		['', 'the selector is empty'],
+	])('rejects the selector %j before opening the archive', async (selector, reason) => {
+		const { exitCode, stdout, stderr } = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', selector],
+			cwd,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(stdout).toBe('');
+		expect(stderr).toContain(reason);
+		expect(stderr).not.toContain('Extracting archive');
+	});
+
+	it('keeps stdout pure JSON while progress goes to stderr', async () => {
+		const { exitCode, stdout, stderr } = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', 'a', '--limit', '0'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(0);
+		expect(() => JSON.parse(stdout)).not.toThrow();
+		expect(stderr).toContain('Scanning HTML snapshots');
+		expect(stdout).not.toContain('Scanning HTML snapshots');
+	});
+
+	it('rejects a selector that needs later markup with exit code 1 and the supported grammar', async () => {
+		const { exitCode, stdout, stderr } = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', 'a + b'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(stdout).toBe('');
+		expect(stderr).toContain('adjacent sibling combinator');
+		expect(stderr).toContain('Supported selectors');
+	});
+
+	it('requires --selector', async () => {
+		const { exitCode, stdout, stderr } = await runCli(
+			['query', FIXTURE, 'match-selector'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(stdout).toBe('');
+		expect(stderr).toContain('--selector is required');
+	});
+});

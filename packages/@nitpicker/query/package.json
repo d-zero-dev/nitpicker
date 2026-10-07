@@ -43,7 +43,8 @@
 	},
 	"dependencies": {
 		"@d-zero/shared": "0.23.0",
-		"@nitpicker/crawler": "0.23.0"
+		"@nitpicker/crawler": "0.23.0",
+		"css-what": "8.0.0"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }

@@ -4091,6 +4091,60 @@ export interface SearchHtmlResult {
 }
 
 /**
+ * Options for {@link import('./match-selector/match-selector.js').matchSelector}.
+ */
+export interface MatchSelectorOptions {
+	/**
+	 * CSS selector list to look for in the stored HTML. Limited to the
+	 * grammar a single pass over the markup can evaluate exactly (compound
+	 * selectors, descendant / child combinators, `:first-child`,
+	 * `:nth-child()`, `:first-of-type`, `:nth-of-type()`, `:not(compound)`).
+	 */
+	selector: string;
+	/** Maximum number of matching pages to return (default 100; `0` returns only counts). */
+	limit?: number;
+	/** Number of matching pages to skip (default 0). */
+	offset?: number;
+	/**
+	 * Called after each scanned chunk with a human-readable status line
+	 * (`Scanning HTML snapshots: <done> / <total>`). Omit for silent.
+	 */
+	onProgress?: (message: string) => void;
+}
+
+/** One page whose stored HTML snapshot contains an element matching the selector. */
+export interface MatchSelectorItem {
+	/** The page id (`content_items.id`). */
+	pageId: number;
+	/** The page URL. */
+	url: string;
+}
+
+/** Result of {@link import('./match-selector/match-selector.js').matchSelector}. */
+export interface MatchSelectorResult {
+	/** The selector as given. */
+	selector: string;
+	/** Matching pages in page-id order, sliced by `offset` / `limit`. */
+	items: MatchSelectorItem[];
+	/** Total number of matching pages (before `offset` / `limit`). */
+	total: number;
+	/** Applied offset. */
+	offset: number;
+	/** Applied limit. */
+	limit: number;
+	/** Number of distinct HTML snapshots that were decompressed and examined. */
+	scannedSnapshots: number;
+	/** Number of in-scope pages that have a stored HTML snapshot. */
+	candidatePages: number;
+	/** Snapshots the ordered-literal prefilter rejected without reading their elements. */
+	prefilteredSnapshots: number;
+	/** Snapshots that needed the open-element stack. */
+	tokenizedSnapshots: number;
+	/** Distinct snapshots that contain a matching element. */
+	matchedSnapshots: number;
+}
+
+/**
  * Options for {@link import('./list-pages-by-resource.js').listPagesByResource}.
  * At least one of `urlPattern` / `contentTypeCategory` is required.
  */

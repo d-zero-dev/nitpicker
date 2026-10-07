@@ -3270,6 +3270,7 @@ __metadata:
   dependencies:
     "@d-zero/shared": "npm:0.23.0"
     "@nitpicker/crawler": "npm:0.23.0"
+    css-what: "npm:8.0.0"
   languageName: unknown
   linkType: soft
 
@@ -8240,6 +8241,13 @@ __metadata:
     mdn-data: "npm:2.27.1"
     source-map-js: "npm:^1.2.1"
   checksum: 10c0/1f65e9ccaa56112a4706d6f003dd43d777f0dbcf848e66fd320f823192533581f8dd58daa906cb80622658332d50284d6be13b87a6ab4556cbbfe9ef535bbf7e
+  languageName: node
+  linkType: hard
+
+"css-what@npm:8.0.0":
+  version: 8.0.0
+  resolution: "css-what@npm:8.0.0"
+  checksum: 10c0/11053f3da58abda961bf3ddc9de28a1d84e2e072a7a6873e68bfce7d0796b55800a41e31c0857b632b71d1a3fc42d0dd1d8e96237e52f43d7cfd90510040bdd4
   languageName: node
   linkType: hard
 

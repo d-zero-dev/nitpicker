@@ -8,6 +8,9 @@ import { decodeStoredBlob } from '@nitpicker/crawler';
 import { excludeSkippedPages } from './exclude-skipped-pages.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 
+// `match-selector/match-selector.ts` repeats this candidate query and the chunked keyset
+// scan so the two HTML searches cover the same pages; change both together.
+
 /** Distinct snapshots decompressed per round trip; bounds peak memory. */
 const SCAN_CHUNK = 500;
 

@@ -111,6 +111,11 @@ export const commandDef = {
 			type: 'number',
 			desc: 'search-html: snippet window size in characters. Defaults to 160.',
 		},
+		selector: {
+			type: 'string',
+			valueName: 'css',
+			desc: 'match-selector: CSS selector list to find in the stored HTML. Supports compound selectors, descendant/child combinators, :first-child, :nth-child(), :first-of-type, :nth-of-type(), :not(compound) and comma lists; anything needing later markup (+, ~, :last-child, :has()) is rejected',
+		},
 		resourcesLimit: {
 			type: 'number',
 			desc: 'pages-by-resource: matched resource URL sample size per page. Defaults to 20.',
@@ -323,6 +328,11 @@ export const commandDef = {
 			desc: 'Search the stored HTML snapshots of all pages for a string or /regex/ (raw markup incl. <script>, <style> and attributes; no analyze step needed)',
 			usage: '<file> search-html --pattern <string|/regex/flags> [options]',
 			flags: ['pattern', 'urlPattern', 'directory', 'snippetLength', 'limit', 'offset'],
+		},
+		'match-selector': {
+			desc: 'List pages whose stored HTML snapshot has an element matching a CSS selector (single-pass subset: no sibling combinators, :last-child or :has(); no analyze step needed)',
+			usage: "<file> match-selector --selector '<css>' [options]",
+			flags: ['selector', 'limit', 'offset'],
 		},
 		images: {
 			desc: 'List images, optionally filtered to missing alt/dimensions or oversized files',

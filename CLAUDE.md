@@ -26,6 +26,7 @@ npx @nitpicker/cli pipeline <URL>                      # crawl → analyze → r
 npx @nitpicker/cli query <file> <sub-command>          # アーカイブへのクエリ（JSON 出力）
 npx @nitpicker/cli query <file> match-urls --urls <urls.txt>  # URL リストとアーカイブの突合結果を診断（未収録/redirect/対象外を判別）
 npx @nitpicker/cli query <file> search-html --pattern <str|/re/flags>  # 保存済み HTML の文字列/正規表現検索（analyze 不要・書き込みなし。まず --limit 0 で total 確認）
+npx @nitpicker/cli query <file> match-selector --selector '<css>'  # 保存済み HTML に CSS セレクタ一致要素を持つページを列挙（DOM を作らない。+ ~ :last-child :has() は非対応でエラー。まず --limit 0 で total 確認）
 npx @nitpicker/cli query <file> pages-by-resource --contentTypeCategory font  # 条件に一致するリソース（フォント等）を読み込むページを逆引き（本文は未保存なので判定は取得済みファイルの URL/MIME）
 npx @nitpicker/cli query <file> resource-hosts --isExternal  # リソースのホスト別集計（サードパーティ依存の棚卸し）
 npx @nitpicker/cli viewer <file-or-stub-dir>           # ローカルビューア起動（常駐、Ctrl-C で停止）

@@ -8,6 +8,7 @@ import { dispatchQuery as dispatchQueryFn } from '../query/dispatch-query.js';
 import { query } from './query.js';
 
 vi.mock('@nitpicker/query', () => ({
+	compileSelector: vi.fn(),
 	ArchiveManager: vi.fn().mockImplementation(function (this: {
 		open: ReturnType<typeof vi.fn>;
 		close: ReturnType<typeof vi.fn>;
@@ -143,28 +144,71 @@ describe('query command', () => {
 		);
 	});
 
-	it('shows search-html scan progress on a Lanes line, starting before the first chunk', async () => {
-		mockLanesUpdate.mockClear();
-		const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-		vi.mocked(dispatchQueryFn).mockImplementationOnce(
-			(_accessor, _sub, _flags, onProgress) => {
-				onProgress?.('Scanning HTML snapshots: 500 / 1200');
-				return Promise.resolve({ items: [], total: 0 });
-			},
-		);
+	it.each(['search-html', 'match-selector'])(
+		'shows %s scan progress on a Lanes line, starting before the first chunk',
+		async (subCommand) => {
+			mockLanesUpdate.mockClear();
+			const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+			vi.mocked(dispatchQueryFn).mockImplementationOnce(
+				(_accessor, _sub, _flags, onProgress) => {
+					onProgress?.('Scanning HTML snapshots: 500 / 1200');
+					return Promise.resolve({ items: [], total: 0 });
+				},
+			);
 
-		await query(['test.nitpicker', 'search-html'], { pattern: 'x' } as never);
+			await query(['test.nitpicker', subCommand], {
+				pattern: 'x',
+				selector: 'x',
+			} as never);
 
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			0,
-			'%braille% Scanning HTML snapshots%dots%',
-		);
-		expect(mockLanesUpdate).toHaveBeenCalledWith(
-			0,
-			'%braille% Scanning HTML snapshots: 500 / 1200',
-		);
-		// The Lanes line replaces plain stderr lines for this sub-command.
-		expect(stderrSpy).not.toHaveBeenCalledWith('Scanning HTML snapshots: 500 / 1200\n');
+			expect(mockLanesUpdate).toHaveBeenCalledWith(
+				0,
+				'%braille% Scanning HTML snapshots%dots%',
+			);
+			expect(mockLanesUpdate).toHaveBeenCalledWith(
+				0,
+				'%braille% Scanning HTML snapshots: 500 / 1200',
+			);
+			// The Lanes line replaces plain stderr lines for this sub-command.
+			expect(stderrSpy).not.toHaveBeenCalledWith('Scanning HTML snapshots: 500 / 1200\n');
+		},
+	);
+
+	it('validates the match-selector selector before opening the archive', async () => {
+		const { ArchiveManager, compileSelector } = await import('@nitpicker/query');
+		vi.mocked(ArchiveManager).mockClear();
+		vi.mocked(compileSelector).mockImplementationOnce(() => {
+			throw new Error('unsupported selector');
+		});
+
+		await expect(
+			query(['test.nitpicker', 'match-selector'], { selector: 'a + b' } as never),
+		).rejects.toThrow(ExitError);
+
+		expect(compileSelector).toHaveBeenCalledWith('a + b');
+		expect(ArchiveManager).not.toHaveBeenCalled();
+		expect(formatCliErrorFn).toHaveBeenCalledWith(expect.any(Error), false);
+		expect(exitSpy).toHaveBeenCalledWith(1);
+	});
+
+	it('compiles an empty --selector before opening the archive too', async () => {
+		const { ArchiveManager, compileSelector } = await import('@nitpicker/query');
+		vi.mocked(ArchiveManager).mockClear();
+		vi.mocked(compileSelector).mockClear();
+
+		await query(['test.nitpicker', 'match-selector'], { selector: '' } as never);
+
+		expect(compileSelector).toHaveBeenCalledWith('');
+	});
+
+	it('does not compile a selector for other sub-commands or when --selector is missing', async () => {
+		const { compileSelector } = await import('@nitpicker/query');
+		vi.mocked(compileSelector).mockClear();
+
+		await query(['test.nitpicker', 'summary'], { selector: 'a' } as never);
+		await query(['test.nitpicker', 'match-selector'], {} as never);
+
+		expect(compileSelector).not.toHaveBeenCalled();
 	});
 
 	it('exits with error when ArchiveManager.open fails', async () => {
