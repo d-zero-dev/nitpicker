@@ -91,7 +91,7 @@ export async function searchHtml(
 	const matches = new Map<string, HashMatch>();
 	const { matchedPages, scannedSnapshots, candidatePages } = await scanHtmlSnapshots({
 		knex,
-		filters: { urlPattern: options.urlPattern, directory: options.directory },
+		filters: options,
 		matches: ({ hash, html }) => {
 			let matchCount = 0;
 			let snippet = '';

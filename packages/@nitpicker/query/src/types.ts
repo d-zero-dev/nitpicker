@@ -15,6 +15,7 @@ export type ArchiveMode = 'archive' | 'stub';
 // host cache and cannot depend on query.
 export type { PageSource, ErrorKind } from '@nitpicker/crawler';
 import type { FindMismatchesOptions } from './find-mismatches.js';
+import type { HtmlSnapshotPageFilters } from './html-snapshot-scan/types.js';
 import type {
 	ErrorKind,
 	PageSource,
@@ -4040,17 +4041,13 @@ export interface UrlMatchResult {
 /**
  * Options for {@link import('./search-html.js').searchHtml}.
  */
-export interface SearchHtmlOptions {
+export interface SearchHtmlOptions extends HtmlSnapshotPageFilters {
 	/**
 	 * Search pattern in `strToRegex` syntax: a plain string is matched as an
 	 * escaped literal substring, `/pattern/flags` (flags `g`/`i`/`m`) as a
 	 * regular expression.
 	 */
 	pattern: string;
-	/** SQL LIKE pattern restricting the page URLs to scan. */
-	urlPattern?: string;
-	/** Directory path prefix restricting the page URLs to scan. */
-	directory?: string;
 	/** Maximum number of matching pages to return (default 100; `0` returns only counts). */
 	limit?: number;
 	/** Number of matching pages to skip (default 0). */
@@ -4093,7 +4090,7 @@ export interface SearchHtmlResult {
 /**
  * Options for {@link import('./match-selector/match-selector.js').matchSelector}.
  */
-export interface MatchSelectorOptions {
+export interface MatchSelectorOptions extends HtmlSnapshotPageFilters {
 	/**
 	 * CSS selector list to look for in the stored HTML. Limited to the
 	 * grammar a single pass over the markup can evaluate exactly (compound
