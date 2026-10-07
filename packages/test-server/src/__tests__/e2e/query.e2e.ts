@@ -336,18 +336,43 @@ describe('query match-selector (e2e)', () => {
 			candidatePages: 1,
 		});
 
-		// No fixture page lives under /blog/, so nothing is scanned at all
+		// The directory page itself is in its directory
 		const byDirectory = await runCli(
-			['query', FIXTURE, 'match-selector', '--selector', 'a', '--directory', '/blog'],
+			['query', FIXTURE, 'match-selector', '--selector', 'a', '--directory', '/about'],
 			cwd,
 		);
 		expect(byDirectory.exitCode).toBe(0);
 		expect(JSON.parse(byDirectory.stdout)).toMatchObject({
+			items: [{ url: 'http://localhost:49375/about' }],
+			total: 1,
+			scannedSnapshots: 1,
+			candidatePages: 1,
+		});
+
+		// No fixture page lives in /blog, so nothing is scanned at all
+		const elsewhere = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', 'a', '--directory', '/blog'],
+			cwd,
+		);
+		expect(elsewhere.exitCode).toBe(0);
+		expect(JSON.parse(elsewhere.stdout)).toMatchObject({
 			items: [],
 			total: 0,
 			scannedSnapshots: 0,
 			candidatePages: 0,
 		});
+	});
+
+	it('rejects a blank --directory with exit code 1 before opening the archive', async () => {
+		const { exitCode, stdout, stderr } = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', 'a', '--directory', ' '],
+			cwd,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(stdout).toBe('');
+		expect(stderr).toContain('Invalid --directory value');
+		expect(stderr).not.toContain('Extracting archive');
 	});
 
 	it.each([
