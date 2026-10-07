@@ -323,6 +323,33 @@ describe('query match-selector (e2e)', () => {
 		expect(output.total).toBe(2);
 	});
 
+	it('narrows the scanned pages with --url-pattern and --directory', async () => {
+		const byUrl = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', 'a', '--url-pattern', '%/about'],
+			cwd,
+		);
+		expect(byUrl.exitCode).toBe(0);
+		expect(JSON.parse(byUrl.stdout)).toMatchObject({
+			items: [{ url: 'http://localhost:49375/about' }],
+			total: 1,
+			scannedSnapshots: 1,
+			candidatePages: 1,
+		});
+
+		// No fixture page lives under /blog/, so nothing is scanned at all
+		const byDirectory = await runCli(
+			['query', FIXTURE, 'match-selector', '--selector', 'a', '--directory', '/blog'],
+			cwd,
+		);
+		expect(byDirectory.exitCode).toBe(0);
+		expect(JSON.parse(byDirectory.stdout)).toMatchObject({
+			items: [],
+			total: 0,
+			scannedSnapshots: 0,
+			candidatePages: 0,
+		});
+	});
+
 	it.each([
 		['div[', 'syntax error'],
 		['', 'the selector is empty'],
