@@ -208,9 +208,11 @@ describe('listPages', () => {
 	});
 
 	it('directory でフィルタする', async () => {
-		const result = await listPages(archive, { directory: 'example.com' });
-		// Root URL (https://example.com) doesn't contain 'example.com/' so only subpages match
-		expect(result.total).toBe(2);
+		const result = await listPages(archive, { directory: '/about' });
+		expect(result.items.map((item) => item.url)).toEqual(['https://example.com/about']);
+		// A host name is not a path: a bare `example.com` names the directory `/example.com`
+		const host = await listPages(archive, { directory: 'example.com' });
+		expect(host.total).toBe(0);
 	});
 
 	it('contentTypeCategory="pdf" でフィルタすると PDF だけが返る', async () => {

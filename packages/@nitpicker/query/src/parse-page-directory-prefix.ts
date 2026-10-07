@@ -26,14 +26,17 @@ function normalizePathname(raw: string): string {
 }
 
 /**
- * Parses one directory-prefix filter into the `viewer_pages` columns it is
- * matched against (see {@link PageDirectoryPrefix}).
+ * Parses one directory filter into the host and pathname it is matched
+ * against (see {@link PageDirectoryPrefix}). The single definition of what a
+ * directory means for `report --html-dirs` (`applyPageListRowFilters`, over
+ * `viewer_pages`) and for `query pages` / `search-html` / `match-selector`
+ * (`applyUrlDirectoryFilter`, over `url_refs.url`).
  *
- * Two spellings are accepted, because a report caller has both at hand: an
- * absolute URL (typically an archive root, so the host matters — a
- * multi-root archive can hold the same `/blog/` path under two hosts) and a
- * bare pathname (host-agnostic, which is what a single-root archive wants
- * and what slices one path across every root).
+ * Two spellings are accepted: an absolute URL (typically an archive root,
+ * so the host matters — a multi-root archive can hold the same `/blog/`
+ * path under two hosts) and a bare pathname (host-agnostic, which is what a
+ * single-root archive wants and what slices one path across every root). A
+ * host name without a scheme (`example.com/blog`) is a pathname.
  *
  * Matching is host + pathname only. The scheme is not compared even when the
  * filter carries one: a filter written `http://example.com/blog` against an
@@ -42,11 +45,10 @@ function normalizePathname(raw: string): string {
  * `viewer_pages` stores `hostname` (port excluded) and no port column, so
  * `example.com:8080` and `example.com` are one host here.
  *
- * A pathname-only filter is compared verbatim against
- * `viewer_pages.path_sort_key`, which holds the URL's percent-encoded
- * pathname — a filter containing non-ASCII or space characters must be
- * supplied percent-encoded (a full-URL filter is encoded for the caller by
- * URL parsing).
+ * The pathname is compared verbatim and case-sensitively against the
+ * URL's percent-encoded pathname — a filter containing non-ASCII or space
+ * characters must be supplied percent-encoded (a full-URL filter is encoded
+ * for the caller by URL parsing).
  * @param filter - A full URL (`https://example.com/blog/`) or a pathname
  *   (`/blog`, `blog` — the leading slash is optional). `/` names the whole
  *   site.
@@ -62,7 +64,7 @@ function normalizePathname(raw: string): string {
 export function parsePageDirectoryPrefix(filter: string): PageDirectoryPrefix {
 	if (filter.trim() === '') {
 		throw new TypeError(
-			'parsePageDirectoryPrefix: filter must not be blank (omit the option to list every directory)',
+			'directory filter must not be blank (omit it to keep every directory)',
 		);
 	}
 	if (!ABSOLUTE_URL.test(filter)) {
@@ -71,7 +73,7 @@ export function parsePageDirectoryPrefix(filter: string): PageDirectoryPrefix {
 	const parsed = parseUrl(filter);
 	if (!parsed?.hostname) {
 		throw new TypeError(
-			`parsePageDirectoryPrefix: filter is not an HTTP(S) URL with a host: ${filter}`,
+			`directory filter is not a pathname or an HTTP(S) URL with a host: ${filter}`,
 		);
 	}
 	return {

@@ -4,7 +4,7 @@ import type { Knex } from 'knex';
 export interface HtmlSnapshotPageFilters {
 	/** SQL LIKE pattern restricting the page URLs to scan. */
 	readonly urlPattern?: string;
-	/** Directory path prefix restricting the page URLs to scan. */
+	/** Directory the scanned pages must be in or under; see `applyUrlDirectoryFilter`. */
 	readonly directory?: string;
 }
 

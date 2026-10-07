@@ -44,7 +44,11 @@ const DEFAULT_LIMIT = 100;
  *   large archive (see ARCHITECTURE.md's fast-path invariant) and would
  *   give no signal that re-running `viewer-build` would fix it.
  * - `listPages` (the live, offset-only, write-model path) in stub mode
- *   only (a live crawl, where the read model cannot exist yet).
+ *   only (a live crawl, where the read model cannot exist yet). Its
+ *   `directory` is `applyUrlDirectoryFilter`'s, which also keeps the
+ *   directory's own page (`/blog`) and accepts a full URL — a superset of
+ *   the fast path's `path_sort_key` range, kept rather than aligned because
+ *   an equality arm would take the fast path off its single index range.
  *   Its `cursor` is a plain decimal offset string (see
  *   `buildLivePagesCursors`), not the fast path's opaque keyset token, but
  *   exposes the same `nextCursor`-only contract so `usePagesInfinite`'s
@@ -127,7 +131,8 @@ export function registerPagesRoute(app: Hono, context: ArchiveContext): void {
 			isDedupeCapped: toBoolean(q.isDedupeCapped),
 			dedupeCapEventId: toNumber(q.dedupeCapEventId),
 			urlPattern: q.urlPattern,
-			directory: q.directory,
+			// `listPages` rejects a blank directory; the fast path ignores one.
+			directory: q.directory?.trim() ? q.directory : undefined,
 			templateKey: q.templateKey,
 			technology: q.technology,
 			sortBy: toPageSortBy(q.sortBy),

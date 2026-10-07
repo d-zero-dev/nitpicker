@@ -131,30 +131,6 @@ export interface PageListStreamRow extends PageListItem {
 	pageId: number;
 }
 
-/**
- * One directory-prefix filter, parsed into the two `viewer_pages` columns it
- * is matched against.
- *
- * Produced by `parsePageDirectoryPrefix` from either filter spelling a
- * caller may supply (full URL or pathname-only) so both end up as the same
- * pair of column predicates.
- */
-export interface PageDirectoryPrefix {
-	/**
-	 * The `viewer_pages.hostname` value the filter is scoped to (lowercased
-	 * by WHATWG URL parsing, port excluded — `viewer_pages` has no port
-	 * column), or `null` for a pathname-only filter, which matches the path
-	 * on every host in the archive.
-	 */
-	hostname: string | null;
-	/**
-	 * The pathname prefix, normalised to a leading slash, collapsed repeated
-	 * slashes and no trailing slash (`/blog`), or `''` for a filter that
-	 * names a host (or the site root) without narrowing the path.
-	 */
-	pathname: string;
-}
-
 /** Directory-prefix and URL-list filtering shared by every Page List row reader. */
 export interface PageListRowFilterOptions {
 	/**

@@ -131,6 +131,37 @@ describe('matchSelector', () => {
 		]);
 	});
 
+	it('narrows the scan to the pages matching urlPattern', async () => {
+		const result = await matchSelector(archive, {
+			selector: 'nav a',
+			urlPattern: '%/about',
+		});
+		expect(result.items.map((item) => item.url)).toEqual(['https://example.com/about']);
+		expect(result).toMatchObject({
+			total: 1,
+			candidatePages: 1,
+			scannedSnapshots: 1,
+			matchedSnapshots: 1,
+		});
+	});
+
+	it('narrows the scan to the pages under directory', async () => {
+		// The shared snapshot also matches `nav a, img`, but no page under /blog references it.
+		const result = await matchSelector(archive, {
+			selector: 'nav a, img',
+			directory: '/blog',
+		});
+		expect(result.items.map((item) => item.url)).toEqual([
+			'https://example.com/blog/post',
+		]);
+		expect(result).toMatchObject({
+			total: 1,
+			candidatePages: 1,
+			scannedSnapshots: 1,
+			matchedSnapshots: 1,
+		});
+	});
+
 	it('slices with offset / limit and returns only counts for limit 0', async () => {
 		const page2 = await matchSelector(archive, { selector: 'li', limit: 1, offset: 1 });
 		expect(page2.items).toHaveLength(1);

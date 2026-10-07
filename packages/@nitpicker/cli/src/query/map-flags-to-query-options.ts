@@ -212,6 +212,8 @@ export function mapFlagsToQueryOptions(
 			}
 			return {
 				selector: flags.selector,
+				urlPattern: flags.urlPattern,
+				directory: flags.directory,
 				limit: flags.limit,
 				offset: flags.offset,
 			};

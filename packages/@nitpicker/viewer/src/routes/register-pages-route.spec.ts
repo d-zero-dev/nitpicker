@@ -334,6 +334,21 @@ describe('registerPagesRoute (integration)', () => {
 			const body = (await res.json()) as { items: unknown[]; total: number };
 			expect(body.total).toBe(0);
 		});
+
+		it('keeps the directory page itself for a directory filter (listPages semantics)', async () => {
+			const res = await fixture.app.request(
+				`/api/pages?directory=${encodeURIComponent('/c')}`,
+			);
+			const body = (await res.json()) as { items: { url: string }[] };
+			expect(body.items.map((item) => item.url)).toEqual(['https://example.com/c']);
+		});
+
+		it('ignores a whitespace-only directory instead of failing the request', async () => {
+			const res = await fixture.app.request('/api/pages?directory=%20');
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { total: number };
+			expect(body.total).toBe(5);
+		});
 	});
 
 	describe('urlPattern stays on the fast path (keyset cursor, redirect/alias parity)', () => {

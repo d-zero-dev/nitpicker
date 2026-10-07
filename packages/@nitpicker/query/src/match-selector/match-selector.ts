@@ -31,7 +31,7 @@ import { planSelectorMatch } from './plan-selector-match.js';
  * and raw text element (`script`, `style`, `noscript`, ...) content is
  * not searched.
  * @param accessor - The archive accessor to query.
- * @param options - The selector, pagination and progress callback.
+ * @param options - The selector, page filters, pagination and progress callback.
  * @returns Matching pages sliced by `offset` / `limit`, plus totals and stage counters.
  * @throws {UnsupportedSelectorError} If the selector is invalid or outside the supported grammar.
  * @example
@@ -57,6 +57,7 @@ export async function matchSelector(
 	const { matchedPages, matchedSnapshots, scannedSnapshots, candidatePages } =
 		await scanHtmlSnapshots({
 			knex,
+			filters: options,
 			matches: ({ html }) => {
 				const outcome = htmlMatchesSelector({ plan, html });
 				if (outcome.prefiltered) {

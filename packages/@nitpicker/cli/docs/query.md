@@ -91,13 +91,15 @@ npx @nitpicker/cli query ./site.nitpicker pages --status-min 400 --sort-by url -
 | `--missing-description`   | boolean | description欠落ページ          |
 | `--noindex`               | boolean | noindexページ                  |
 | `--url-pattern`           | string  | SQL LIKEパターンでURL絞り込み  |
-| `--directory`             | string  | ディレクトリprefixで絞り込み   |
+| `--directory`             | string  | ディレクトリで絞り込み（下記） |
 | `--sort-by`               | string  | `url` / `status` / `title`     |
 | `--sort-order`            | string  | `asc` / `desc`                 |
 | `--limit`, `-l`           | number  | 最大取得件数                   |
 | `--offset`, `-o`          | number  | スキップ件数                   |
 
 `--content-type-category` は `html`、`pdf`、`csv`、`word`、`excel`、`powerpoint`、`image`、`css`、`javascript`、`json`、`xml`、`font`、`audio`、`video`、`archive`、`text`、`other`、`unknown` を指定できます。指定時は既定のHTML中心フィルタを外し、PDFなどの非HTMLページも対象になります。
+
+`--directory` はそのディレクトリのページ自身と配下すべてに一致します（`search-html` / `match-selector` も同じ意味、`report --html-dirs` とも同じ）。境界は `/` 区切りで、`/blog` は `/blog`・`/blog/`・`/blog?page=2`・`/blog/2024/post` に一致し、`/blogging` や `/en/blog/post` には一致しません。パスだけ（`/blog`）なら全ホストが対象で、`https://example.com/blog` のようにURLで書くとそのホストに限定します（スキームとポートは比較しません）。スキームのない `example.com/blog` はホストではなくパス `/example.com/blog` として扱います。パスはURLに保存されている形（パーセントエンコード済み）と大文字小文字を区別して比較し、`%` や `_` はワイルドカードではなく文字そのものとして扱います。空白だけの値やHTTP(S)以外のURLは、アーカイブを開く前にエラー（exit code 1）になります。
 
 ### `page-detail`
 
@@ -227,7 +229,7 @@ npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*
 | ------------------ | ---------------- | --------------------------------------------------------------------------------- |
 | `--pattern`        | string, required | 通常の文字列はリテラル部分一致、`/pattern/flags`（flagsは `g` `i` `m`）は正規表現 |
 | `--url-pattern`    | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                    |
-| `--directory`      | string           | ディレクトリprefixでスキャン対象ページを絞り込み                                  |
+| `--directory`      | string           | ディレクトリでスキャン対象ページを絞り込み（`pages` の `--directory` と同じ意味） |
 | `--snippet-length` | number           | スニペットの文字数（既定 160）                                                    |
 | `--limit`, `-l`    | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                               |
 | `--offset`, `-o`   | number           | スキップ件数                                                                      |
@@ -241,13 +243,16 @@ npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*
 ```sh
 npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'nav > a[href^="/products/"]' --pretty
 npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'img:not([alt]), a[target="_blank"]:not([rel~="noopener"])' --limit 0
+npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'table:not([class])' --directory /news --limit 0
 ```
 
-| オプション       | 型               | 説明                                                |
-| ---------------- | ---------------- | --------------------------------------------------- |
-| `--selector`     | string, required | CSSセレクタ（カンマ区切りリスト可。対応文法は下記） |
-| `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ |
-| `--offset`, `-o` | number           | スキップ件数                                        |
+| オプション       | 型               | 説明                                                                              |
+| ---------------- | ---------------- | --------------------------------------------------------------------------------- |
+| `--selector`     | string, required | CSSセレクタ（カンマ区切りリスト可。対応文法は下記）                               |
+| `--url-pattern`  | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                    |
+| `--directory`    | string           | ディレクトリでスキャン対象ページを絞り込み（`pages` の `--directory` と同じ意味） |
+| `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                               |
+| `--offset`, `-o` | number           | スキップ件数                                                                      |
 
 保存済みのHTMLスナップショットに、セレクタに一致する要素を1つ以上持つページを返します。ページ単位の存在判定で、一致要素の位置や個数は返しません。analyzeプラグインの実行は不要で、アーカイブへの書き込みもありません（`analyze-search` はjsdomで全ページのDOMを構築しますが、本コマンドはDOMを作りません）。
 
@@ -255,7 +260,7 @@ npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'img:not([al
 
 **対応しないセレクタ**: 要素より後ろのマークアップが分からないと判定できないもの（`+` `~` 結合子、`:last-child` `:only-child` `:nth-last-*` `:has()`）、`:is()` `:where()`、`:root` `:empty` などの状態系疑似クラス、疑似要素、名前空間、`:nth-child()` の `of S`、`:not()` に渡すリスト・結合子・入れ子の `:not()`。これらは近似せず、対応文法の一覧つきのエラー（exit code 1）で拒否します。
 
-結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ）なので、`candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。stderrに進捗が出ます。
+結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ。`--url-pattern` / `--directory` の絞り込みも同じ意味）で、絞り込むと `candidatePages` / `scannedSnapshots` / `total` は絞り込み後のページだけを数えます。絞り込みなしで `candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。stderrに進捗が出ます。
 
 `prefilteredSnapshots` と `tokenizedSnapshots` は判定の経路を示します。どのセレクタも、まず必要なリテラルが順に現れるかを `indexOf` で確認し、現れない文書はマークアップを一度も走査せずに却下します（`prefilteredSnapshots`）。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav` など）は正規表現1本で判定します。結合子・`:nth-*`・`<` `>` を含む属性値のセレクタと、`<template` を含む文書は開タグスタックで評価し、`tokenizedSnapshots` に数えます。
 
@@ -539,8 +544,8 @@ npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
 | `--missing-title`            | boolean | `pages`                                                                                                                                              |
 | `--missing-description`      | boolean | `pages`                                                                                                                                              |
 | `--noindex`                  | boolean | `pages`                                                                                                                                              |
-| `--url-pattern`              | string  | `pages` / `images`                                                                                                                                   |
-| `--directory`                | string  | `pages`                                                                                                                                              |
+| `--url-pattern`              | string  | `pages` / `images` / `search-html` / `match-selector`                                                                                                |
+| `--directory`                | string  | `pages` / `search-html` / `match-selector`                                                                                                           |
 | `--sort-by`                  | string  | `pages` / `console-logs`                                                                                                                             |
 | `--sort-order`               | string  | `pages` / `console-logs`                                                                                                                             |
 | `--type`                     | string  | `links` / `mismatches` / JSON-LD type系 / `console-logs`                                                                                             |

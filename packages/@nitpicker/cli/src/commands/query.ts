@@ -12,6 +12,7 @@ import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { formatCliError } from '../format-cli-error.js';
 import { dispatchQuery } from '../query/dispatch-query.js';
 import { VALID_SUB_COMMANDS } from '../query/types.js';
+import { validateDirectoryFlag } from '../query/validate-directory-flag.js';
 
 /** Parsed flag values for the `query` CLI command. */
 type QueryFlags = InferFlags<typeof commandDef.flags>;
@@ -56,14 +57,16 @@ export async function query(args: string[], flags: QueryFlags) {
 		: path.resolve(process.cwd(), filePath);
 
 	try {
-		// An invalid or unsupported selector is detected before the archive is
-		// extracted: opening a large `.nitpicker` takes minutes, and a typo
-		// should not cost that. (A missing `--selector` is reported by the
-		// flag mapper once the archive is open, like every other required flag;
-		// an empty one is a selector and fails here.)
+		// An invalid or unsupported selector, and an unusable --directory, are
+		// detected before the archive is extracted: opening a large
+		// `.nitpicker` takes minutes, and a typo should not cost that. (A
+		// missing `--selector` is reported by the flag mapper once the archive
+		// is open, like every other required flag; an empty one is a selector
+		// and fails here.)
 		if (subCommand === 'match-selector' && flags.selector !== undefined) {
 			compileSelector(flags.selector);
 		}
+		validateDirectoryFlag(subCommand, flags.directory);
 
 		// The extraction Lanes is scoped to this block (issue #294), not
 		// the rest of the function: it must be disposed before

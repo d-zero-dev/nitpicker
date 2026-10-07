@@ -1,10 +1,10 @@
-import type { PageDirectoryPrefix, PageListRowFilterOptions } from './types.js';
+import type { PageDirectoryPrefix } from '../types.js';
+import type { PageListRowFilterOptions } from './types.js';
 import type { Knex } from 'knex';
 
 import { applyEqualityOrInFilter } from '../apply-equality-or-in-filter.js';
 import { applyViewerPagesFilters } from '../apply-viewer-pages-filters.js';
-
-import { parsePageDirectoryPrefix } from './parse-page-directory-prefix.js';
+import { parsePageDirectoryPrefix } from '../parse-page-directory-prefix.js';
 
 /**
  * Upper bound of a directory subtree range: the directory's path plus the

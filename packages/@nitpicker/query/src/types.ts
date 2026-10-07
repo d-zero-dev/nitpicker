@@ -15,6 +15,7 @@ export type ArchiveMode = 'archive' | 'stub';
 // host cache and cannot depend on query.
 export type { PageSource, ErrorKind } from '@nitpicker/crawler';
 import type { FindMismatchesOptions } from './find-mismatches.js';
+import type { HtmlSnapshotPageFilters } from './html-snapshot-scan/types.js';
 import type {
 	ErrorKind,
 	PageSource,
@@ -867,7 +868,12 @@ export interface ListPagesOptions {
 	imageScan?: ImageScanOutcome | readonly ImageScanOutcome[];
 	/** URL pattern to search (SQL LIKE pattern). */
 	urlPattern?: string;
-	/** Directory path prefix to filter by. */
+	/**
+	 * Directory to filter by: its own page and everything beneath it, with
+	 * `/` as the boundary (`/blog` matches `/blog` and `/blog/post`, not
+	 * `/blogging` or `/en/blog/`). A pathname matches on every host; a full
+	 * URL (`https://example.com/blog`) also requires the host.
+	 */
 	directory?: string;
 	/**
 	 * Filter by exact DOM-structure template classification group key.
@@ -1449,9 +1455,11 @@ export interface ListViewerPagesOptions {
 	 * unrelated sibling like `/blog2/`. Implemented as a `path_sort_key` range
 	 * scan bounded by a maximal Unicode sentinel appended to the directory
 	 * (`>= dir AND < dir` + sentinel), not a LIKE — see this interface's doc
-	 * for why that keeps it inside the fast path's contract. Host-agnostic
-	 * like `listPages`'s `directory`: a multi-root archive with the same path
-	 * under two different hosts is not disambiguated here either.
+	 * for why that keeps it inside the fast path's contract. Always
+	 * host-agnostic: a multi-root archive with the same path under two
+	 * different hosts is not disambiguated. Narrower than `listPages`'s
+	 * `directory`, which also matches the directory's own page (`/blog`) and
+	 * accepts a full URL to scope by host.
 	 */
 	directory?: string;
 	/**
@@ -4038,19 +4046,37 @@ export interface UrlMatchResult {
 }
 
 /**
+ * One directory filter, parsed by
+ * {@link import('./parse-page-directory-prefix.js').parsePageDirectoryPrefix}
+ * from either spelling a caller may supply (full URL or pathname only).
+ * Matched against `viewer_pages.hostname` / `path_sort_key` by the report
+ * readers and against `url_refs.url` by `listPages` and the HTML searches.
+ */
+export interface PageDirectoryPrefix {
+	/**
+	 * The host the filter is scoped to (lowercased by WHATWG URL parsing,
+	 * port excluded), or `null` for a pathname-only filter, which matches
+	 * the path on every host in the archive.
+	 */
+	hostname: string | null;
+	/**
+	 * The pathname prefix, normalised to a leading slash, collapsed repeated
+	 * slashes and no trailing slash (`/blog`), or `''` for a filter that
+	 * names a host (or the site root) without narrowing the path.
+	 */
+	pathname: string;
+}
+
+/**
  * Options for {@link import('./search-html.js').searchHtml}.
  */
-export interface SearchHtmlOptions {
+export interface SearchHtmlOptions extends HtmlSnapshotPageFilters {
 	/**
 	 * Search pattern in `strToRegex` syntax: a plain string is matched as an
 	 * escaped literal substring, `/pattern/flags` (flags `g`/`i`/`m`) as a
 	 * regular expression.
 	 */
 	pattern: string;
-	/** SQL LIKE pattern restricting the page URLs to scan. */
-	urlPattern?: string;
-	/** Directory path prefix restricting the page URLs to scan. */
-	directory?: string;
 	/** Maximum number of matching pages to return (default 100; `0` returns only counts). */
 	limit?: number;
 	/** Number of matching pages to skip (default 0). */
@@ -4093,7 +4119,7 @@ export interface SearchHtmlResult {
 /**
  * Options for {@link import('./match-selector/match-selector.js').matchSelector}.
  */
-export interface MatchSelectorOptions {
+export interface MatchSelectorOptions extends HtmlSnapshotPageFilters {
 	/**
 	 * CSS selector list to look for in the stored HTML. Limited to the
 	 * grammar a single pass over the markup can evaluate exactly (compound

@@ -62,11 +62,12 @@ describe('createHtmlSnapshotCandidateQuery', () => {
 		]);
 	});
 
-	it('narrows by directory, treating it as a path prefix with a trailing slash', async () => {
+	it('narrows by directory to the directory page and its subtree', async () => {
 		expect(await candidateUrls({ directory: '/blog' })).toEqual([
 			'https://example.com/blog/post',
+			'https://example.com/blog',
 		]);
-		expect(await candidateUrls({ directory: '/blog/' })).toEqual([
+		expect(await candidateUrls({ directory: '/blog/post' })).toEqual([
 			'https://example.com/blog/post',
 		]);
 	});
