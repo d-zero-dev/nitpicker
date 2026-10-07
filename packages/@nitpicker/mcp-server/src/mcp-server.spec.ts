@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { Archive } from '@nitpicker/crawler';
-import { buildViewerReadModel } from '@nitpicker/query';
+import { buildViewerReadModel, SUPPORTED_SELECTOR_GRAMMAR } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createServer } from './mcp-server.js';
@@ -268,9 +268,9 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で37個のツールが返される', async () => {
+	it('ListTools で38個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(37);
+		expect(result.tools).toHaveLength(38);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('list_inbound_links');
@@ -295,6 +295,7 @@ describe('createServer', () => {
 		expect(names).toContain('list_console_logs');
 		expect(names).toContain('get_page_console_logs');
 		expect(names).toContain('search_html');
+		expect(names).toContain('match_selector');
 		expect(names).toContain('list_pages_by_resource');
 		expect(names).toContain('get_resource_host_inventory');
 	});
@@ -302,6 +303,13 @@ describe('createServer', () => {
 	it('toolDefinitions の数と ListTools の数が一致する', async () => {
 		const result = await listTools(server);
 		expect(toolDefinitions.length).toBe(result.tools.length);
+	});
+
+	it('match_selector の description は対応文法の一覧を含み、search_html から導線が張られている', () => {
+		const matchSelector = toolDefinitions.find((tool) => tool.name === 'match_selector');
+		const searchHtml = toolDefinitions.find((tool) => tool.name === 'search_html');
+		expect(matchSelector?.description).toContain(SUPPORTED_SELECTOR_GRAMMAR);
+		expect(searchHtml?.description).toContain('use `match_selector`');
 	});
 
 	it('open_archive でアーカイブを開ける（mode=archive, crawlerPid=null も返す）', async () => {
@@ -616,6 +624,95 @@ describe('createServer', () => {
 		const missing = await callTool(server, 'search_html', { archiveId });
 		expect(missing.isError).toBe(true);
 		expect(missing.content[0]!.text).toContain('Missing required argument: pattern');
+	});
+
+	it('match_selector はセレクタに一致する要素を持つページを返し、selector 必須', async () => {
+		const result = await callTool(server, 'match_selector', {
+			archiveId,
+			selector: 'body > h1',
+		});
+		expect(result.isError).toBeUndefined();
+		const data = JSON.parse(result.content[0]!.text);
+		expect(data.selector).toBe('body > h1');
+		expect(data.total).toBe(2);
+		expect(data.items.map((item: { url: string }) => item.url)).toEqual([
+			'https://example.com',
+			'https://example.com/about',
+		]);
+		expect(data.candidatePages).toBe(2);
+
+		const none = await callTool(server, 'match_selector', {
+			archiveId,
+			selector: 'img:not([alt])',
+		});
+		expect(JSON.parse(none.content[0]!.text).total).toBe(0);
+
+		const missing = await callTool(server, 'match_selector', { archiveId });
+		expect(missing.isError).toBe(true);
+		expect(missing.content[0]!.text).toContain('Missing required argument: selector');
+	});
+
+	it('match_selector は directory / limit / offset で絞り込める', async () => {
+		const scoped = await callTool(server, 'match_selector', {
+			archiveId,
+			selector: 'h1',
+			directory: '/about',
+		});
+		const scopedData = JSON.parse(scoped.content[0]!.text);
+		expect(scopedData.total).toBe(1);
+		expect(scopedData.items[0].url).toBe('https://example.com/about');
+
+		const countOnly = await callTool(server, 'match_selector', {
+			archiveId,
+			selector: 'h1',
+			limit: 0,
+		});
+		const countData = JSON.parse(countOnly.content[0]!.text);
+		expect(countData.total).toBe(2);
+		expect(countData.items).toEqual([]);
+
+		const skipped = await callTool(server, 'match_selector', {
+			archiveId,
+			selector: 'h1',
+			offset: 1,
+		});
+		const skippedItems = JSON.parse(skipped.content[0]!.text).items;
+		expect(skippedItems).toHaveLength(1);
+		expect(skippedItems[0].url).toBe('https://example.com/about');
+	});
+
+	it('match_selector は urlPattern で絞り込み、結合子つきセレクタ（開タグスタック経路）も判定できる', async () => {
+		const scoped = await callTool(server, 'match_selector', {
+			archiveId,
+			selector: 'html > body > h1',
+			urlPattern: '%/about',
+		});
+		const data = JSON.parse(scoped.content[0]!.text);
+		expect(data.total).toBe(1);
+		expect(data.items[0].url).toBe('https://example.com/about');
+		expect(data.candidatePages).toBe(1);
+	});
+
+	it('match_selector は空の directory をエラーで拒否する', async () => {
+		const result = await callTool(server, 'match_selector', {
+			archiveId,
+			selector: 'h1',
+			directory: '   ',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toContain('directory filter must not be blank');
+	});
+
+	it('match_selector は非対応セレクタを対応文法の一覧つきエラーで拒否する', async () => {
+		const result = await callTool(server, 'match_selector', {
+			archiveId,
+			selector: 'h1 + p',
+		});
+		expect(result.isError).toBe(true);
+		const text = result.content[0]!.text;
+		expect(text).toContain('Unsupported or invalid selector "h1 + p"');
+		expect(text).toContain('Supported selectors');
+		expect(text).toContain(':first-child');
 	});
 
 	it('get_resource_referrers でリソースの参照元ページを返す', async () => {

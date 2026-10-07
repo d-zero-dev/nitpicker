@@ -1,6 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query';
+import { CONTENT_TYPE_CATEGORIES, SUPPORTED_SELECTOR_GRAMMAR } from '@nitpicker/query';
 
 /**
  * All MCP tool definitions for the Nitpicker archive query server.
@@ -421,7 +421,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'search_html',
 		description:
-			'Search the stored HTML snapshots of all pages for a string or regular expression, WITHOUT running an analyze plugin and without writing to the archive. The search runs on the raw markup `get_page_html` returns, so <script>, <style>, inline style and every attribute are searchable (e.g. `fonts.example.org`, `font-family`, `gtag(`, `/UA-\\d+-\\d+/`) — unlike the analyze-search plugin, which matches DOM text nodes only. `pattern` is a plain literal substring, or `/regex/flags` (flags g, i, m) for a regular expression. Returns matching pages in page-id order with matchCount and a whitespace-collapsed snippet around the first hit, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). This is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> search-html --pattern "..." | jq`. Cannot search CSS/JS file bodies (not stored).',
+			'Search the stored HTML snapshots of all pages for a string or regular expression, WITHOUT running an analyze plugin and without writing to the archive. The search runs on the raw markup `get_page_html` returns, so <script>, <style>, inline style and every attribute are searchable (e.g. `fonts.example.org`, `font-family`, `gtag(`, `/UA-\\d+-\\d+/`) — unlike the analyze-search plugin, which matches DOM text nodes only. `pattern` is a plain literal substring, or `/regex/flags` (flags g, i, m) for a regular expression. Returns matching pages in page-id order with matchCount and a whitespace-collapsed snippet around the first hit, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). This is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> search-html --pattern "..." | jq`. Cannot search CSS/JS file bodies (not stored). To find pages by DOM structure (a CSS selector) rather than by text, use `match_selector`.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -454,6 +454,42 @@ export const toolDefinitions: Tool[] = [
 				offset: { type: 'number', description: 'Matching pages to skip (default: 0)' },
 			},
 			required: ['archiveId', 'pattern'],
+		},
+	},
+	{
+		name: 'match_selector',
+		description:
+			'Find pages whose stored HTML snapshot contains at least one element matching a CSS selector (e.g. `img:not([alt])`, `nav > a[href^="/products/"]`, `a[target="_blank"]:not([rel~="noopener"])`), WITHOUT running an analyze plugin and without writing to the archive. Use it to search by DOM structure; use `search_html` to search by text. It is an existence check per page: matching element positions and counts are not returned. Returns matching pages in page-id order as `{ pageId, url }`, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). Only the subset of CSS that can be evaluated exactly in a single pass over the markup is supported; anything else is rejected with an error that lists this grammar, never approximated.\n\n' +
+			SUPPORTED_SELECTOR_GRAMMAR +
+			'\n\nThis is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> match-selector --selector "..." | jq`. Cannot inspect CSS/JS file bodies (not stored).',
+		inputSchema: {
+			type: 'object' as const,
+			properties: {
+				archiveId: {
+					type: 'string',
+					description: 'The archive ID returned by open_archive',
+				},
+				selector: {
+					type: 'string',
+					description:
+						'CSS selector list to look for in the stored HTML (comma-separated alternatives allowed). Limited to the supported grammar described above.',
+				},
+				urlPattern: {
+					type: 'string',
+					description: 'SQL LIKE pattern restricting the page URLs to scan.',
+				},
+				directory: {
+					type: 'string',
+					description:
+						'Directory the scanned pages must be in or under, with the same meaning as list_pages (e.g. "/blog").',
+				},
+				limit: {
+					type: 'number',
+					description: 'Max matching pages (default: 100). 0 returns only the counts.',
+				},
+				offset: { type: 'number', description: 'Matching pages to skip (default: 0)' },
+			},
+			required: ['archiveId', 'selector'],
 		},
 	},
 	{

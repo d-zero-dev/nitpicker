@@ -33,6 +33,7 @@ stdio トランスポートで起動し、`.nitpicker` アーカイブを開い�
 | `list_inbound_links`          | 指定ページへの被リンク一覧                                        |
 | `get_page_html`               | HTMLスナップショット                                              |
 | `search_html`                 | 保存済みHTMLの文字列／正規表現検索（analyze不要・書き込みなし）   |
+| `match_selector`              | 保存済みHTMLにCSSセレクタ一致要素を持つページを列挙（構造で探す） |
 | `list_links`                  | リンク一覧（broken / external / 全件、URLパターンで絞り込み）     |
 | `list_resources`              | リソース一覧（URLパターン・Content-Typeカテゴリで絞り込み）       |
 | `list_pages_by_resource`      | 条件に一致するリソースを読み込むページ一覧（フォント利用など）    |
