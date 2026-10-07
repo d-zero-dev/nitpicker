@@ -58,6 +58,21 @@ describe('mapFlagsToCrawlConfig', () => {
 		expect(result.mainContentSelector).toBe('#main');
 	});
 
+	it('解決済みの requestHeaders をそのまま requestHeaders として渡し、生の header / authorization は含めない', () => {
+		const result = mapFlagsToCrawlConfig({
+			requestHeaders: { Authorization: 'Bearer t' },
+			header: ['X-Api-Key: k'],
+			authorization: 'Bearer t',
+			headerFile: 'h.txt',
+		} as never);
+
+		expect(result.requestHeaders).toEqual({ Authorization: 'Bearer t' });
+		const keys = Object.keys(result);
+		expect(keys).not.toContain('header');
+		expect(keys).not.toContain('authorization');
+		expect(keys).not.toContain('headerFile');
+	});
+
 	it('CLI 専用フラグ (resume, silent, diff, single, listFile, list) が結果に含まれない', () => {
 		const flags = {
 			exclude: ['/test/*'],

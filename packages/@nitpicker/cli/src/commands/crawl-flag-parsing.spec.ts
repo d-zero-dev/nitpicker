@@ -111,4 +111,29 @@ describe('crawl CLI flag parsing (parseCli integration)', () => {
 		const result = runParse(['https://example.com/', '--dedupeCap', '25']);
 		expect(result.flags.dedupeCap).toBe(25);
 	});
+
+	it('aggregates repeated --header into a string array', () => {
+		const result = runParse([
+			'https://example.com/',
+			'--header',
+			'X-Api-Key: k',
+			'--header',
+			'Authorization: Bearer t',
+		]);
+
+		expect(result.flags.header).toEqual(['X-Api-Key: k', 'Authorization: Bearer t']);
+	});
+
+	it('parses --authorization and --header-file as single strings', () => {
+		const result = runParse([
+			'https://example.com/',
+			'--authorization',
+			'Bearer t',
+			'--header-file',
+			'./headers.txt',
+		]);
+
+		expect(result.flags.authorization).toBe('Bearer t');
+		expect(result.flags.headerFile).toBe('./headers.txt');
+	});
 });

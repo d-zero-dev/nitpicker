@@ -51,6 +51,27 @@ npx @nitpicker/cli crawl 'https://user:pass@staging.example.com/'
 
 認証情報はクロール対象への認証にのみ使用され、スコープ外ホストへのリクエストには送信されません。ページの保存URLにも含まれません。ただし、アーカイブ内のクロール設定（起点URL）には再クロール（`--append` / `--retry-failed`）のために元のURLがそのまま保存されるため、Basic認証つきでクロールした `.nitpicker` ファイルを第三者へ共有する場合は認証情報が含まれる点に注意してください。
 
+### リクエストヘッダつきのクロール（Bearer トークン・API キーなど）
+
+`Authorization: Bearer ...` や `X-Api-Key` のような任意のリクエストヘッダで保護されたサイトは、`--header` / `--authorization` / `--header-file` でヘッダを指定してクロールできます。
+
+```sh
+# 汎用: curl の -H と同じ書式。繰り返し指定できる
+npx @nitpicker/cli crawl https://staging.example.com/ --header "X-Api-Key: $API_KEY"
+
+# Authorization の短縮形（`--header "Authorization: <値>"` と同じ）
+npx @nitpicker/cli crawl https://staging.example.com/ --authorization "Bearer $TOKEN"
+
+# ファイルから読む（1行1ヘッダ、空行と # コメントは無視）
+npx @nitpicker/cli crawl https://staging.example.com/ --header-file ./headers.txt
+```
+
+- 値が空のヘッダ、改行・制御文字・U+00FF を超える文字を含む値はエラーになります。同じヘッダ名（大文字小文字は区別しない）を複数の指定にまたがって重複させてもエラーです。`Host` / `Content-Length` / `Transfer-Encoding` / `Connection` は指定できません。`User-Agent` は `--user-agent` を使ってください。
+- ヘッダは**クロールのスコープ内のURLにだけ**送信されます。外部リンクの確認、外部ホストのサブリソース、スコープ外へ出るリダイレクト先には送信されません。`robots.txt` の取得とクロール後のJS走査には、ヘッダは付きません。
+- `Authorization` ヘッダを指定した場合、URLに埋め込んだ Basic 認証の資格情報よりそちらが優先されます。
+- ヘッダの**値はアーカイブにも `DEBUG` ログにも起動時の設定表示にも保存・出力されません**。コマンドラインに値を直接書くとシェル履歴や `ps` に残るため、`$TOKEN` のように環境変数で渡すか、`chmod 600` したファイルを `--header-file` で渡すことを推奨します。
+- 値を保存しないので、`--resume` / `--append` / `--retry-failed` / `--recrawl` / `--inventory` では**同じヘッダを指定し直してください**。アーカイブにはヘッダ**名**だけが記録されており、指定漏れがあると警告が出ます（警告が出てもクロールは続行され、そのヘッダなしで取得します）。
+
 ## 実行中の対話コマンド
 
 TTY で実行し、`--verbose` / `--silent` のどちらも指定していない場合、進捗表示の最下行に常時入力行（`> `）が表示され、クロール実行中に以下のコマンドを打てます。
@@ -229,6 +250,9 @@ npx @nitpicker/cli crawl --diff ./before.nitpicker ./after.nitpicker
 | `--list`                                   | string, repeatable | 指定URLリストだけをクロール                                                                                                                                                                                                                                               |
 | `--list-file`                              | string             | URLリストファイルだけをクロール                                                                                                                                                                                                                                           |
 | `--user-agent`                             | string             | HTTPリクエストのUser-Agent                                                                                                                                                                                                                                                |
+| `--header`                                 | string, repeatable | 追加リクエストヘッダ（`"Name: value"`）。スコープ内のURLにのみ送信し、値は保存しない。[詳細](#リクエストヘッダつきのクロールbearer-トークンapi-キーなど)                                                                                                                  |
+| `--authorization`                          | string             | `--header "Authorization: <値>"` の短縮形                                                                                                                                                                                                                                 |
+| `--header-file`                            | string             | 追加リクエストヘッダを1行1ヘッダで書いたファイル（空行と `#` コメントは無視）                                                                                                                                                                                             |
 | `--ignore-robots`                          | boolean            | robots.txt制限を無視                                                                                                                                                                                                                                                      |
 | `--skip-technology-js-scan`                | boolean            | クロール完了後のJSリソース再取得（技術スタックのライセンスコメントスキャン）をスキップし、追加のネットワークリクエストを避ける                                                                                                                                            |
 | `--skip-templates`                         | boolean            | クロール完了時に自動実行されるページのテンプレート分類（DOM構造の類似性クラスタリング）をスキップする。後から `viewer-build` で実行できる                                                                                                                                 |

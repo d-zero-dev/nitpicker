@@ -1,7 +1,7 @@
 import type { commandDef } from './crawl-def.js';
 import type { CrawlDisplayHandle } from '../crawl/attach-crawl-display.js';
 import type { SetupTaskListHandle } from '../crawl/create-setup-task-list.js';
-import type { CrawlConsoleHandle } from '../crawl/types.js';
+import type { CrawlConsoleHandle, CrawlFlagInput } from '../crawl/types.js';
 import type { InferFlags } from '@d-zero/roar';
 import type { Config, CrawlerError } from '@nitpicker/crawler';
 
@@ -18,6 +18,7 @@ import {
 	INVENTORY_SETUP_PHASES,
 	PendingUrlsRemainError,
 	RECRAWL_SETUP_PHASES,
+	redactRequestHeaders,
 	RESUME_SETUP_PHASES,
 	RETRY_FAILED_SETUP_PHASES,
 } from '@nitpicker/crawler';
@@ -27,15 +28,19 @@ import { createCrawlConsole } from '../crawl/create-crawl-console.js';
 import { createSetupTaskList } from '../crawl/create-setup-task-list.js';
 import { log, verbosely } from '../crawl/debug.js';
 import { diff } from '../crawl/diff.js';
+import { findMissingRequestHeaderNames } from '../crawl/find-missing-request-header-names.js';
 import { formatCrawlConsoleHelp } from '../crawl/format-crawl-console-help.js';
 import { formatCrawlConsoleResult } from '../crawl/format-crawl-console-result.js';
 import { formatInvalidInventoryUrlWarning } from '../crawl/format-invalid-inventory-url-warning.js';
 import { formatInvalidRecrawlUrlWarning } from '../crawl/format-invalid-recrawl-url-warning.js';
 import { formatInventorySkipSummary } from '../crawl/format-inventory-skip-summary.js';
+import { formatMissingRequestHeaderWarning } from '../crawl/format-missing-request-header-warning.js';
 import { formatRecrawlSkipSummary } from '../crawl/format-recrawl-skip-summary.js';
 import { isValidUrl } from '../crawl/is-valid-url.js';
 import { mapFlagsToCrawlConfig } from '../crawl/map-flags-to-crawl-config.js';
+import { maskHeaderFlags } from '../crawl/mask-header-flags.js';
 import { parseCrawlConsoleCommand } from '../crawl/parse-crawl-console-command.js';
+import { resolveRequestHeaders } from '../crawl/resolve-request-headers.js';
 import { runPostCrawlTaskList } from '../crawl/run-post-crawl-task-list.js';
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
@@ -43,8 +48,17 @@ import { readUrlListFile } from '../read-url-list-file.js';
 
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
 
-/** Parsed flag values for the `crawl` CLI command. */
-type CrawlFlags = InferFlags<typeof commandDef.flags>;
+/** Flags exactly as `@d-zero/roar` parsed them — header flags still unresolved. */
+type RawCrawlFlags = InferFlags<typeof commandDef.flags>;
+
+/**
+ * Parsed flag values for the `crawl` CLI command, plus `requestHeaders`: the
+ * already-resolved form of `--header` / `--authorization` / `--header-file`
+ * (resolution reads a file and can throw, so it happens once in
+ * {@link crawl} / the pipeline before any display or archive exists).
+ */
+type CrawlFlags = Omit<RawCrawlFlags, 'header' | 'authorization' | 'headerFile'> &
+	Pick<CrawlFlagInput, 'requestHeaders'>;
 
 type LogType = 'verbose' | 'normal' | 'silent';
 
@@ -249,13 +263,27 @@ function beginCrawlMode(
 /**
  * Builds the crawl-start header lines `attachCrawlDisplay` prints to stderr.
  * @param trigger - Display label for the crawl (URL or stub file path).
- * @param config - The resolved archive configuration.
+ * @param config - The resolved archive configuration. Request-header values are never printed, only their names.
  * @returns Header lines, first entry bold and the rest dimmed.
  */
-function buildCrawlHeader(trigger: string, config: Config): string[] {
+function buildCrawlHeader(
+	trigger: string,
+	config: Config & { readonly requestHeaders?: Readonly<Record<string, string>> },
+): string[] {
+	// `requestHeaders` (present when the orchestrator hands over its merged
+	// runtime config) carries credentials — print the names only. The
+	// archive-recorded `requestHeaderNames` is then redundant with it.
+	const shown = redactRequestHeaders(config);
 	return [
 		`🐳 ${trigger} (New scraping)`,
-		...Object.entries(config).map(([key, value]) => `  ${key}: ${value}`),
+		...Object.entries(shown)
+			.filter(([key]) => !(key === 'requestHeaderNames' && shown.requestHeaders))
+			.map(([key, value]) => {
+				if (key === 'requestHeaders') {
+					return `  ${key}: ${Object.keys(value as object).join(', ')}`;
+				}
+				return `  ${key}: ${value}`;
+			}),
 	];
 }
 
@@ -385,6 +413,16 @@ function createCrawlConsoleCommandHandler(
 	};
 }
 
+/** What {@link createCrawlInitializedCallback} closes over. */
+interface CrawlInitializedCallbackParams {
+	readonly setupTaskList: SetupTaskListHandle | null;
+	readonly crawlLifecycle: CrawlLifecycle;
+	readonly logType: LogType;
+	readonly errStack: (CrawlerError | Error)[];
+	readonly trigger: string | ((config: Config) => string);
+	readonly requestHeaders: Readonly<Record<string, string>> | undefined;
+}
+
 /**
  * Builds the `initializedCallback` every crawl mode passes to its
  * `CrawlerOrchestrator` factory (`crawling`/`resume`/`append`/`inventory`/
@@ -400,26 +438,35 @@ function createCrawlConsoleCommandHandler(
  * `logType === 'normal'` only — start the crawl console reading stdin.
  * `setupTaskList` is `null` for `startCrawl` (no setup phase), so
  * `finish()`/`taskListDone` are no-ops there.
- * @param setupTaskList - The setup-phase task list handle, or `null` for modes with no setup phase (`startCrawl`).
- * @param crawlLifecycle - Mutable handles this callback fills in.
- * @param logType - Verbosity level passed through to `attachCrawlDisplay`.
- * @param errStack - Crawl-time errors are pushed here as they arrive.
- * @param trigger - Display label for the crawl (URL or stub file path), or a
+ * @param params - What the callback closes over.
+ * @param params.setupTaskList - The setup-phase task list handle, or `null` for modes with no setup phase (`startCrawl`).
+ * @param params.crawlLifecycle - Mutable handles this callback fills in.
+ * @param params.logType - Verbosity level passed through to `attachCrawlDisplay`.
+ * @param params.errStack - Crawl-time errors are pushed here as they arrive.
+ * @param params.trigger - Display label for the crawl (URL or stub file path), or a
  *   function of the resolved config for modes where the trigger isn't known
  *   until then (`startCrawl`'s fresh-crawl `config.baseUrl`).
+ * @param params.requestHeaders - The headers supplied on this run's command line. Compared with the
+ *   header names the archive recorded, to warn when a re-run forgot to supply them again.
  * @returns The `initializedCallback` to pass to the orchestrator factory.
  */
 function createCrawlInitializedCallback(
-	setupTaskList: SetupTaskListHandle | null,
-	crawlLifecycle: CrawlLifecycle,
-	logType: LogType,
-	errStack: (CrawlerError | Error)[],
-	trigger: string | ((config: Config) => string),
+	params: CrawlInitializedCallbackParams,
 ): (orchestrator: CrawlerOrchestrator, config: Config) => Promise<void> {
+	const { setupTaskList, crawlLifecycle, logType, errStack, trigger, requestHeaders } =
+		params;
 	return async (orchestrator, config) => {
 		crawlLifecycle.orchestrator = orchestrator;
 		setupTaskList?.finish();
 		await setupTaskList?.taskListDone;
+		const missingHeaderNames = findMissingRequestHeaderNames(
+			config.requestHeaderNames,
+			requestHeaders,
+		);
+		if (missingHeaderNames.length > 0) {
+			// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
+			console.warn(formatMissingRequestHeaderWarning(missingHeaderNames));
+		}
 		const triggerLabel = typeof trigger === 'function' ? trigger(config) : trigger;
 		crawlLifecycle.display = attachCrawlDisplay({
 			orchestrator,
@@ -571,13 +618,14 @@ export async function startCrawl(siteUrl: string[], flags: CrawlFlags): Promise<
 					verbose: isLanesVerbose(logType),
 					lanes,
 				},
-				createCrawlInitializedCallback(
-					null,
+				createCrawlInitializedCallback({
+					setupTaskList: null,
 					crawlLifecycle,
 					logType,
 					errStack,
-					(config) => config.baseUrl,
-				),
+					trigger: (config) => config.baseUrl,
+					requestHeaders: flags.requestHeaders,
+				}),
 			),
 	);
 
@@ -616,13 +664,14 @@ async function resumeCrawl(stubFilePath: string, flags: CrawlFlags) {
 					verbose: isLanesVerbose(logType),
 					lanes,
 				},
-				createCrawlInitializedCallback(
-					setupTaskList,
+				createCrawlInitializedCallback({
+					setupTaskList: setupTaskList,
 					crawlLifecycle,
 					logType,
 					errStack,
-					stubFilePath,
-				),
+					trigger: stubFilePath,
+					requestHeaders: flags.requestHeaders,
+				}),
 				setupTaskList?.setupProgress,
 			),
 	);
@@ -663,13 +712,14 @@ async function appendCrawl(archivePath: string, newUrls: string[], flags: CrawlF
 					verbose: isLanesVerbose(logType),
 					lanes,
 				},
-				createCrawlInitializedCallback(
-					setupTaskList,
+				createCrawlInitializedCallback({
+					setupTaskList: setupTaskList,
 					crawlLifecycle,
 					logType,
 					errStack,
-					`${archivePath} (append: ${newUrls.join(', ')})`,
-				),
+					trigger: `${archivePath} (append: ${newUrls.join(', ')})`,
+					requestHeaders: flags.requestHeaders,
+				}),
 				setupTaskList?.setupProgress,
 			),
 	);
@@ -745,13 +795,14 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 					verbose: isLanesVerbose(logType),
 					lanes,
 				},
-				createCrawlInitializedCallback(
-					setupTaskList,
+				createCrawlInitializedCallback({
+					setupTaskList: setupTaskList,
 					crawlLifecycle,
 					logType,
 					errStack,
-					`${archivePath} (inventory: ${listFile})`,
-				),
+					trigger: `${archivePath} (inventory: ${listFile})`,
+					requestHeaders: flags.requestHeaders,
+				}),
 				{ sha256, bytes, invalidLineCount: invalid.length },
 				setupTaskList?.setupProgress,
 			),
@@ -813,13 +864,14 @@ async function recrawlCrawl(archivePath: string, listFile: string, flags: CrawlF
 					verbose: isLanesVerbose(logType),
 					lanes,
 				},
-				createCrawlInitializedCallback(
-					setupTaskList,
+				createCrawlInitializedCallback({
+					setupTaskList: setupTaskList,
 					crawlLifecycle,
 					logType,
 					errStack,
-					`${archivePath} (recrawl: ${listFile})`,
-				),
+					trigger: `${archivePath} (recrawl: ${listFile})`,
+					requestHeaders: flags.requestHeaders,
+				}),
 				{ sha256, bytes, invalidLineCount: invalid.length },
 				setupTaskList?.setupProgress,
 			),
@@ -859,13 +911,14 @@ async function retryFailedCrawl(archivePath: string, flags: CrawlFlags) {
 					verbose: isLanesVerbose(logType),
 					lanes,
 				},
-				createCrawlInitializedCallback(
-					setupTaskList,
+				createCrawlInitializedCallback({
+					setupTaskList: setupTaskList,
 					crawlLifecycle,
 					logType,
 					errStack,
-					`${archivePath} (retry-failed)`,
-				),
+					trigger: `${archivePath} (retry-failed)`,
+					requestHeaders: flags.requestHeaders,
+				}),
 				setupTaskList?.setupProgress,
 			),
 	);
@@ -909,15 +962,27 @@ function validateUrls(urls: readonly string[]) {
  * `puppeteer`/`@d-zero/beholder` version drift before it can surface as an
  * opaque `Page` type mismatch mid-crawl.
  * @param args - Positional arguments (typically one or two URLs/file paths)
- * @param flags - Parsed CLI flags from the `crawl` command
+ * @param rawFlags - Parsed CLI flags from the `crawl` command. The header flags
+ *   (`--header` / `--authorization` / `--header-file`) are resolved into
+ *   `requestHeaders` first, so a malformed header fails before anything else runs.
  * @returns A promise that resolves when the dispatched mode completes.
  */
-export async function crawl(args: string[], flags: CrawlFlags) {
-	if (flags.verbose && !flags.silent) {
+export async function crawl(args: string[], rawFlags: RawCrawlFlags) {
+	if (rawFlags.verbose && !rawFlags.silent) {
 		verbosely();
 	}
 
-	log('Options: %O', flags);
+	log('Options: %O', maskHeaderFlags(rawFlags));
+
+	// Resolved before anything else: it reads `--header-file` and validates
+	// every header, so a malformed one fails here — before the browser check,
+	// any display, or any archive I/O exists to clean up. The raw header flags
+	// stay on `flags` but nothing downstream reads them: `mapFlagsToCrawlConfig`
+	// maps only `requestHeaders`.
+	const flags: CrawlFlags = {
+		...rawFlags,
+		requestHeaders: await resolveRequestHeaders(rawFlags),
+	};
 
 	const hasAppendFlag = !!flags.append && flags.append.length > 0;
 	const hasInventoryFlag = !!flags.inventory;

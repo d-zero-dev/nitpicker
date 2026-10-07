@@ -126,6 +126,25 @@ export const commandDef = {
 			group: 'Crawl options',
 			desc: 'Custom User-Agent string for HTTP requests',
 		},
+		header: {
+			type: 'string',
+			isMultiple: true,
+			valueName: 'name: value',
+			group: 'Crawl options',
+			desc: 'Extra request header, curl -H style (repeatable). Sent only to in-scope URLs — never to external hosts or redirects that leave the scope. The value is never stored in the archive; re-supply it on --resume/--append/--retry-failed/--recrawl/--inventory. Prefer --header-file to keep secrets out of shell history',
+		},
+		authorization: {
+			type: 'string',
+			valueName: 'value',
+			group: 'Crawl options',
+			desc: 'Shorthand for --header "Authorization: <value>" (e.g. "Bearer <token>"). Same scope and storage rules as --header',
+		},
+		headerFile: {
+			type: 'string',
+			valueName: 'path',
+			group: 'Crawl options',
+			desc: 'File of extra request headers, one "Name: value" per line (blank lines and # comments ignored). Same scope and storage rules as --header',
+		},
 		ignoreRobots: {
 			type: 'boolean',
 			group: 'Crawl options',

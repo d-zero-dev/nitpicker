@@ -43,6 +43,9 @@ vi.mock('@nitpicker/crawler', async () => {
 		assertChromeIsInstalled: mockAssertChromeIsInstalled,
 		assertPuppeteerSharedWithBeholder: mockAssertPuppeteerSharedWithBeholder,
 		PendingUrlsRemainError: actual.PendingUrlsRemainError,
+		// Pure helper used by `buildCrawlHeader` to mask header values — the real
+		// one keeps the "values never printed" assertions below meaningful.
+		redactRequestHeaders: actual.redactRequestHeaders,
 		// Real content doesn't matter to this suite — `createSetupTaskList` is
 		// mocked wholesale below, so these are only ever forwarded as opaque
 		// values, never iterated for their actual phase labels.
@@ -228,7 +231,7 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-type CrawlFlags = Parameters<typeof import('./crawl.js').startCrawl>[1];
+type CrawlFlags = Parameters<typeof import('./crawl.js').crawl>[1];
 
 /**
  * Minimal flags matching the shape produced by the CLI parser.
@@ -237,6 +240,9 @@ type CrawlFlags = Parameters<typeof import('./crawl.js').startCrawl>[1];
 function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 	return {
 		resume: undefined,
+		header: undefined,
+		authorization: undefined,
+		headerFile: undefined,
 		append: undefined,
 		retryFailed: undefined,
 		inventory: undefined,
@@ -2129,5 +2135,250 @@ describe('startCrawl: crawl console (TTY gating)', () => {
 		} finally {
 			exitSpy.mockRestore();
 		}
+	});
+});
+
+describe('crawl request headers', () => {
+	let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		setupFakeOrchestrator();
+		consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('--header / --authorization を解決して requestHeaders として crawling に渡す', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['https://example.com'],
+			createFlags({ header: ['X-Api-Key: k'], authorization: 'Bearer t' }),
+		);
+
+		expect(mockCrawling).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({
+				requestHeaders: { 'X-Api-Key': 'k', Authorization: 'Bearer t' },
+			}),
+			expect.any(Function),
+		);
+	});
+
+	it('ヘッダ未指定のときは requestHeaders が undefined', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags());
+
+		const [, options] = mockCrawling.mock.calls[0]!;
+		expect(options.requestHeaders).toBeUndefined();
+	});
+
+	it('不正なヘッダは browser チェックやアーカイブ作成より前に失敗する', async () => {
+		const { crawl } = await import('./crawl.js');
+		await expect(
+			crawl(['https://example.com'], createFlags({ header: ['no-colon'] })),
+		).rejects.toThrow('expected "Name: value"');
+
+		expect(mockAssertChromeIsInstalled).not.toHaveBeenCalled();
+		expect(mockCrawling).not.toHaveBeenCalled();
+	});
+
+	it('DEBUG ログに出る Options ではヘッダの値がマスクされる', async () => {
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['https://example.com'],
+			createFlags({
+				header: ['X-Api-Key: secret-key'],
+				authorization: 'Bearer secret-token',
+			}),
+		);
+
+		const logged = JSON.stringify(
+			mockLog.mock.calls.filter(([format]) => format === 'Options: %O'),
+		);
+		expect(logged).not.toContain('secret-key');
+		expect(logged).not.toContain('secret-token');
+		expect(logged).toContain('X-Api-Key');
+	});
+
+	it('アーカイブが記録したヘッダ名を今回の実行で指定し忘れたら警告する（--append）', async () => {
+		const fake = setupFakeOrchestrator();
+		mockAppend.mockImplementationOnce((_path, _urls, _opts, cb) => {
+			cb?.(fake, {
+				baseUrl: 'https://example.com',
+				requestHeaderNames: ['Authorization'],
+			});
+			return Promise.resolve(fake);
+		});
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ append: ['https://sample-b.example.com/'] }),
+		);
+
+		expect(consoleWarnSpy).toHaveBeenCalledWith(
+			expect.stringContaining('request header(s) Authorization'),
+		);
+	});
+
+	it('記録済みのヘッダ名を再指定していれば警告しない', async () => {
+		const fake = setupFakeOrchestrator();
+		mockRetryFailed.mockImplementationOnce((_path, _opts, cb) => {
+			cb?.(fake, {
+				baseUrl: 'https://example.com',
+				requestHeaderNames: ['Authorization'],
+			});
+			return Promise.resolve(fake);
+		});
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({ retryFailed: true, authorization: 'Bearer t' }),
+		);
+
+		expect(consoleWarnSpy).not.toHaveBeenCalled();
+	});
+
+	describe('警告は再クロール系の全モードで出る', () => {
+		const modes = [
+			{
+				label: '--resume',
+				mock: mockResume,
+				callbackIndex: 2,
+				run: (flags: Partial<CrawlFlags>) =>
+					import('./crawl.js').then(({ crawl }) =>
+						crawl([], createFlags({ resume: '/absolute/stub', ...flags })),
+					),
+			},
+			{
+				label: '--inventory',
+				mock: mockInventory,
+				callbackIndex: 3,
+				run: (flags: Partial<CrawlFlags>) => {
+					mockReadFile.mockResolvedValueOnce(Buffer.from('https://example.com/hidden\n'));
+					return import('./crawl.js').then(({ crawl }) =>
+						crawl(
+							['/tmp/a.nitpicker'],
+							createFlags({ inventory: '/tmp/list.txt', ...flags }),
+						),
+					);
+				},
+			},
+			{
+				label: '--recrawl',
+				mock: mockRecrawl,
+				callbackIndex: 3,
+				run: (flags: Partial<CrawlFlags>) => {
+					mockReadFile.mockResolvedValueOnce(Buffer.from('https://example.com/a\n'));
+					return import('./crawl.js').then(({ crawl }) =>
+						crawl(
+							['/tmp/a.nitpicker'],
+							createFlags({ recrawl: '/tmp/list.txt', ...flags }),
+						),
+					);
+				},
+			},
+		];
+
+		it.each(modes)(
+			'$label: アーカイブ記録のヘッダ名を指定し忘れると警告する',
+			async ({ mock, callbackIndex, run }) => {
+				const fake = setupFakeOrchestrator();
+				mock.mockImplementationOnce((...args: unknown[]) => {
+					(args[callbackIndex] as (...cbArgs: unknown[]) => void)?.(fake, {
+						baseUrl: 'https://example.com',
+						requestHeaderNames: ['X-Api-Key'],
+					});
+					return Promise.resolve(fake);
+				});
+
+				await run({});
+
+				expect(consoleWarnSpy).toHaveBeenCalledWith(
+					expect.stringContaining('request header(s) X-Api-Key'),
+				);
+			},
+		);
+
+		it.each(modes)(
+			'$label: ヘッダ名を大文字小文字違いで再指定していれば警告しない',
+			async ({ mock, callbackIndex, run }) => {
+				const fake = setupFakeOrchestrator();
+				mock.mockImplementationOnce((...args: unknown[]) => {
+					(args[callbackIndex] as (...cbArgs: unknown[]) => void)?.(fake, {
+						baseUrl: 'https://example.com',
+						requestHeaderNames: ['X-Api-Key'],
+					});
+					return Promise.resolve(fake);
+				});
+
+				await run({ header: ['x-api-key: k'] });
+
+				expect(consoleWarnSpy).not.toHaveBeenCalled();
+			},
+		);
+	});
+
+	it('新規クロール（startCrawl）はヘッダ名が記録済みでも、指定していれば警告しない', async () => {
+		const fake = setupFakeOrchestrator();
+		mockCrawling.mockImplementationOnce((_urls, _opts, cb) => {
+			cb?.(fake, {
+				baseUrl: 'https://example.com',
+				requestHeaderNames: ['Authorization'],
+			});
+			return Promise.resolve(fake);
+		});
+		const { crawl } = await import('./crawl.js');
+		await crawl(['https://example.com'], createFlags({ authorization: 'Bearer t' }));
+
+		expect(consoleWarnSpy).not.toHaveBeenCalled();
+	});
+
+	it('名前だけ記録されたアーカイブの起動ヘッダは、名前を列挙して値を含まない', async () => {
+		const fake = setupFakeOrchestrator();
+		mockAppend.mockImplementationOnce((_path, _urls, _opts, cb) => {
+			cb?.(fake, {
+				baseUrl: 'https://example.com',
+				requestHeaderNames: ['Authorization', 'X-Api-Key'],
+			});
+			return Promise.resolve(fake);
+		});
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['/tmp/existing.nitpicker'],
+			createFlags({
+				append: ['https://sample-b.example.com/'],
+				authorization: 'Bearer t',
+				header: ['X-Api-Key: k'],
+			}),
+		);
+
+		const [{ initialLog }] = mockAttachCrawlDisplay.mock.calls[0]!;
+		expect((initialLog as string[]).join('\n')).toContain(
+			'requestHeaderNames: Authorization,X-Api-Key',
+		);
+	});
+
+	it('クロール開始ヘッダにはヘッダ名だけが載り、値は載らない', async () => {
+		const fake = setupFakeOrchestrator();
+		mockCrawling.mockImplementationOnce((_urls, _opts, cb) => {
+			cb?.(fake, {
+				baseUrl: 'https://example.com',
+				requestHeaders: { Authorization: 'Bearer secret-token' },
+			});
+			return Promise.resolve(fake);
+		});
+		const { crawl } = await import('./crawl.js');
+		await crawl(
+			['https://example.com'],
+			createFlags({ authorization: 'Bearer secret-token' }),
+		);
+
+		const [{ initialLog }] = mockAttachCrawlDisplay.mock.calls[0]!;
+		const text = (initialLog as string[]).join('\n');
+		expect(text).toContain('requestHeaders: Authorization');
+		expect(text).not.toContain('secret-token');
 	});
 });
