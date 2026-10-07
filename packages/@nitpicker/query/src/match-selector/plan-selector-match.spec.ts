@@ -31,7 +31,7 @@ describe('planSelectorMatch', () => {
 		expect(tokenizedAlternatives[0]!.prefilterLiterals).toEqual(['<nav', '<a']);
 	});
 
-	it('splits a list between the layers', () => {
+	it('splits a list between the stages', () => {
 		const { directRegExp, tokenizedAlternatives, allAlternatives } =
 			plan('img, nav a, video');
 		expect(directRegExp).toBeInstanceOf(RegExp);

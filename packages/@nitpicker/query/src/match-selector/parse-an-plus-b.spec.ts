@@ -18,11 +18,15 @@ describe('parseAnPlusB', () => {
 		['3n-1', { a: 3, b: -1 }],
 		[' ODD ', { a: 2, b: 1 }],
 		['2N+1', { a: 2, b: 1 }],
+		['-n', { a: -1, b: 0 }],
+		['0n+1', { a: 0, b: 1 }],
+		['n+0', { a: 1, b: 0 }],
+		['2n+ 1', { a: 2, b: 1 }],
 	])('%s', (text, expected) => {
 		expect(parseAnPlusB(text)).toEqual(expected);
 	});
 
-	it.each(['', 'x', '2x+1', 'n+', '1n+', '2n+1 of .a', '--n', 'n n'])(
+	it.each(['', 'x', '2x+1', 'n+', '1n+', '2n+1 of .a', '--n', 'n n', 'n+-1', '1.5'])(
 		'rejects %j',
 		(text) => {
 			expect(() => parseAnPlusB(text)).toThrow(SyntaxError);

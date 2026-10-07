@@ -74,11 +74,17 @@ export function runSelectorStateMachine(options: {
 		if (event.kind === 'close') {
 			if (templateDepth > 0) {
 				templateDepth--;
-			} else {
-				templateDepth = -1;
-				if (names[depth] === event.name) {
-					depth--;
+				continue;
+			}
+			if (templateDepth === 0) {
+				// An end tag other than `</template>` in the content is not the end of it.
+				if (event.name !== 'template') {
+					continue;
 				}
+				templateDepth = -1;
+			}
+			if (names[depth] === event.name) {
+				depth--;
 			}
 			continue;
 		}

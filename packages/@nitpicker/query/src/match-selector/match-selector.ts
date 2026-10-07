@@ -26,7 +26,8 @@ function toBuffer(hash: Uint8Array | ArrayBuffer): Buffer {
 /**
  * The in-scope pages that have a stored HTML snapshot — the same page set
  * `searchHtml` scans, so the two HTML searches never disagree about what
- * is searchable.
+ * is searchable. Keep this predicate, the BLOB handling and the chunked keyset
+ * scan in step with `searchHtml` (`search-html.ts`), which owns the same logic.
  * @param knex - The archive's Knex instance.
  * @returns A fresh query over `page_html_ref` joined to its page.
  */
@@ -42,7 +43,7 @@ function createCandidateQuery(knex: Knex): Knex.QueryBuilder {
  * to the archive.
  *
  * Design: the selector is validated first (an unsupported one fails before
- * the archive is touched), then planned for three layers of increasing
+ * the archive is touched), then planned for three stages of increasing
  * cost — a regular expression over start tags for single-compound
  * selectors, an ordered-literal prefilter, and an open-element stack for
  * combinators and sibling-position tests. See `htmlMatchesSelector`.
@@ -60,7 +61,7 @@ function createCandidateQuery(knex: Knex): Knex.QueryBuilder {
  * not searched.
  * @param accessor - The archive accessor to query.
  * @param options - The selector, pagination and progress callback.
- * @returns Matching pages sliced by `offset` / `limit`, plus totals and layer counters.
+ * @returns Matching pages sliced by `offset` / `limit`, plus totals and stage counters.
  * @throws {UnsupportedSelectorError} If the selector is invalid or outside the supported grammar.
  * @example
  * const { items, total } = await matchSelector(accessor, {

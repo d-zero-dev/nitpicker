@@ -66,6 +66,10 @@ describe('runSelectorStateMachine', () => {
 		['body img', '<body><template></template><img></body>', true],
 		['template > img', '<template><img></template>', false],
 		['body > img', '<body><template><p></p></template><img></body>', true],
+		// an end tag other than </template> does not end the template's content
+		['img', '<template></p><img></template>', false],
+		['img', '<template><p></p></p><img></template>', false],
+		['img', '<template></p><img></template><img>', true],
 		// the template element counts as a sibling, its content does not
 		[
 			'p:nth-child(3)',

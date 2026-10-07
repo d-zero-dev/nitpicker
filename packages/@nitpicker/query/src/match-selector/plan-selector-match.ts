@@ -20,7 +20,7 @@ function usesNth(compound: NegatedCompound, kind: 'child' | 'of-type'): boolean 
 }
 
 /**
- * Splits a compiled selector list across the matching layers.
+ * Splits a compiled selector list across the matching stages.
  *
  * An alternative that is one compound decidable from a single start tag
  * goes into the combined regular expression (decided without tracking

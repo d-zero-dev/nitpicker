@@ -42,10 +42,6 @@ const NEEDS_LOOKAHEAD = new Set([
 	'nth-last-child',
 	'nth-last-of-type',
 	'has',
-	'is',
-	'where',
-	'matches',
-	'any',
 ]);
 
 const REJECTED_COMBINATORS: Readonly<Record<string, string>> = {

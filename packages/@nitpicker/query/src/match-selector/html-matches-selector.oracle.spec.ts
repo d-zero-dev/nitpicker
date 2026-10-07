@@ -1,6 +1,7 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
+import { matchHtmlWithTokenizer } from './test-helpers/match-html-with-tokenizer.js';
 import { matchHtml } from './test-helpers/match-html.js';
 
 /**
@@ -53,6 +54,10 @@ function expectAgreement(document: Document, selectors: string[]) {
 	for (const selector of selectors) {
 		const oracle = document.querySelector(selector) !== null;
 		expect(matchHtml(selector, html).matched, `${selector} on ${html}`).toBe(oracle);
+		expect(
+			matchHtmlWithTokenizer(selector, html).matched,
+			`stack: ${selector} on ${html}`,
+		).toBe(oracle);
 	}
 }
 
@@ -312,6 +317,7 @@ describe('htmlMatchesSelector against the DOM it was serialized from', () => {
 
 		it('agrees with querySelector on 300 random pairs', () => {
 			const random = createRandom(20_260_706);
+			let positives = 0;
 			for (let round = 0; round < 300; round++) {
 				const document = createDocument();
 				document.body.append(
@@ -322,7 +328,14 @@ describe('htmlMatchesSelector against the DOM it was serialized from', () => {
 				const html = document.documentElement.outerHTML;
 				const oracle = document.querySelector(selector) !== null;
 				expect(matchHtml(selector, html).matched, `${selector} on ${html}`).toBe(oracle);
+				expect(
+					matchHtmlWithTokenizer(selector, html).matched,
+					`stack: ${selector} on ${html}`,
+				).toBe(oracle);
+				positives += oracle ? 1 : 0;
 			}
+			// the comparison is only meaningful if many selectors really match
+			expect(positives).toBeGreaterThan(30);
 		});
 	});
 });

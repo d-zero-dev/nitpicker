@@ -18,7 +18,10 @@ export interface AttributeTest {
 	readonly operator: AttributeOperator;
 	/** The selector's literal value (empty for `exists`). */
 	readonly value: string;
-	/** `true` only for an explicit `i` flag; every other mode is case-sensitive. */
+	/**
+	 * Whether values compare ignoring ASCII case: an explicit `i` flag, or one of
+	 * the attributes HTML defines as case-insensitive unless the selector says `s`.
+	 */
 	readonly ignoreCase: boolean;
 }
 
@@ -64,7 +67,7 @@ export interface PlannedAlternative {
 	readonly prefilterLiterals: readonly string[] | null;
 }
 
-/** How a selector list is split across the matching layers. */
+/** How a selector list is split across the matching stages. */
 export interface SelectorMatchPlan {
 	/**
 	 * One regular expression covering every alternative that is a single
@@ -118,7 +121,7 @@ export interface ElementContext {
 /** Outcome of matching one document. */
 export interface HtmlMatchOutcome {
 	readonly matched: boolean;
-	/** `true` when the ordered-literal prefilter rejected every alternative that needed the tokenizer. */
+	/** `true` when the ordered-literal prefilter rejected the document and its markup was never scanned. */
 	readonly prefiltered: boolean;
 	/** `true` when the open-element stack ran over the document. */
 	readonly tokenized: boolean;

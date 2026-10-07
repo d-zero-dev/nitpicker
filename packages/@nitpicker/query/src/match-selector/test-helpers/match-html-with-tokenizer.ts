@@ -7,7 +7,7 @@ import { planSelectorMatch } from '../plan-selector-match.js';
 /**
  * Runs a selector over markup with every alternative forced onto the
  * open-element stack (no direct scan, no prefilter bypass), so the two
- * exact layers can be compared on the same input.
+ * exact stages can be compared on the same input.
  * @param selector - The selector list.
  * @param html - The stored markup.
  * @returns The match outcome.

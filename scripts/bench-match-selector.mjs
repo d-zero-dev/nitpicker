@@ -5,12 +5,12 @@
  * Reports, per selector:
  *
  * - **end to end**: `matchSelector` over the whole archive (SQLite read +
- *   zstd decode + matching), with the per-layer counters it returns
- * - **layered vs stack only**: the same selector over an in-memory sample
- *   of decoded snapshots, once through the layered path (regular
+ *   zstd decode + matching), with the per-stage counters it returns
+ * - **staged vs stack only**: the same selector over an in-memory sample
+ *   of decoded snapshots, once through the staged path (regular
  *   expression scan, ordered-literal prefilter, open-element stack) and
- *   once forced onto the open-element stack, so the cost of each layer and
- *   the agreement of the two exact layers are visible. Decoding is
+ *   once forced onto the open-element stack, so the cost of each stage and
+ *   the agreement of the two exact stages are visible. Decoding is
  *   excluded and timed on its own as the baseline.
  *
  * `--verify N` additionally compares the first N sampled snapshots with
@@ -42,7 +42,7 @@ import process from 'node:process';
 import { decodeStoredBlob } from '@nitpicker/crawler';
 import { ArchiveManager, matchSelector } from '@nitpicker/query';
 
-// The layer comparison forces selectors onto the open-element stack, which the
+// The stage comparison forces selectors onto the open-element stack, which the
 // public API does not expose, so (like the other bench scripts) this reads the
 // built `lib/` modules directly.
 import { compileSelector } from '../packages/@nitpicker/query/lib/match-selector/compile-selector.js';
@@ -168,7 +168,7 @@ try {
 		`\n== sample: ${documents.length} snapshots, ${megabytes.toFixed(1)} MB decoded (decode ${decodeMs.toFixed(0)}ms = ${(megabytes / (decodeMs / 1000)).toFixed(0)} MB/s) ==`,
 	);
 
-	console.log('\n== layered vs stack only (decoded sample, decode excluded) ==');
+	console.log('\n== staged vs stack only (decoded sample, decode excluded) ==');
 	for (const selector of selectors) {
 		const plan = planSelectorMatch(compileSelector(selector));
 		const stackOnly = {
@@ -176,28 +176,28 @@ try {
 			directRegExp: null,
 			tokenizedAlternatives: plan.allAlternatives,
 		};
-		let layeredMatches = 0;
+		let stagedMatches = 0;
 		let stackMatches = 0;
 		let disagreements = 0;
-		const layeredResults = [];
-		const layeredMs = await time(() => {
+		const stagedResults = [];
+		const stagedMs = await time(() => {
 			for (const html of documents) {
 				const outcome = htmlMatchesSelector({ plan, html });
-				layeredResults.push(outcome.matched);
-				layeredMatches += outcome.matched ? 1 : 0;
+				stagedResults.push(outcome.matched);
+				stagedMatches += outcome.matched ? 1 : 0;
 			}
 		});
 		const stackMs = await time(() => {
 			for (const [index, html] of documents.entries()) {
 				const matched = htmlMatchesSelector({ plan: stackOnly, html }).matched;
 				stackMatches += matched ? 1 : 0;
-				disagreements += matched === layeredResults[index] ? 0 : 1;
+				disagreements += matched === stagedResults[index] ? 0 : 1;
 			}
 		});
 		console.log(
-			`layered ${layeredMs.toFixed(0).padStart(6)}ms (${(megabytes / (layeredMs / 1000)).toFixed(0)} MB/s)  ` +
+			`staged ${stagedMs.toFixed(0).padStart(6)}ms (${(megabytes / (stagedMs / 1000)).toFixed(0)} MB/s)  ` +
 				`stack-only ${stackMs.toFixed(0).padStart(6)}ms (${(megabytes / (stackMs / 1000)).toFixed(0)} MB/s)  ` +
-				`matches ${layeredMatches}/${stackMatches}  layer disagreements ${disagreements}  ${selector}`,
+				`matches ${stagedMatches}/${stackMatches}  stage disagreements ${disagreements}  ${selector}`,
 		);
 	}
 

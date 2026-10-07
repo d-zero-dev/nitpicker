@@ -33,6 +33,20 @@ describe('derivePrefilterLiterals', () => {
 		expect(derive('nav > .menu a[href^="/p"]')).toEqual(['<nav', 'menu', '/p']);
 	});
 
+	it.each([
+		['[id="a b"][data-x=y]', ['y']],
+		['.é.b', ['b']],
+		['.a.b', ['a']],
+		['[id^=ab]', ['ab']],
+		['[class="a b"]', ['class']],
+		['[x="a\'b"]', ['x']],
+		['[x="a>b"]', ['x']],
+		['[x="a\u007Fb"]', ['x']],
+		['[x="a\u001Fb"]', ['x']],
+	])('falls back through the priorities for %s', (selector, expected) => {
+		expect(derive(selector)).toEqual(expected);
+	});
+
 	it('contributes nothing for the universal selector and for :not()', () => {
 		expect(derive('*')).toBeNull();
 		expect(derive(':not(.x)')).toBeNull();

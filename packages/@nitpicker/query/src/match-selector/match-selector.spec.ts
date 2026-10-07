@@ -56,6 +56,7 @@ describe('matchSelector', () => {
 		]);
 		expect(result.total).toBe(2);
 		expect(result.matchedSnapshots).toBe(1);
+		expect(result).toMatchObject({ limit: 100, offset: 0 });
 	});
 
 	it('judges identical HTML once and counts only pages that have a snapshot', async () => {
@@ -96,8 +97,7 @@ describe('matchSelector', () => {
 	});
 
 	it('answers a single-compound selector without the open-element stack', async () => {
-		// The second snapshot holds a <template>, so the regular expression scan
-		// hands it over; the prefilter then rejects it for lacking `<li`.
+		// The second snapshot has no `<li`, so the prefilter rejects it before any scan.
 		const result = await matchSelector(archive, { selector: 'li' });
 		expect(result).toMatchObject({
 			total: 2,
@@ -122,7 +122,7 @@ describe('matchSelector', () => {
 		expect(result.tokenizedSnapshots).toBe(2);
 	});
 
-	it('matches a selector list across both layers', async () => {
+	it('matches a selector list across both stages', async () => {
 		const result = await matchSelector(archive, { selector: 'img, nav a' });
 		expect(result.items.map((item) => item.url)).toEqual([
 			'https://example.com',

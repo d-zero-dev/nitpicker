@@ -69,11 +69,7 @@ export function derivePrefilterLiterals(selector: ComplexSelector): string[] | n
 			(a) => a.name === 'class' && a.operator === 'includes',
 		);
 		const valued = compound.attributes.find(
-			(a) =>
-				a.operator !== 'exists' &&
-				a !== id &&
-				a !== className &&
-				literalOfAttribute(a) !== null,
+			(a) => a.operator !== 'exists' && literalOfAttribute(a) !== null,
 		);
 		// Whatever the operator, the attribute has to be present, so its name is
 		// always a necessary literal when it is usable.

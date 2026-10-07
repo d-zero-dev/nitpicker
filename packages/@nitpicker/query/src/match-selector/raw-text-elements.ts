@@ -5,7 +5,7 @@
  * `noscript` belongs here: `<noscript><img></noscript>` in a snapshot is a
  * text node, not an element.
  *
- * Both matching layers skip the content of these elements after judging
+ * Both matching stages skip the content of these elements after judging
  * the start tag itself, so a tag-looking string inside them is never read
  * as markup.
  * @example

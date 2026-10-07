@@ -1,4 +1,4 @@
-import type { ElementContext, NegatedCompound } from './types.js';
+import type { CompoundMatcher, ElementContext, NegatedCompound } from './types.js';
 
 import { matchesAttributeTest } from './matches-attribute-test.js';
 import { matchesNth } from './matches-nth.js';
@@ -18,7 +18,7 @@ import { parseStartTagAttributes } from './parse-start-tag-attributes.js';
  * ); // true
  */
 export function matchesCompound(
-	compound: NegatedCompound & { readonly negations?: readonly NegatedCompound[] },
+	compound: CompoundMatcher | NegatedCompound,
 	element: ElementContext,
 ): boolean {
 	if (compound.tag !== null && compound.tag !== element.name) {
@@ -38,7 +38,7 @@ export function matchesCompound(
 			}
 		}
 	}
-	if (compound.negations) {
+	if ('negations' in compound) {
 		for (const negation of compound.negations) {
 			if (matchesCompound(negation, element)) {
 				return false;

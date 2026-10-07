@@ -6,7 +6,7 @@ import { runSelectorStateMachine } from './run-selector-state-machine.js';
 
 /**
  * Decides whether any element of a stored document matches a planned
- * selector list, using the cheapest layer that is exact.
+ * selector list, using the cheapest stage that is exact.
  *
  * 1. Every alternative first passes the ordered-literal prefilter, which
  *    can only reject a document that cannot match it. A document that
@@ -15,7 +15,7 @@ import { runSelectorStateMachine } from './run-selector-state-machine.js';
  * 2. Alternatives that are a single compound are decided by one regular
  *    expression scan; a match ends the call. If the scan reaches a
  *    `<template>` it stops and every surviving alternative goes to the
- *    next layer.
+ *    next stage.
  * 3. The rest run on the open-element stack.
  *
  * The result is a judgement about the stored string, read as markup with
@@ -25,7 +25,7 @@ import { runSelectorStateMachine } from './run-selector-state-machine.js';
  * @param options - The plan and the document.
  * @param options.plan - The plan from `planSelectorMatch`.
  * @param options.html - The stored markup.
- * @returns The verdict and which layers ran.
+ * @returns The verdict and which stages ran.
  * @example
  * htmlMatchesSelector({ plan: planSelectorMatch(compileSelector('img[alt]')), html }).matched;
  */
@@ -52,8 +52,10 @@ export function htmlMatchesSelector(options: {
 		direct === 'needs-tokenizer' ? plan.allAlternatives : plan.tokenizedAlternatives;
 	const survivors = candidates.filter((c) => passes(c.prefilterLiterals));
 	if (survivors.length === 0) {
-		// Rejected by literals alone only when no scan of the markup took place.
-		const scanned = direct === 'unmatched' || direct === 'needs-tokenizer';
+		// Rejected by literals alone only when no scan of the markup took place. (A
+		// scan that hands over at a `<template>` always leaves a survivor: the
+		// alternative that scanned passed the prefilter.)
+		const scanned = direct === 'unmatched';
 		return {
 			matched: false,
 			prefiltered: !scanned,

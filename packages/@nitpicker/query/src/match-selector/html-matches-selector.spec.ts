@@ -5,7 +5,7 @@ import { matchHtml } from './test-helpers/match-html.js';
 
 type Case = [selector: string, html: string, expected: boolean];
 
-/** Cases decided by one start tag (the regular expression layer). */
+/** Cases decided by one start tag (the regular expression stage). */
 const COMPOUND_CASES: Case[] = [
 	['img', '<p><img></p>', true],
 	['img', '<p></p>', false],
@@ -40,9 +40,20 @@ const COMPOUND_CASES: Case[] = [
 	['[x="A" i]', '<p x="a"></p>', true],
 	['[x="A"]', '<p x="a"></p>', false],
 	['[x="A" s]', '<p x="a"></p>', false],
+	// class and id tokens are case-sensitive
+	['.foo', '<p class="FOO"></p>', false],
+	['#x', '<p id="X"></p>', false],
+	['[TYPE=text]', '<input type="TEXT">', true],
 	// HTML defines the values of some attributes as case-insensitive
 	['input[type=text]', '<input type="TEXT">', true],
 	['input[type="text" s]', '<input type="TEXT">', false],
+	['form[method=post]', '<form method="POST"></form>', true],
+	['a[target=_blank]', '<a target="_BLANK"></a>', true],
+	['p[dir=rtl]', '<p dir="RTL"></p>', true],
+	['a[hreflang=en]', '<a hreflang="EN"></a>', true],
+	['link[media=print]', '<link media="PRINT">', true],
+	['meta[charset=utf-8]', '<meta charset="UTF-8">', true],
+	['meta[http-equiv=refresh]', '<meta http-equiv="REFRESH">', true],
 	['a[rel~=nofollow]', '<a rel="NoFollow noopener"></a>', true],
 	['[data-type=text]', '<p data-type="TEXT"></p>', false],
 	// a `<` inside a quoted value is not the start of a tag
@@ -69,7 +80,7 @@ const COMPOUND_CASES: Case[] = [
 	['[title="say &quot;hi&quot;"]', '<p title="say &amp;quot;hi&amp;quot;"></p>', true],
 	['[title=\'say "hi"\']', '<p title="say &quot;hi&quot;"></p>', true],
 	['[href="/A&B" i]', '<a href="/a&amp;b"></a>', true],
-	// a `>` or `<` in a value has no single stored form, so the stack layer decides
+	// a `>` or `<` in a value has no single stored form, so the stack stage decides
 	['a[title="x>y"]', '<a title="x&gt;y"></a>', true],
 	['a[title="x>y"]', '<a title="x>y"></a>', true],
 	// :not
@@ -146,6 +157,11 @@ const STRUCTURAL_CASES: Case[] = [
 	['div > p', '<div><p>', true],
 	['div p', '</div><p></p>', false],
 	['div > p', '<div></span><p></p></div>', true],
+	// `/>` closes an element at once
+	['x > p', '<x/><p></p>', false],
+	['div p', '<div><br/><p></p></div>', true],
+	// stray end tag inside a template
+	['img', '<template></p><img></template>', false],
 	// sibling position
 	['li:first-child', '<ul><li></li></ul>', true],
 	['li:first-child', '<ul><b></b><li></li></ul>', false],
@@ -176,7 +192,7 @@ const STRUCTURAL_CASES: Case[] = [
 	['p:nth-child(2)', '<template><b></b></template><p></p>', true],
 	['p:nth-child(3)', '<template><b></b></template><p></p>', false],
 	['p:nth-child(3)', '<b></b><template><b></b></template><p></p>', true],
-	// lists mixing both layers
+	// lists mixing both stages
 	['img, ul > li', '<ul><li></li></ul>', true],
 	['img, ul > li', '<ul></ul>', false],
 	['img, ul > li', '<template><img></template>', false],
@@ -196,13 +212,13 @@ describe('htmlMatchesSelector', () => {
 		});
 	});
 
-	describe('the stack layer agrees with the regular expression layer', () => {
+	describe('the stack stage agrees with the regular expression stage', () => {
 		it.each(COMPOUND_CASES)('%s on %s → %s', (selector, html, expected) => {
 			expect(matchHtmlWithTokenizer(selector, html).matched).toBe(expected);
 		});
 	});
 
-	describe('layer accounting', () => {
+	describe('stage accounting', () => {
 		it('decides a single compound without the stack', () => {
 			expect(matchHtml('img', '<p><img></p>')).toMatchObject({
 				matched: true,
@@ -229,6 +245,24 @@ describe('htmlMatchesSelector', () => {
 			});
 		});
 
+		it('counts a mixed list as prefiltered only when no stage scanned the markup', () => {
+			expect(matchHtml('img, nav a', '<p></p>')).toMatchObject({
+				matched: false,
+				prefiltered: true,
+				tokenized: false,
+			});
+			// the scan for `img` read the comment, so the document was not rejected on literals
+			expect(matchHtml('img, nav a', '<!-- <img> --><p></p>')).toMatchObject({
+				matched: false,
+				prefiltered: false,
+				tokenized: false,
+			});
+			expect(matchHtml('img, nav a', '<nav><a></a></nav>')).toMatchObject({
+				matched: true,
+				tokenized: true,
+			});
+		});
+
 		it('cannot reject on literals when none can be derived', () => {
 			expect(matchHtml('*', '')).toMatchObject({ matched: false, prefiltered: false });
 			expect(matchHtml(':not(.x)', '<p class="x"></p>')).toMatchObject({
@@ -238,7 +272,11 @@ describe('htmlMatchesSelector', () => {
 		});
 
 		it('skips the scan only for the alternatives whose literals are missing', () => {
-			expect(matchHtml('img, video', '<video></video>').matched).toBe(true);
+			expect(matchHtml('img, video', '<video></video>')).toMatchObject({
+				matched: true,
+				tokenized: false,
+				prefiltered: false,
+			});
 			expect(matchHtml('img, video', '<img>').matched).toBe(true);
 			expect(matchHtml('img, nav a', '<nav><a></a></nav>')).toMatchObject({
 				matched: true,
