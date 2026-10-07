@@ -123,7 +123,7 @@ export const commandDef = {
 		directory: {
 			type: 'string',
 			valueName: 'path',
-			desc: 'Directory path prefix to filter by',
+			desc: 'Directory to filter by: the page itself and everything under it (/blog matches /blog and /blog/post, not /blogging). A full URL also restricts the host',
 		},
 		sortBy: {
 			type: 'string',

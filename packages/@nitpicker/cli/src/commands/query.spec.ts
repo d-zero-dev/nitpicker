@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { formatCliError as formatCliErrorFn } from '../format-cli-error.js';
 import { dispatchQuery as dispatchQueryFn } from '../query/dispatch-query.js';
+import { validateDirectoryFlag as validateDirectoryFlagFn } from '../query/validate-directory-flag.js';
 
 import { query } from './query.js';
 
@@ -41,6 +42,10 @@ vi.mock('../query/dispatch-query.js', () => ({
 
 vi.mock('../format-cli-error.js', () => ({
 	formatCliError: vi.fn(),
+}));
+
+vi.mock('../query/validate-directory-flag.js', () => ({
+	validateDirectoryFlag: vi.fn(),
 }));
 
 /** Sentinel error thrown by the process.exit mock to halt execution. */
@@ -186,6 +191,23 @@ describe('query command', () => {
 		).rejects.toThrow(ExitError);
 
 		expect(compileSelector).toHaveBeenCalledWith('a + b');
+		expect(ArchiveManager).not.toHaveBeenCalled();
+		expect(formatCliErrorFn).toHaveBeenCalledWith(expect.any(Error), false);
+		expect(exitSpy).toHaveBeenCalledWith(1);
+	});
+
+	it('validates --directory before opening the archive', async () => {
+		const { ArchiveManager } = await import('@nitpicker/query');
+		vi.mocked(ArchiveManager).mockClear();
+		vi.mocked(validateDirectoryFlagFn).mockImplementationOnce(() => {
+			throw new Error('Invalid --directory value: " "');
+		});
+
+		await expect(
+			query(['test.nitpicker', 'search-html'], { pattern: 'x', directory: ' ' } as never),
+		).rejects.toThrow(ExitError);
+
+		expect(validateDirectoryFlagFn).toHaveBeenCalledWith('search-html', ' ');
 		expect(ArchiveManager).not.toHaveBeenCalled();
 		expect(formatCliErrorFn).toHaveBeenCalledWith(expect.any(Error), false);
 		expect(exitSpy).toHaveBeenCalledWith(1);

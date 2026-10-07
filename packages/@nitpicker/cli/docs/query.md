@@ -91,13 +91,15 @@ npx @nitpicker/cli query ./site.nitpicker pages --status-min 400 --sort-by url -
 | `--missing-description`   | boolean | description欠落ページ          |
 | `--noindex`               | boolean | noindexページ                  |
 | `--url-pattern`           | string  | SQL LIKEパターンでURL絞り込み  |
-| `--directory`             | string  | ディレクトリprefixで絞り込み   |
+| `--directory`             | string  | ディレクトリで絞り込み（下記） |
 | `--sort-by`               | string  | `url` / `status` / `title`     |
 | `--sort-order`            | string  | `asc` / `desc`                 |
 | `--limit`, `-l`           | number  | 最大取得件数                   |
 | `--offset`, `-o`          | number  | スキップ件数                   |
 
 `--content-type-category` は `html`、`pdf`、`csv`、`word`、`excel`、`powerpoint`、`image`、`css`、`javascript`、`json`、`xml`、`font`、`audio`、`video`、`archive`、`text`、`other`、`unknown` を指定できます。指定時は既定のHTML中心フィルタを外し、PDFなどの非HTMLページも対象になります。
+
+`--directory` はそのディレクトリのページ自身と配下すべてに一致します（`search-html` / `match-selector` も同じ意味、`report --html-dirs` とも同じ）。境界は `/` 区切りで、`/blog` は `/blog`・`/blog/`・`/blog?page=2`・`/blog/2024/post` に一致し、`/blogging` や `/en/blog/post` には一致しません。パスだけ（`/blog`）なら全ホストが対象で、`https://example.com/blog` のようにURLで書くとそのホストに限定します（スキームとポートは比較しません）。スキームのない `example.com/blog` はホストではなくパス `/example.com/blog` として扱います。パスはURLに保存されている形（パーセントエンコード済み）と大文字小文字を区別して比較し、`%` や `_` はワイルドカードではなく文字そのものとして扱います。空白だけの値やHTTP(S)以外のURLは、アーカイブを開く前にエラー（exit code 1）になります。
 
 ### `page-detail`
 
@@ -227,7 +229,7 @@ npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*
 | ------------------ | ---------------- | --------------------------------------------------------------------------------- |
 | `--pattern`        | string, required | 通常の文字列はリテラル部分一致、`/pattern/flags`（flagsは `g` `i` `m`）は正規表現 |
 | `--url-pattern`    | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                    |
-| `--directory`      | string           | ディレクトリprefixでスキャン対象ページを絞り込み                                  |
+| `--directory`      | string           | ディレクトリでスキャン対象ページを絞り込み（`pages` の `--directory` と同じ意味） |
 | `--snippet-length` | number           | スニペットの文字数（既定 160）                                                    |
 | `--limit`, `-l`    | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                               |
 | `--offset`, `-o`   | number           | スキップ件数                                                                      |
@@ -244,13 +246,13 @@ npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'img:not([al
 npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'table:not([class])' --directory /news --limit 0
 ```
 
-| オプション       | 型               | 説明                                                |
-| ---------------- | ---------------- | --------------------------------------------------- |
-| `--selector`     | string, required | CSSセレクタ（カンマ区切りリスト可。対応文法は下記） |
-| `--url-pattern`  | string           | SQL LIKEパターンでスキャン対象ページを絞り込み      |
-| `--directory`    | string           | ディレクトリprefixでスキャン対象ページを絞り込み    |
-| `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ |
-| `--offset`, `-o` | number           | スキップ件数                                        |
+| オプション       | 型               | 説明                                                                              |
+| ---------------- | ---------------- | --------------------------------------------------------------------------------- |
+| `--selector`     | string, required | CSSセレクタ（カンマ区切りリスト可。対応文法は下記）                               |
+| `--url-pattern`  | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                    |
+| `--directory`    | string           | ディレクトリでスキャン対象ページを絞り込み（`pages` の `--directory` と同じ意味） |
+| `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                               |
+| `--offset`, `-o` | number           | スキップ件数                                                                      |
 
 保存済みのHTMLスナップショットに、セレクタに一致する要素を1つ以上持つページを返します。ページ単位の存在判定で、一致要素の位置や個数は返しません。analyzeプラグインの実行は不要で、アーカイブへの書き込みもありません（`analyze-search` はjsdomで全ページのDOMを構築しますが、本コマンドはDOMを作りません）。
 
@@ -542,8 +544,8 @@ npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
 | `--missing-title`            | boolean | `pages`                                                                                                                                              |
 | `--missing-description`      | boolean | `pages`                                                                                                                                              |
 | `--noindex`                  | boolean | `pages`                                                                                                                                              |
-| `--url-pattern`              | string  | `pages` / `images`                                                                                                                                   |
-| `--directory`                | string  | `pages`                                                                                                                                              |
+| `--url-pattern`              | string  | `pages` / `images` / `search-html` / `match-selector`                                                                                                |
+| `--directory`                | string  | `pages` / `search-html` / `match-selector`                                                                                                           |
 | `--sort-by`                  | string  | `pages` / `console-logs`                                                                                                                             |
 | `--sort-order`               | string  | `pages` / `console-logs`                                                                                                                             |
 | `--type`                     | string  | `links` / `mismatches` / JSON-LD type系 / `console-logs`                                                                                             |
