@@ -147,6 +147,8 @@ jobs:
                 crawl-write-console-logs.e2e.ts,
                 concat.e2e.ts,
                 split.e2e.ts,
+                request-headers.e2e.ts,
+                cli-request-headers.e2e.ts,
               ]
           - id: append-pipeline
             files:

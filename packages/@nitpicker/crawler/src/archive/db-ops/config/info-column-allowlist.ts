@@ -26,5 +26,6 @@ export const INFO_COLUMN_ALLOWLIST: ReadonlySet<string> = new Set<keyof Config>(
 	'userAgent',
 	'ignoreRobots',
 	'mainContentSelector',
+	'requestHeaderNames',
 	'createdCwd',
 ]);

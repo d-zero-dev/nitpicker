@@ -554,6 +554,103 @@ describe('CrawlerOrchestrator.crawling: network-outage option forwarding (regres
 	});
 });
 
+describe('CrawlerOrchestrator.crawling: request headers', () => {
+	/**
+	 * Builds the minimal fake archive `crawling()` needs.
+	 * @param label - Distinguishes the fake stub / file paths per test.
+	 * @returns The fake archive and its `setConfig` spy.
+	 */
+	function buildFakeArchive(label: string) {
+		const setConfig = vi.fn(() => Promise.resolve());
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: `/tmp/._nitpicker-fake-stub-${label}`,
+			on: vi.fn(),
+			setConfig,
+			getConfig: vi.fn(() => Promise.resolve({ analyze: [] })),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			getResourceByUrl: vi.fn(() => Promise.resolve(null)),
+			addError: vi.fn(() => Promise.resolve()),
+			filePath: `/tmp/orchestrator-${label}.nitpicker`,
+		} as unknown as Archive;
+		return { fakeArchive, setConfig };
+	}
+
+	it('forwards requestHeaders from crawling() options to the underlying Crawler', async () => {
+		const { fakeArchive } = buildFakeArchive('request-headers-forward');
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-request-headers-forward.nitpicker',
+			requestHeaders: { Authorization: 'Bearer t' },
+		});
+
+		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			requestHeaders: { Authorization: 'Bearer t' },
+		});
+	});
+
+	it('passes undefined requestHeaders to the Crawler when none are configured', async () => {
+		const { fakeArchive } = buildFakeArchive('request-headers-none');
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-request-headers-none.nitpicker',
+		});
+
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({ requestHeaders: undefined });
+	});
+
+	it('records only the header NAMES in the archive config, never the values', async () => {
+		const { fakeArchive, setConfig } = buildFakeArchive('request-headers-names');
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-request-headers-names.nitpicker',
+			requestHeaders: {
+				Authorization: 'Bearer very-secret',
+				'X-Api-Key': 'another-secret',
+			},
+		});
+
+		expect(setConfig).toHaveBeenCalledTimes(1);
+		const stored = (
+			setConfig.mock.calls as unknown as [Record<string, unknown>][]
+		)[0]![0];
+		expect(stored.requestHeaderNames).toEqual(['Authorization', 'X-Api-Key']);
+		expect(stored).not.toHaveProperty('requestHeaders');
+		expect(JSON.stringify(stored)).not.toContain('very-secret');
+		expect(JSON.stringify(stored)).not.toContain('another-secret');
+	});
+
+	it('records an empty name list when no headers are configured', async () => {
+		const { fakeArchive, setConfig } = buildFakeArchive('request-headers-names-empty');
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
+
+		await CrawlerOrchestrator.crawling(['https://example.com/'], {
+			cwd: '/tmp',
+			filePath: '/tmp/orchestrator-request-headers-names-empty.nitpicker',
+		});
+
+		const stored = (
+			setConfig.mock.calls as unknown as [Record<string, unknown>][]
+		)[0]![0];
+		expect(stored.requestHeaderNames).toEqual([]);
+	});
+});
+
 describe('CrawlerOrchestrator.crawling: pageError ハンドラ', () => {
 	it('pageError イベントが archive.addPageError 経由で書き込まれる', async () => {
 		const addPageError = vi.fn(() => Promise.resolve());
@@ -922,6 +1019,55 @@ describe('CrawlerOrchestrator.append', () => {
 					url: observationRow.url,
 				},
 			],
+		});
+	});
+
+	it('unions the newly supplied header names into the archive on append, and hands the values only to the Crawler', async () => {
+		const fakeArchive = {
+			getCrawlingState: vi.fn(() => Promise.resolve({ scraped: [], pending: [] })),
+			updateConfig: vi.fn(() => Promise.resolve()),
+			getResourceUrlList: vi.fn(() => Promise.resolve([])),
+			getScrapedHtmlPageCount: vi.fn(() => Promise.resolve(0)),
+			releaseHandle: vi.fn(() => Promise.resolve()),
+			tmpDir: '/tmp/._nitpicker-fake-stub-append-request-headers',
+			filePath: '/tmp/test-cwd/existing.nitpicker',
+			on: vi.fn(),
+			getConfig: vi.fn(() =>
+				Promise.resolve({
+					fromList: false,
+					roots: ['https://example.com/'],
+					baseUrl: 'https://example.com/',
+					requestHeaderNames: ['Authorization'],
+				}),
+			),
+			repromoteExternalPages: vi.fn(() => Promise.resolve([])),
+			listDedupeCapShapeKeys: vi.fn(() => Promise.resolve([])),
+			listDedupeCapObservations: vi.fn(() => Promise.resolve([])),
+			listDnsBurnedHostCandidates: vi.fn(() => Promise.resolve([])),
+			setUrlOrder: vi.fn(() => Promise.resolve()),
+			close: vi.fn(() => Promise.resolve()),
+		} as unknown as Archive;
+
+		const archiveModule = await import('./archive/archive.js');
+		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
+		const copyFileModule =
+			await import('./archive/filesystem/copy-file-with-progress.js');
+		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
+
+		fakeCrawlerDriver = (crawler) => {
+			crawler.handlers.get('crawlEnd')?.(undefined as never);
+		};
+
+		await CrawlerOrchestrator.append('./existing.nitpicker', ['https://example.com/'], {
+			cwd: '/tmp/test-cwd',
+			requestHeaders: { 'X-Api-Key': 'append-secret' },
+		});
+
+		const patch = (fakeArchive.updateConfig as ReturnType<typeof vi.fn>).mock
+			.calls[0]![0] as { requestHeaderNames: string[] };
+		expect(patch.requestHeaderNames).toEqual(['Authorization', 'X-Api-Key']);
+		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
+			requestHeaders: { 'X-Api-Key': 'append-secret' },
 		});
 	});
 

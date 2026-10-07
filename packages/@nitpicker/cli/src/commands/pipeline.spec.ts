@@ -146,6 +146,33 @@ describe('pipeline command', () => {
 		);
 	});
 
+	it('ヘッダ系フラグ（header / authorization / headerFile）が pipeline-def にも定義されている（手書き複製ゆえの同期漏れガード）', async () => {
+		const { commandDef } = await import('./pipeline-def.js');
+		const { commandDef: crawlDef } = await import('./crawl-def.js');
+		for (const key of ['header', 'authorization', 'headerFile'] as const) {
+			expect(commandDef.flags[key].type).toBe(crawlDef.flags[key].type);
+		}
+		expect(commandDef.flags.header.isMultiple).toBe(true);
+	});
+
+	it('--header / --authorization を解決して requestHeaders として startCrawl に渡す', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+		vi.mocked(analyzeFn).mockResolvedValue();
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			header: ['X-Api-Key: k'],
+			authorization: 'Bearer t',
+		});
+
+		expect(startCrawlFn).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({
+				requestHeaders: { 'X-Api-Key': 'k', Authorization: 'Bearer t' },
+			}),
+		);
+	});
+
 	it('dedupeCap フラグは commandDef 側も default: 10 で crawl.ts と揃えている（手書き複製ゆえの同期漏れガード）', async () => {
 		const { commandDef } = await import('./pipeline-def.js');
 		expect(commandDef.flags.dedupeCap.default).toBe(10);

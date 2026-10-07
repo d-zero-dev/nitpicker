@@ -7,6 +7,7 @@ import {
 	PendingUrlsRemainError,
 } from '@nitpicker/crawler';
 
+import { resolveRequestHeaders } from '../crawl/resolve-request-headers.js';
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
 
@@ -54,6 +55,10 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 
 	let archivePath: string;
 	try {
+		// Header flags are validated (and `--header-file` read) first, so a
+		// malformed header fails before the browser check or any archive I/O —
+		// the same order `crawl` itself uses.
+		const requestHeaders = await resolveRequestHeaders(flags);
 		// Fails fast if Chrome is missing, before the crawl step does any
 		// archive I/O — see `assertChromeIsInstalled`'s JSDoc.
 		await assertChromeIsInstalled();
@@ -77,6 +82,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			list: flags.list,
 			listFile: flags.listFile,
 			userAgent: flags.userAgent,
+			requestHeaders,
 			ignoreRobots: flags.ignoreRobots,
 			mainContentSelector: flags.mainContentSelector,
 			output: flags.output,

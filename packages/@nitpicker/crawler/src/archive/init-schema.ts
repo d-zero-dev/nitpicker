@@ -123,6 +123,7 @@ export async function initSchema(instance: Knex) {
 			t.string('userAgent');
 			t.boolean('ignoreRobots');
 			t.string('mainContentSelector');
+			t.json('requestHeaderNames');
 			t.string('createdCwd');
 		});
 	}

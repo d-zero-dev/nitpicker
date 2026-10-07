@@ -28,6 +28,9 @@ const STRICT_MATCH_FIELDS = ['disableQueries', 'fromList'] as const;
  *   `baseUrl` is the merged `roots[0]`.
  * - `excludes` / `excludeKeywords` / `excludeUrls` are unioned the same
  *   way, order-preserving.
+ * - `requestHeaderNames` is unioned too: it only records which header names
+ *   ANY source needed (never values), so dropping a later source's names would
+ *   silence the "re-supply these headers" warning for that source's pages.
  * - Every other scalar field (`recursive`, `interval`, `image`,
  *   `fetchExternal`, `parallels`, `maxExcludedDepth`, `retry`,
  *   `userAgent`, `ignoreRobots`, `mainContentSelector`) is taken from the
@@ -69,6 +72,9 @@ export function mergeArchiveConfigs(configs: readonly Config[], name: string): C
 	const excludes = [...new Set(configs.flatMap((c) => c.excludes))];
 	const excludeKeywords = [...new Set(configs.flatMap((c) => c.excludeKeywords))];
 	const excludeUrls = [...new Set(configs.flatMap((c) => c.excludeUrls))];
+	const requestHeaderNames = [
+		...new Set(configs.flatMap((c) => c.requestHeaderNames ?? [])),
+	];
 
 	const first = configs[0]!;
 	return {
@@ -80,6 +86,7 @@ export function mergeArchiveConfigs(configs: readonly Config[], name: string): C
 		excludes,
 		excludeKeywords,
 		excludeUrls,
+		requestHeaderNames,
 		createdCwd: null,
 	};
 }

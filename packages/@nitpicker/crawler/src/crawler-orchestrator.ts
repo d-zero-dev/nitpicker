@@ -57,6 +57,7 @@ import { RESUME_SETUP_PHASES } from './resume-setup-phases.js';
 import { RETRY_FAILED_SETUP_PHASES } from './retry-failed-setup-phases.js';
 import { SETUP_RECOVERY_PHASE_LABELS } from './setup-recovery-phase-labels.js';
 import { cleanObject } from './utils/object/clean-object.js';
+import { redactRequestHeaders } from './utils/object/redact-request-headers.js';
 import { WriteQueue } from './write-queue.js';
 
 const [RECOVERY_RESTORE_FROM_BACKUP, RECOVERY_LEAVE_STATE_FOR_RESUME] =
@@ -133,6 +134,13 @@ interface CrawlConfig extends Config {
 
 	/** Custom User-Agent string for HTTP requests. */
 	userAgent: string;
+
+	/**
+	 * See {@link CrawlerOptions.requestHeaders}. Runtime-only: the values are
+	 * never written to the archive (`INFO_COLUMN_ALLOWLIST` has no such
+	 * column); only the names are, as `requestHeaderNames`.
+	 */
+	requestHeaders: Readonly<Record<string, string>>;
 
 	/** Whether to ignore robots.txt restrictions. */
 	ignoreRobots: boolean;
@@ -401,6 +409,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			disableQueries: options?.disableQueries,
 			verbose: options?.verbose ?? false,
 			userAgent: options?.userAgent || defaultUserAgent,
+			requestHeaders: options?.requestHeaders,
 			ignoreRobots: options?.ignoreRobots ?? false,
 			mainContentSelector: options?.mainContentSelector ?? null,
 			// Let the crawler reuse sub-resource data captured during page
@@ -1249,6 +1258,8 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			userAgent: options?.userAgent || defaultUserAgent,
 			ignoreRobots: options?.ignoreRobots ?? false,
 			mainContentSelector: options?.mainContentSelector ?? null,
+			// Names only — the values are credentials and never reach the archive.
+			requestHeaderNames: Object.keys(options?.requestHeaders ?? {}),
 			...buildCreatedCwdPatch(cwd),
 		});
 		const orchestrator = new CrawlerOrchestrator(archive, {
@@ -1365,6 +1376,15 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				fromList: false,
 				recursive: true,
 				baseUrl: mergedRoots[0]!,
+				// Union, not replace: a name stays recorded once any session used
+				// it, so a later run that omits it still gets the re-supply warning.
+				// Names only — the values never reach the archive.
+				requestHeaderNames: [
+					...new Set([
+						...(archived.requestHeaderNames ?? []),
+						...Object.keys(options?.requestHeaders ?? {}),
+					]),
+				],
 				// Stamped for `Archive.resume` (issue #350) — this session's
 				// cwd, not `options.cwd` (already spread above and dropped by
 				// `updateConfig`'s allowlist): a stub left behind by THIS
@@ -2844,7 +2864,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		log('Start resuming');
 		log('Data %s', stubPath);
 		log('URL %s', url.href);
-		log('Config %O', config);
+		log('Config %O', redactRequestHeaders(config));
 		await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 		await orchestrator.#crawlUntilPendingClears([url]);
 		CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);

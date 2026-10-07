@@ -18,6 +18,7 @@ import { optionsRoutes } from './routes/options.js';
 import { paginationRoutes } from './routes/pagination.js';
 import { recursiveRoutes } from './routes/recursive.js';
 import { redirectRoutes } from './routes/redirect.js';
+import { requestHeadersRoutes } from './routes/request-headers.js';
 import { resourceReuseRoutes } from './routes/resource-reuse.js';
 import { scopeAuthLeakRoutes } from './routes/scope-auth-leak.js';
 import { scopeRoutes } from './routes/scope.js';
@@ -55,6 +56,7 @@ export function createApp(portRef: PortRef) {
 	errorStatusRoutes(app);
 	scopeRoutes(app);
 	scopeAuthLeakRoutes(app, portRef);
+	requestHeadersRoutes(app, portRef);
 	specialCharAuthRoutes(app);
 	emptyPasswordAuthRoutes(app);
 	paginationRoutes(app);

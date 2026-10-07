@@ -9,4 +9,5 @@ export const INFO_JSON_COLUMNS: ReadonlySet<string> = new Set<keyof Config>([
 	'excludes',
 	'excludeKeywords',
 	'excludeUrls',
+	'requestHeaderNames',
 ]);

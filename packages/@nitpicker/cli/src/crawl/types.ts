@@ -80,6 +80,26 @@ export interface CreateCrawlConsoleOptions {
 	readonly onInterrupt: () => void;
 }
 
+/** A parsed `Name: value` request header. */
+export interface ParsedHeader {
+	/** Header field name, as written. */
+	readonly name: string;
+	/** Header field value, trimmed. */
+	readonly value: string;
+}
+
+/**
+ * The CLI flags that carry extra request headers.
+ */
+export interface RequestHeaderFlags {
+	/** Repeated `--header "Name: value"`. */
+	readonly header?: readonly string[];
+	/** `--authorization "<value>"`, shorthand for `Authorization: <value>`. */
+	readonly authorization?: string;
+	/** `--header-file <path>`. */
+	readonly headerFile?: string;
+}
+
 /**
  * CLI crawl flag names that need to be mapped to CrawlConfig properties.
  *
@@ -116,6 +136,11 @@ export interface CrawlFlagInput {
 	readonly maxAutoRetry?: number;
 	/** Custom User-Agent string for HTTP requests. */
 	readonly userAgent?: string;
+	/**
+	 * Extra request headers, already resolved from `--header` / `--authorization`
+	 * / `--header-file` by `resolveRequestHeaders`. Maps to `requestHeaders` in CrawlConfig.
+	 */
+	readonly requestHeaders?: Readonly<Record<string, string>>;
 	/** Whether to ignore robots.txt restrictions. */
 	readonly ignoreRobots?: boolean;
 	/** Whether to enable verbose logging output. */

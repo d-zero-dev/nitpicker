@@ -7,6 +7,7 @@ import { migrateContentItemsDedupeCapEventId } from '../../migrate-content-items
 import { migrateContentItemsIsMetadataOnly } from '../../migrate-content-items-is-metadata-only.js';
 import { migrateInfoCreatedCwd } from '../../migrate-info-created-cwd.js';
 import { migrateInfoMainContentSelector } from '../../migrate-info-main-content-selector.js';
+import { migrateInfoRequestHeaderNames } from '../../migrate-info-request-header-names.js';
 import { migrateInfoRoots } from '../../migrate-info-roots.js';
 import { migrateInventoryRunsToListReconcileRuns } from '../../migrate-inventory-runs-to-list-reconcile-runs.js';
 import { migrateListReconcileRunsExcludeSkipped } from '../../migrate-list-reconcile-runs-exclude-skipped.js';
@@ -102,6 +103,7 @@ export async function init(
 	await initSchema(knex);
 	await migrateInfoRoots(knex, onLog);
 	await migrateInfoMainContentSelector(knex, onLog);
+	await migrateInfoRequestHeaderNames(knex, onLog);
 	await migrateInfoCreatedCwd(knex, onLog);
 	await migrateMainContentsColumns(knex, onLog);
 	await migratePageMetaBodyHash(knex, onLog);

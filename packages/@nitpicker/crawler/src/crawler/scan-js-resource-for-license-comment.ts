@@ -36,6 +36,12 @@ export interface ScanJsResourceForLicenseCommentOptions {
  * pass over the rest of the archive's resources (see
  * `scanJsResourcesForTechnologySignals`, this function's only caller).
  *
+ * Deliberately sends no user-supplied request headers (`--header` /
+ * `--authorization`): the resources scanned here are archive-wide and include
+ * third-party hosts, so a scope-bound credential must not reach them. A JS
+ * file that is only readable with the header answers 401, resolves `null`,
+ * and is recorded as scanned-without-a-match.
+ *
  * Not cached and not routed through `destinationCache` (unlike
  * `fetchDestination`): callers are expected to persist the outcome in
  * `technology_js_scan_cache`, keyed by `resourceId`, so a resource is never

@@ -27,6 +27,7 @@ export function mapFlagsToCrawlConfig(flags: CrawlFlagInput) {
 		// to its default via `?? 3`, which does not trigger on `0`.
 		maxAutoRetry: flags.maxAutoRetry,
 		userAgent: flags.userAgent,
+		requestHeaders: flags.requestHeaders,
 		ignoreRobots: flags.ignoreRobots,
 		mainContentSelector: flags.mainContentSelector,
 		verbose: flags.verbose,

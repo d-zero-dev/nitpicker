@@ -41,6 +41,9 @@ crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の�
 | `--list`                                   | string, repeatable | 指定URLリストだけをクロール                                                            |
 | `--list-file`                              | string             | URLリストファイルだけをクロール                                                        |
 | `--user-agent`                             | string             | HTTPリクエストのUser-Agent                                                             |
+| `--header`                                 | string, repeatable | 追加リクエストヘッダ（`"Name: value"`）。スコープ内のURLにのみ送信し、値は保存しない   |
+| `--authorization`                          | string             | `--header "Authorization: <値>"` の短縮形                                              |
+| `--header-file`                            | string             | 追加リクエストヘッダを1行1ヘッダで書いたファイル                                       |
 | `--ignore-robots`                          | boolean            | robots.txt制限を無視                                                                   |
 | `--skip-technology-js-scan`                | boolean            | クロール完了後のJSリソース再取得（技術スタックのライセンスコメントスキャン）をスキップ |
 | `--skip-templates`                         | boolean            | クロール完了時のページのテンプレート分類をスキップ                                     |
