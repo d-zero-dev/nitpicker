@@ -1,7 +1,7 @@
 import type { ContentItemStreamRow } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { loadResponseHeadersBySetIds } from '@nitpicker/crawler';
+import { loadResponseHeadersBySetIds } from '@nitpicker/archive/db-ops/_shared/load-response-headers-by-set-ids';
 
 import { applyEqualityOrInFilter } from '../apply-equality-or-in-filter.js';
 

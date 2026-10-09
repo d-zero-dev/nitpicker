@@ -1,4 +1,4 @@
-import type { DomPathCandidate } from '../archive/populate-entity-tables/types.js';
+import type { DomPathCandidate } from '@nitpicker/archive/populate-entity-tables/types';
 import type { Page as PuppeteerPage } from 'puppeteer';
 
 import { collectImageDomPaths } from './collect-image-dom-paths.js';
@@ -15,7 +15,7 @@ import { collectImageDomPaths } from './collect-image-dom-paths.js';
  * {@link ./collect-image-dom-paths.ts} — a self-contained function whose
  * source puppeteer serialises into the page, and whose spec pins its
  * output against the Node-side
- * {@link ../archive/populate-entity-tables/derive-dom-path.ts} so a
+ * `@nitpicker/archive`'s `populate-entity-tables/derive-dom-path.ts` so a
  * live-crawled archive and one whose dom paths were reconstructed from
  * HTML snapshots by the migration script produce identical strings for
  * identical DOM shapes.
@@ -24,7 +24,7 @@ import { collectImageDomPaths } from './collect-image-dom-paths.js';
  * navigation raced the call) — dom paths are best-effort enrichment and
  * a capture failure must not fail the scrape. Callers fall back to the
  * `unknown/<id>` synthetic marker per image via
- * {@link ../archive/populate-entity-tables/match-images-to-dom-paths.ts}.
+ * `@nitpicker/archive`'s `populate-entity-tables/match-images-to-dom-paths.ts`.
  * @param page - The live puppeteer page, after the scrape completed and
  *   before the browser closes.
  * @returns Candidates in document order, or `undefined` when the page

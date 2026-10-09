@@ -8,7 +8,7 @@ import type { MetaSignatureSource } from './types.js';
  * than the (fake) paginated URL, which this signal is built to catch.
  *
  * Duplicates the tiny URL-absolutisation logic from
- * `../../archive/meta/derive-flat-from-meta.ts` rather than importing it:
+ * `@nitpicker/archive`'s `meta/derive-flat-from-meta.ts` rather than importing it:
  * that file exports only `deriveFlatFromMeta` (one export per file is a
  * project convention), so its internal `absolutizeUrl` helper is not
  * reachable from here. `og:url` arrives un-absolutised (beholder extracts it

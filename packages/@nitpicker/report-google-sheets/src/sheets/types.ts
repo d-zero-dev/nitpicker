@@ -1,5 +1,5 @@
 import type { Sheet } from '@d-zero/google-sheets';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { sheets_v4 } from 'googleapis';
 
 /** A value that may be synchronous or wrapped in a Promise. */

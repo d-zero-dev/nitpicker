@@ -1,4 +1,4 @@
-import type { Archive } from '@nitpicker/crawler';
+import type Archive from '@nitpicker/archive/archive';
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 

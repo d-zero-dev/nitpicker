@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 
 /**
  * Generate an **un-finalised** crawl stub directory for the viewer's stub-mode

@@ -1,9 +1,7 @@
 import type { attachCrawlDisplay as AttachCrawlDisplayFn } from '../crawl/attach-crawl-display.js';
 import type * as DealerModule from '@d-zero/dealer';
-import type {
-	CrawlerOrchestrator as OrchestratorType,
-	CrawlerError,
-} from '@nitpicker/crawler';
+import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
+import type { CrawlerOrchestrator as OrchestratorType } from '@nitpicker/crawler';
 
 import path from 'node:path';
 
@@ -43,9 +41,6 @@ vi.mock('@nitpicker/crawler', async () => {
 		assertChromeIsInstalled: mockAssertChromeIsInstalled,
 		assertPuppeteerSharedWithBeholder: mockAssertPuppeteerSharedWithBeholder,
 		PendingUrlsRemainError: actual.PendingUrlsRemainError,
-		// Pure helper used by `buildCrawlHeader` to mask header values — the real
-		// one keeps the "values never printed" assertions below meaningful.
-		redactRequestHeaders: actual.redactRequestHeaders,
 		// Real content doesn't matter to this suite — `createSetupTaskList` is
 		// mocked wholesale below, so these are only ever forwarded as opaque
 		// values, never iterated for their actual phase labels.

@@ -1,4 +1,4 @@
-import type { DedupeCapObservationRow } from '../../archive/types.js';
+import type { DedupeCapObservationRow } from '@nitpicker/archive/types';
 
 import { describe, expect, it } from 'vitest';
 

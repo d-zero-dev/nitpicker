@@ -70,11 +70,11 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 import libsqlPkg from 'libsql';
 import * as tar from 'tar';
 
-import { classifyJsonLdType } from '../packages/@nitpicker/crawler/lib/archive/meta/classify-jsonld-type.js';
-import { computePageDenormalized } from '../packages/@nitpicker/crawler/lib/archive/meta/compute-page-denormalized.js';
-import { deriveFlatFromMeta } from '../packages/@nitpicker/crawler/lib/archive/meta/derive-flat-from-meta.js';
-import { deriveMetaExtras } from '../packages/@nitpicker/crawler/lib/archive/meta/derive-meta-extras.js';
-import { extractTagsForArchive } from '../packages/@nitpicker/crawler/lib/archive/meta/extract-tags-for-archive.js';
+import { classifyJsonLdType } from '../packages/@nitpicker/archive/lib/meta/classify-jsonld-type.js';
+import { computePageDenormalized } from '../packages/@nitpicker/archive/lib/meta/compute-page-denormalized.js';
+import { deriveFlatFromMeta } from '../packages/@nitpicker/archive/lib/meta/derive-flat-from-meta.js';
+import { deriveMetaExtras } from '../packages/@nitpicker/archive/lib/meta/derive-meta-extras.js';
+import { extractTagsForArchive } from '../packages/@nitpicker/archive/lib/meta/extract-tags-for-archive.js';
 
 const Database = libsqlPkg.default ?? libsqlPkg;
 
@@ -799,7 +799,7 @@ function buildDerivation(row, meta) {
  * UPDATE statement and the bind-order math in `buildDerivation`.
  *
  * Mirrors {@link FlatPageMetaColumns} from
- * `packages/@nitpicker/crawler/src/archive/meta/types.ts`. When the
+ * `packages/@nitpicker/archive/src/meta/types.ts`. When the
  * crawler's `FlatPageMetaColumns` grows a field, add it here AND to
  * `migrateMetaSchema`'s `ADD COLUMN` list so a freshly-migrated archive
  * carries it.

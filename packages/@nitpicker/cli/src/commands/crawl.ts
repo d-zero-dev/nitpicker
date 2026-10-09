@@ -3,12 +3,14 @@ import type { CrawlDisplayHandle } from '../crawl/attach-crawl-display.js';
 import type { SetupTaskListHandle } from '../crawl/create-setup-task-list.js';
 import type { CrawlConsoleHandle, CrawlFlagInput } from '../crawl/types.js';
 import type { InferFlags } from '@d-zero/roar';
-import type { Config, CrawlerError } from '@nitpicker/crawler';
+import type { Config } from '@nitpicker/archive/types';
+import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
 
 import path from 'node:path';
 
 import { Lanes, TaskList, TaskListStepError } from '@d-zero/dealer';
 import { readList } from '@d-zero/readtext/list';
+import { redactRequestHeaders } from '@nitpicker/archive/utils/object/redact-request-headers';
 import {
 	APPEND_SETUP_PHASES,
 	assertChromeIsInstalled,
@@ -18,7 +20,6 @@ import {
 	INVENTORY_SETUP_PHASES,
 	PendingUrlsRemainError,
 	RECRAWL_SETUP_PHASES,
-	redactRequestHeaders,
 	RESUME_SETUP_PHASES,
 	RETRY_FAILED_SETUP_PHASES,
 } from '@nitpicker/crawler';

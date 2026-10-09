@@ -37,5 +37,8 @@
 		"@modelcontextprotocol/sdk": "1.31.0",
 		"@nitpicker/query": "0.24.0"
 	},
-	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
+	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb",
+	"devDependencies": {
+		"@nitpicker/archive": "0.24.0"
+	}
 }

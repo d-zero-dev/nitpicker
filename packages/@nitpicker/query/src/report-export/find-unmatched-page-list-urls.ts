@@ -1,4 +1,4 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyEqualityOrInFilter } from '../apply-equality-or-in-filter.js';
 import { applyViewerPagesFilters } from '../apply-viewer-pages-filters.js';

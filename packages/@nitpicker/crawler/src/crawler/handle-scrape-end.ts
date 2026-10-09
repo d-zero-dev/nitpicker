@@ -3,9 +3,10 @@ import type { CrawlerOptions } from './types.js';
 import type { AnchorData, Link, PageData } from '../utils/types/types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
+import { findScopeEntry } from '@nitpicker/archive/scope/find-scope-entry';
+
 import { crawlerLog } from '../debug.js';
 
-import { findScopeEntry } from './find-scope-entry.js';
 import { injectScopeAuth } from './inject-scope-auth.js';
 
 /**

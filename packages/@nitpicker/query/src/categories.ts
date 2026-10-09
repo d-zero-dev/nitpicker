@@ -3,7 +3,7 @@
  *
  * Browser-safe sub-export. Re-exports only the Content-Type category
  * symbols that have ZERO runtime dependencies — no `knex`, no
- * `@nitpicker/crawler`. The viewer's Vite bundle imports from this path
+ * `@nitpicker/archive`. The viewer's Vite bundle imports from this path
  * instead of the main `@nitpicker/query` entry, which would otherwise drag
  * the entire Node-only query runtime into the browser bundle.
  *

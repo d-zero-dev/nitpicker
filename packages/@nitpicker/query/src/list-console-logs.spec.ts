@@ -1,9 +1,9 @@
-import type { ConsoleLogEntry } from '@d-zero/beholder';
+import type { ConsoleLogEntry } from '@nitpicker/archive/utils/types/types';
 
 import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listConsoleLogs } from './list-console-logs.js';

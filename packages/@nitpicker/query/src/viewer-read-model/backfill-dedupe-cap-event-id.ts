@@ -1,6 +1,6 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { computeShapeKey } from '@nitpicker/crawler';
+import { computeShapeKey } from '@nitpicker/archive/url-pattern/compute-shape-key';
 
 const CHUNK_SIZE = 500;
 

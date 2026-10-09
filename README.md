@@ -28,14 +28,15 @@ CLI の詳細な使い方と全オプションは [@nitpicker/cli README](./pack
 
 `.nitpicker` は `crawl` が生成するアーカイブファイルです。クロール結果、レンダリング後の HTML スナップショット、リンク、ネットワークリソース、画像情報などを保存します。
 
-このファイルは `report` / `query` / `viewer` の入力になります。保存形式やスキーマの概要は [ARCHITECTURE.md](./ARCHITECTURE.md) の「アーカイブ（DB スキーマ概要）」、定義の正は `packages/@nitpicker/crawler/src/archive/init-schema.ts` を参照してください。
+このファイルは `report` / `query` / `viewer` の入力になります。保存形式やスキーマの概要は [ARCHITECTURE.md](./ARCHITECTURE.md) の「アーカイブ（DB スキーマ概要）」、定義の正は `packages/@nitpicker/archive/src/init-schema.ts` を参照してください。
 
 ## パッケージ
 
 | パッケージ                                                                              | 用途                                              |
 | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| [@nitpicker/archive](./packages/@nitpicker/archive/README.md)                           | `.nitpicker` アーカイブの読み書き・移行・結合分割 |
 | [@nitpicker/cli](./packages/@nitpicker/cli/README.md)                                   | クロール、レポート、クエリ、ビューアを実行するCLI |
-| [@nitpicker/crawler](./packages/@nitpicker/crawler/README.md)                           | ヘッドレスブラウザによるクロールとアーカイブ生成  |
+| [@nitpicker/crawler](./packages/@nitpicker/crawler/README.md)                           | ヘッドレスブラウザによるクロール                  |
 | [@nitpicker/query](./packages/@nitpicker/query/README.md)                               | `.nitpicker` アーカイブのクエリ関数               |
 | [@nitpicker/report-google-sheets](./packages/@nitpicker/report-google-sheets/README.md) | Google Sheets向けレポート出力                     |
 | [@nitpicker/report-html](./packages/@nitpicker/report-html/README.md)                   | 単一ファイルの静的HTMLレポート出力                |

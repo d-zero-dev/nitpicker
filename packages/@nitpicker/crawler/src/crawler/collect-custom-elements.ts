@@ -1,4 +1,4 @@
-import type { MainContentCustomElementCandidate } from './types.js';
+import type { MainContentCustomElementCandidate } from '@nitpicker/archive/types';
 
 /**
  * Collects every Web Component (custom element) inside a page's main-content

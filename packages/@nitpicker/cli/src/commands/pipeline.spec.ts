@@ -1,4 +1,4 @@
-import type { CrawlerError } from '@nitpicker/crawler';
+import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
 
 import {
 	assertChromeIsInstalled,

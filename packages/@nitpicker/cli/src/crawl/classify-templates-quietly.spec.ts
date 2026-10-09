@@ -1,12 +1,15 @@
-import type { Archive } from '@nitpicker/crawler';
+import type Archive from '@nitpicker/archive/archive';
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 const mockClassifyArchivePageTemplates = vi.fn();
 
-vi.mock('@nitpicker/crawler', () => ({
-	classifyArchivePageTemplates: mockClassifyArchivePageTemplates,
-}));
+vi.mock(
+	'@nitpicker/archive/template-classification/classify-archive-page-templates',
+	() => ({
+		classifyArchivePageTemplates: mockClassifyArchivePageTemplates,
+	}),
+);
 
 const fakeArchive = {} as Archive;
 

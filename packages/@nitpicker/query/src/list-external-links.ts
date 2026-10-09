@@ -3,7 +3,7 @@ import type {
 	ListExternalLinksOptions,
 	PaginatedExternalLinkList,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyListOrder } from './apply-list-order.js';
 import { ensureUrlSortTempTable } from './url-sort-temp-table.js';

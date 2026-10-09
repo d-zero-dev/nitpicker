@@ -3,7 +3,7 @@ import type {
 	GetDuplicatesFastPathOptions,
 	ViewerDuplicateGroupEntry,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { countDuplicateGroups } from './count-duplicate-groups.js';
 import { findDuplicates } from './find-duplicates.js';

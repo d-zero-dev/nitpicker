@@ -1,4 +1,4 @@
-import type { Archive } from '@nitpicker/crawler';
+import type Archive from '@nitpicker/archive/archive';
 
 import { buildViewerReadModelInWorker } from '@nitpicker/query';
 

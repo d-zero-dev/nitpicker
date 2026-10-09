@@ -3,7 +3,7 @@ import type { HeaderPresence } from './types.js';
 /**
  * Mapping from public {@link HeaderPresence} keys to the corresponding
  * pre-computed boolean column in `header_flags` (0.13). Populated during
- * 0.13 by `packages/@nitpicker/crawler/src/archive/populate-ref-tables/compute-header-flags.ts`,
+ * 0.13 by `packages/@nitpicker/archive/src/populate-ref-tables/compute-header-flags.ts`,
  * which mirrors the same detection rules the old LIKE-based
  * `pages.responseHeaders` scan used before 0.13.
  *

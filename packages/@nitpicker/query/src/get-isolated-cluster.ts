@@ -1,5 +1,5 @@
 import type { GetIsolatedClusterOptions, IsolatedClusterDetail } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { computeIsolatedClusters } from './compute-isolated-clusters.js';
 import { sortArrayItems } from './sort-array-items.js';

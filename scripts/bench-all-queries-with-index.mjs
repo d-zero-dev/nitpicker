@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-import { ArchiveAccessor } from '@nitpicker/crawler';
+import { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import {
 	checkHeaders,
 	findDuplicates,
@@ -36,7 +36,7 @@ import {
 import knex from 'knex';
 import * as tar from 'tar';
 
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 
 const archivePath = process.argv[2];
 if (!archivePath) {

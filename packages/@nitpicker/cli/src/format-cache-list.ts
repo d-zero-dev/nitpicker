@@ -1,4 +1,4 @@
-import type { ArchiveCacheEntry } from '@nitpicker/crawler';
+import type { ArchiveCacheEntry } from '@nitpicker/archive/cache/types';
 
 import { formatBytes } from './format-bytes.js';
 

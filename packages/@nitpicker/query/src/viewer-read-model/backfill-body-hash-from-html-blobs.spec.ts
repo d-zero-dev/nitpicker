@@ -1,7 +1,8 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive, computeBodyHash } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
+import { computeBodyHash } from '@nitpicker/archive/body-hash/compute-body-hash';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { backfillBodyHashFromHtmlBlobs } from './backfill-body-hash-from-html-blobs.js';

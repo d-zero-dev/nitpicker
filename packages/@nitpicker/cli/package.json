@@ -38,6 +38,7 @@
 		"@d-zero/readtext": "1.2.1",
 		"@d-zero/roar": "2.2.1",
 		"@d-zero/shared": "0.23.0",
+		"@nitpicker/archive": "0.24.0",
 		"@nitpicker/crawler": "0.24.0",
 		"@nitpicker/query": "0.24.0",
 		"@nitpicker/report-google-sheets": "0.24.0",

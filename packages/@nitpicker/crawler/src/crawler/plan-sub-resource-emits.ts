@@ -1,6 +1,6 @@
 import type { CrawlerEventTypes } from './types.js';
-import type { PageSource } from '../archive/types.js';
 import type { ResourceEntry } from '@d-zero/beholder';
+import type { PageSource } from '@nitpicker/archive/types';
 
 import { deriveResourceSource } from './derive-resource-source.js';
 import { handleResourceResponse } from './handle-resource-response.js';

@@ -1,4 +1,4 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { ArchiveManager } from '@nitpicker/query';
 
@@ -21,7 +21,7 @@ export interface ReportArchiveHandle extends AsyncDisposable {
 /**
  * Opens a `.nitpicker` archive for reporting, via `@nitpicker/query`'s
  * `ArchiveManager` (the same tar-extraction cache `viewer`/`query` CLI use)
- * instead of `@nitpicker/crawler`'s `Archive.open` — report used to
+ * instead of `@nitpicker/archive`'s `Archive.open` — report used to
  * re-extract the full tar on every run; `ArchiveManager` reuses the cache
  * across runs and returns a read-only `ArchiveAccessor`, matching report's
  * actual access pattern (it never writes back to the archive).

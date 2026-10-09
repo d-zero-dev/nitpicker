@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
+import { CrawlerOrchestrator } from '@nitpicker/crawler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { TEST_SERVER_ORIGIN } from './test-server-port.js';

@@ -11,6 +11,7 @@
 		"hono": "4.13.7"
 	},
 	"devDependencies": {
+		"@nitpicker/archive": "0.24.0",
 		"@nitpicker/crawler": "0.24.0",
 		"@nitpicker/query": "0.24.0",
 		"await-event-emitter": "2.0.2",

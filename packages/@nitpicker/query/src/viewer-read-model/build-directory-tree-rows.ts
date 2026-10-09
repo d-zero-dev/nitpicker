@@ -272,7 +272,7 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
  *   because something linked to it and the HEAD pre-flight recorded its
  *   destination. It is NOT a pure "is this URL inside the scope path" test:
  *   crawl scope is a `(hostname, port, path)` triple (see
- *   `@nitpicker/crawler`'s `find-scope-entry.ts`), so `is_external = 1` covers
+ *   `@nitpicker/archive`'s `scope/find-scope-entry.ts`), so `is_external = 1` covers
  *   a different host AND a same-host subpath outside the scope path, while an
  *   out-of-scope URL that an IN-scope request redirects to is deliberately
  *   stored as internal — `updatePage` writes the redirect result under the
@@ -307,7 +307,7 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
  *
  * This trusts `is_external` completely. The writer guards against the one
  * direction that would otherwise mislabel a real page as external (see
- * `insertPage`'s docs in `crawler/src/archive/db-ops/pages/write/insert-page.ts`
+ * `insertPage`'s docs in `archive/src/db-ops/pages/write/insert-page.ts`
  * for the mechanism), but this function still has no way to tell a
  * genuinely out-of-scope row from a mislabelled one written before that
  * guard existed, or by some other path that bypasses it — such a row would

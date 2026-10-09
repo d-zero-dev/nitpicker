@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createViewerReadModelTables } from '../viewer-read-model/create-viewer-read-model-tables.js';

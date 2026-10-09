@@ -1,7 +1,7 @@
 import { parse } from 'parse5';
 import { describe, it, expect } from 'vitest';
 
-import { deriveDomPath } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/derive-dom-path.js';
+import { deriveDomPath } from '../packages/@nitpicker/archive/lib/populate-entity-tables/derive-dom-path.js';
 
 import { findElementsByTagName } from './find-elements-by-tag-name.mjs';
 import { Parse5ElementAdapter } from './parse5-element-adapter.mjs';

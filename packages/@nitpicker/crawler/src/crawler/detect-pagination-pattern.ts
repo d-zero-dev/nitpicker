@@ -1,6 +1,6 @@
 import type { PaginationPattern } from './types.js';
 
-import { decomposeUrl } from './decompose-url.js';
+import { decomposeUrl } from '@nitpicker/archive/url-pattern/decompose-url';
 
 /**
  * Compares two consecutive URL strings and detects a single-token numeric

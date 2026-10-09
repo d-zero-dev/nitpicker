@@ -1,5 +1,5 @@
 import type { PageJsonLdEntry } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Retrieves all JSON-LD / SpeculationRules entries for the page at the given

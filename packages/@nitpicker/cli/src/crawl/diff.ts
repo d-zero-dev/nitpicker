@@ -1,10 +1,10 @@
-import type { Page } from '@nitpicker/crawler';
+import type Page from '@nitpicker/archive/page';
 
 import fs from 'node:fs/promises';
 
 import { Lanes } from '@d-zero/dealer';
 import { sortUrl } from '@d-zero/shared/sort-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 
 import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { formatLogLine } from '../format-log-line.js';

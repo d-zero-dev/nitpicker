@@ -1,6 +1,5 @@
+import { classifyErrorKind } from '@nitpicker/archive/error-kind/classify-error-kind';
 import { describe, it, expect } from 'vitest';
-
-import { classifyErrorKind } from '../classify-error-kind.js';
 
 import { PreloadShortCircuitError } from './preload-short-circuit-error.js';
 

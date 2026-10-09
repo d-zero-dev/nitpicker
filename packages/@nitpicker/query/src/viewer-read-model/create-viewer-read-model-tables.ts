@@ -17,7 +17,7 @@ import type { Knex } from 'knex';
  * primary key / a `CHECK` constraint / a table-level `UNIQUE` constraint,
  * none of which the chainable builder can express (the same reason
  * `page_html_blobs` / `page_html_ref` drop to `raw()` in
- * `@nitpicker/crawler`'s `init-schema.ts`). Using `raw()` for every table
+ * `@nitpicker/archive`'s `init-schema.ts`). Using `raw()` for every table
  * keeps this function a single uniform style instead of mixing two
  * schema-definition APIs.
  * @param trx - An open Knex transaction (a plain `Knex` instance also works,

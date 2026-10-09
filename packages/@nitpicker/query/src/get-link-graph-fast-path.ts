@@ -1,5 +1,5 @@
 import type { GetLinkGraphOptions, LinkGraph } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { getLinkGraph } from './get-link-graph.js';
 import { getViewerLinkGraph } from './get-viewer-link-graph.js';

@@ -3,7 +3,7 @@ import type {
 	ViewerResourcesKeysetRow,
 	ViewerResourcesSortSpec,
 } from './viewer-resources-cursor/types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { applyViewerResourcesFilters } from './apply-viewer-resources-filters.js';

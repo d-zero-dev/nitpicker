@@ -11,7 +11,7 @@
 
 import knex from 'knex';
 
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 
 const tmpDir = process.argv[2];
 if (!tmpDir) {

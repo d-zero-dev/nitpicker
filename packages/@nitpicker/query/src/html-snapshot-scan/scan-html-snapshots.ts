@@ -5,7 +5,7 @@ import type {
 	ScanHtmlSnapshotsResult,
 } from './types.js';
 
-import { decodeStoredBlob } from '@nitpicker/crawler';
+import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
 
 import { SQLITE_IN_CHUNK } from '../sqlite-in-chunk.js';
 

@@ -1,5 +1,5 @@
 import type { PageListStreamRow, StreamPageListRowsOptions } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { hasDedupeCapEventIdColumn } from '../has-dedupe-cap-event-id-column.js';
 import { hasPageTemplateLabelsTable } from '../has-page-template-labels-table.js';

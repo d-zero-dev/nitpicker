@@ -1,6 +1,6 @@
 import type { ViewerReadModelWorkerData, ViewerReadModelWorkerMessage } from './types.js';
 import type { BuildViewerReadModelOptions } from '../../types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

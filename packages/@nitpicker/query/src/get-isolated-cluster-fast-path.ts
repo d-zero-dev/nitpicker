@@ -1,5 +1,5 @@
 import type { GetViewerIsolatedClusterOptions, IsolatedClusterDetail } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { getIsolatedCluster } from './get-isolated-cluster.js';
 import { getViewerIsolatedCluster } from './get-viewer-isolated-cluster.js';

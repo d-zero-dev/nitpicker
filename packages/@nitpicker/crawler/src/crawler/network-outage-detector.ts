@@ -4,7 +4,7 @@ import type {
 	OutageSuspect,
 } from './types.js';
 
-import { NETWORK_RELATED_ERROR_KINDS } from '../network-related-error-kinds.js';
+import { NETWORK_RELATED_ERROR_KINDS } from '@nitpicker/archive/error-kind/network-related-error-kinds';
 
 /**
  * Sliding-window detector for "this looks like the crawl operator's own

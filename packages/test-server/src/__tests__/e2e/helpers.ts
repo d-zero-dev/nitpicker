@@ -1,11 +1,12 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
+import { CrawlerOrchestrator } from '@nitpicker/crawler';
 
 /**
  * Result object returned by the E2E crawl helper.

@@ -1,5 +1,6 @@
 import type { GetLinkGraphOptions, GraphEdge, GraphNode, LinkGraph } from './types.js';
-import type { ArchiveAccessor, PageSource } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
+import type { PageSource } from '@nitpicker/archive/types';
 
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 

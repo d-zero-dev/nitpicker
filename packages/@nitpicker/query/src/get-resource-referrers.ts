@@ -1,5 +1,5 @@
 import type { GetResourceReferrersOptions, ResourceReferrerResult } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Parses an opaque referrers cursor (the last-seen `pageId`, plain decimal).

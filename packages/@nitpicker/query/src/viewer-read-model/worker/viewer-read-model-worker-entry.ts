@@ -38,7 +38,7 @@ import type { ViewerReadModelWorkerData, ViewerReadModelWorkerMessage } from './
 
 import { parentPort, workerData } from 'node:worker_threads';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 
 import { backfillAliasOfId } from '../backfill-alias-of-id.js';
 import { backfillBodyHashFromHtmlBlobs } from '../backfill-body-hash-from-html-blobs.js';

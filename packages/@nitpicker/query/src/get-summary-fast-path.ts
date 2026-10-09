@@ -1,5 +1,5 @@
 import type { SummaryResult } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { getSummary } from './get-summary.js';
 import { getViewerSummary } from './get-viewer-summary.js';

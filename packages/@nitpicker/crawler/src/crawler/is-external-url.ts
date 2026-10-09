@@ -1,6 +1,6 @@
 import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 
-import { findScopeEntry } from './find-scope-entry.js';
+import { findScopeEntry } from '@nitpicker/archive/scope/find-scope-entry';
 
 /**
  * Determine whether a URL is external to the crawl scope.

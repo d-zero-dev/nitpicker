@@ -1,4 +1,4 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import enquirer from 'enquirer';
 import { afterEach, describe, expect, it, vi } from 'vitest';

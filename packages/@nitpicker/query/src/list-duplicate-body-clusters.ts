@@ -2,7 +2,7 @@ import type {
 	DuplicateBodyClusterEntry,
 	ListDuplicateBodyClustersOptions,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { computeDirectoryDistribution } from './compute-directory-distribution.js';
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';

@@ -1,8 +1,8 @@
-import type { ArchiveAccessor } from '../archive/archive-accessor.js';
-import type { TechnologySignalPartial } from '../archive/meta/technologies/types.js';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
+import type { TechnologySignalPartial } from '@nitpicker/archive/meta/technologies/types';
 import type { Knex } from 'knex';
 
-import { combineTechnologyConfidence } from '../archive/meta/technologies/combine-technology-confidence.js';
+import { combineTechnologyConfidence } from '@nitpicker/archive/meta/technologies/combine-technology-confidence';
 
 import { scanJsResourceForLicenseComment } from './scan-js-resource-for-license-comment.js';
 

@@ -1,4 +1,4 @@
-import type { DB_Resource } from './archive/types.js';
+import type { DB_Resource } from '@nitpicker/archive/types';
 
 import { describe, it, expect } from 'vitest';
 

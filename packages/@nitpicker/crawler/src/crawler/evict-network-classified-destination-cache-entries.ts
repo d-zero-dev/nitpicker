@@ -1,7 +1,7 @@
 import type { PageData } from '@d-zero/beholder';
 
-import { classifyErrorKind } from '../classify-error-kind.js';
-import { NETWORK_RELATED_ERROR_KINDS } from '../network-related-error-kinds.js';
+import { classifyErrorKind } from '@nitpicker/archive/error-kind/classify-error-kind';
+import { NETWORK_RELATED_ERROR_KINDS } from '@nitpicker/archive/error-kind/network-related-error-kinds';
 
 /**
  * Delete every `destinationCache` entry whose cached value is an `Error`

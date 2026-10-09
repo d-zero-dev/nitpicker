@@ -4,14 +4,12 @@ import type { InferFlags } from '@d-zero/roar';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-import {
-	clearArchiveCacheEntry,
-	clearArchiveCacheRoot,
-	computeArchiveCacheKey,
-	getArchiveCacheRoot,
-	listArchiveCacheEntries,
-	resolveArchiveCacheDir,
-} from '@nitpicker/crawler';
+import { clearArchiveCacheEntry } from '@nitpicker/archive/cache/clear-archive-cache-entry';
+import { clearArchiveCacheRoot } from '@nitpicker/archive/cache/clear-archive-cache-root';
+import { computeArchiveCacheKey } from '@nitpicker/archive/cache/compute-archive-cache-key';
+import { getArchiveCacheRoot } from '@nitpicker/archive/cache/get-archive-cache-root';
+import { listArchiveCacheEntries } from '@nitpicker/archive/cache/list-archive-cache-entries';
+import { resolveArchiveCacheDir } from '@nitpicker/archive/cache/resolve-archive-cache-dir';
 
 import { ExitCode } from '../exit-code.js';
 import { formatCacheList } from '../format-cache-list.js';

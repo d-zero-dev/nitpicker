@@ -53,7 +53,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 
 import { findDuplicates } from '../packages/@nitpicker/query/lib/find-duplicates.js';
 import { findMismatches } from '../packages/@nitpicker/query/lib/find-mismatches.js';
@@ -121,7 +121,7 @@ const MISMATCHES_MATRIX = [
  *     a mismatch) rather than omitting `og` entirely, matching a real
  *     crawl's typical "OG tags mirror the title tag" population
  * @param {number} n - The number of pages to seed.
- * @returns {Promise<{accessor: import('@nitpicker/crawler').ArchiveAccessor, dbFilePath: string, cleanupDir: string}>}
+ * @returns {Promise<{accessor: import('@nitpicker/archive/archive-accessor').ArchiveAccessor, dbFilePath: string, cleanupDir: string}>}
  *   The seeded, still-open archive (for `getKnex()`) and its backing dir (for size + cleanup).
  */
 async function makeDb(n) {
@@ -314,7 +314,7 @@ async function runMismatchesMatrix(db, fastApp) {
 
 /**
  * Builds a Hono app wired to one `archiveId` mapped to the given accessor.
- * @param {import('@nitpicker/crawler').ArchiveAccessor} accessor - The accessor to serve.
+ * @param {import('@nitpicker/archive/archive-accessor').ArchiveAccessor} accessor - The accessor to serve.
  * @param {string} archiveId - Unique id for this phase.
  * @returns {import('hono').Hono} The configured app.
  */

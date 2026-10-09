@@ -1,4 +1,4 @@
-import type { Meta } from '@d-zero/beholder';
+import type { Meta } from '@nitpicker/archive/meta/types';
 
 /**
  * Test helper: builds a minimal valid beholder 3.0.0 {@link Meta} object.

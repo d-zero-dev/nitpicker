@@ -45,8 +45,10 @@ const mockArchiveOpen = vi.fn().mockResolvedValue({
 });
 const mockCopyFileWithProgress = vi.fn().mockResolvedValue();
 
-vi.mock('@nitpicker/crawler', () => ({
-	Archive: { open: mockArchiveOpen },
+vi.mock('@nitpicker/archive/archive', () => ({
+	default: { open: mockArchiveOpen },
+}));
+vi.mock('@nitpicker/archive/filesystem/copy-file-with-progress', () => ({
 	copyFileWithProgress: mockCopyFileWithProgress,
 }));
 

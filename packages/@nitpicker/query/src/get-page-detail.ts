@@ -1,7 +1,9 @@
 import type { PageDetail } from './types.js';
-import type { ArchiveAccessor, JsonLdRow, PageTechnologyRow } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
+import type { JsonLdRow, PageTechnologyRow } from '@nitpicker/archive/meta/types';
 
-import { decodeJsonRef, loadResponseHeadersBySetIds } from '@nitpicker/crawler';
+import { decodeJsonRef } from '@nitpicker/archive/db-ops/_shared/decode-json-ref';
+import { loadResponseHeadersBySetIds } from '@nitpicker/archive/db-ops/_shared/load-response-headers-by-set-ids';
 
 import { dedupeCapEventIdSelectColumn } from './dedupe-cap-event-id-select-column.js';
 import { dedupeCapShapeKeySelectColumn } from './dedupe-cap-shape-key-select-column.js';
@@ -262,8 +264,8 @@ export async function getPageDetail(
 		return null;
 	}
 
-	// Reconstruct responseHeaders via the crawler's shared header loader so
-	// the detail view always agrees with the crawler's own read paths on
+	// Reconstruct responseHeaders via the archive's shared header loader so
+	// the detail view always agrees with the archive's own read paths on
 	// how a given `header_set_id` merges back into a flat record.
 	let responseHeaders: Record<string, string> = {};
 	if (page.headerSetId != null) {
@@ -271,7 +273,7 @@ export async function getPageDetail(
 		responseHeaders = headersBySetId.get(page.headerSetId) ?? {};
 	}
 
-	// Decode meta_extras via the crawler's shared json_refs decoder.
+	// Decode meta_extras via the archive's shared json_refs decoder.
 	// Corrupt bodies fail closed to `{}` with a warning, matching the
 	// pre-0.13 try/catch shape.
 	let metaExtras: Record<string, unknown> = {};

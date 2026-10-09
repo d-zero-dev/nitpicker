@@ -43,7 +43,7 @@
  *    multi-hour) step entirely once it has committed once.
  * 4. **Verification** — runs invariant checks against the populated
  *    archive. The check functions live in
- *    `packages/@nitpicker/crawler/src/archive/verify-migration/` and
+ *    `packages/@nitpicker/archive/src/verify-migration/` and
  *    the orchestrator `verifyMigration` chains them in the order
  *    documented there. Verification runs **inside** the same
  *    `knex.transaction()` block that ran the entity-populate step so
@@ -186,24 +186,24 @@ import process from 'node:process';
 import knex from 'knex';
 import * as tar from 'tar';
 
-import { acquireArchiveLock } from '../packages/@nitpicker/crawler/lib/archive/archive-lock.js';
-import Archive from '../packages/@nitpicker/crawler/lib/archive/archive.js';
-import { createAdjunctTables } from '../packages/@nitpicker/crawler/lib/archive/create-adjunct-tables.js';
-import { dropLegacyTables } from '../packages/@nitpicker/crawler/lib/archive/drop-legacy-tables.js';
-import { rename } from '../packages/@nitpicker/crawler/lib/archive/filesystem/rename.js';
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
-import { migrateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-entity-tables.js';
-import { migrateRefTables } from '../packages/@nitpicker/crawler/lib/archive/migrate-ref-tables.js';
-import { populateEntityTables } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/populate-entities.js';
-import { populateBlobRefs } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-blob-refs.js';
-import { populateContentTypeRefs } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-content-type-refs.js';
-import { populateHeaderTables } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-header-tables.js';
-import { populateJsonRefs } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-json-refs.js';
-import { populateTextRefs } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-text-refs.js';
-import { populateUrlRefs } from '../packages/@nitpicker/crawler/lib/archive/populate-ref-tables/populate-url-refs.js';
-import { retargetLegacyFkTables } from '../packages/@nitpicker/crawler/lib/archive/retarget-legacy-fk-tables.js';
-import { checkForeignKeyIntegrity } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/check-foreign-key-integrity.js';
-import { verifyMigration } from '../packages/@nitpicker/crawler/lib/archive/verify-migration/verify-migration.js';
+import { acquireArchiveLock } from '../packages/@nitpicker/archive/lib/archive-lock.js';
+import Archive from '../packages/@nitpicker/archive/lib/archive.js';
+import { createAdjunctTables } from '../packages/@nitpicker/archive/lib/create-adjunct-tables.js';
+import { dropLegacyTables } from '../packages/@nitpicker/archive/lib/drop-legacy-tables.js';
+import { rename } from '../packages/@nitpicker/archive/lib/filesystem/rename.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
+import { migrateEntityTables } from '../packages/@nitpicker/archive/lib/migrate-entity-tables.js';
+import { migrateRefTables } from '../packages/@nitpicker/archive/lib/migrate-ref-tables.js';
+import { populateEntityTables } from '../packages/@nitpicker/archive/lib/populate-entity-tables/populate-entities.js';
+import { populateBlobRefs } from '../packages/@nitpicker/archive/lib/populate-ref-tables/populate-blob-refs.js';
+import { populateContentTypeRefs } from '../packages/@nitpicker/archive/lib/populate-ref-tables/populate-content-type-refs.js';
+import { populateHeaderTables } from '../packages/@nitpicker/archive/lib/populate-ref-tables/populate-header-tables.js';
+import { populateJsonRefs } from '../packages/@nitpicker/archive/lib/populate-ref-tables/populate-json-refs.js';
+import { populateTextRefs } from '../packages/@nitpicker/archive/lib/populate-ref-tables/populate-text-refs.js';
+import { populateUrlRefs } from '../packages/@nitpicker/archive/lib/populate-ref-tables/populate-url-refs.js';
+import { retargetLegacyFkTables } from '../packages/@nitpicker/archive/lib/retarget-legacy-fk-tables.js';
+import { checkForeignKeyIntegrity } from '../packages/@nitpicker/archive/lib/verify-migration/check-foreign-key-integrity.js';
+import { verifyMigration } from '../packages/@nitpicker/archive/lib/verify-migration/verify-migration.js';
 import { buildViewerReadModel } from '../packages/@nitpicker/query/lib/viewer-read-model/build-viewer-read-model.js';
 
 import { createDomPathResolver } from './create-dom-path-resolver.mjs';
@@ -228,7 +228,7 @@ const LEGACY_TABLE_NAMES = [
 
 /**
  * `onProgress` sink threaded into the ref-table sub-populates / `populateEntityTables`
- * (see `packages/@nitpicker/crawler/src/archive/create-progress-reporter.ts`).
+ * (see `packages/@nitpicker/archive/src/create-progress-reporter.ts`).
  * Each sub-populate reports at most once per ~5% of its source table
  * scanned, so a multi-million-row table produces ~20 lines total instead
  * of one per chunk.
@@ -580,7 +580,7 @@ async function hasCompletedStep(db, step) {
 
 /**
  * The six ref-table sub-populates in the fixed order
- * `populateRefTables` (`packages/@nitpicker/crawler/src/archive/populate-ref-tables/populate-refs.ts`)
+ * `populateRefTables` (`packages/@nitpicker/archive/src/populate-ref-tables/populate-refs.ts`)
  * documents: dictionary tables first, header tables last. Called
  * directly (bypassing that shared orchestrator) so each sub-populate
  * can commit — and checkpoint — independently; `populateRefTables`
@@ -676,7 +676,7 @@ async function applyMigrations(dbPath) {
 			LEGACY_TABLE_NAMES.map((table) => db.schema.hasTable(table)),
 		);
 		const legacyTablesPresent = legacyTablePresence.every(Boolean);
-		/** @type {import('../packages/@nitpicker/crawler/lib/archive/verify-migration/types.js').MigrationVerificationSummary | undefined} */
+		/** @type {import('../packages/@nitpicker/archive/lib/verify-migration/types.js').MigrationVerificationSummary | undefined} */
 		let summary;
 		if (legacyTablesPresent) {
 			await ensureLegacySourceColumns(db);

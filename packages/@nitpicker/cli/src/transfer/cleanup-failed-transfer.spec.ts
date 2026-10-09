@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { cleanupFailedTransfer } from './cleanup-failed-transfer.js';

@@ -1,4 +1,4 @@
-import type { DomPathCandidate } from '../archive/populate-entity-tables/types.js';
+import type { DomPathCandidate } from '@nitpicker/archive/populate-entity-tables/types';
 
 /**
  * Collects every `<img>` in a document — its `outerHTML` and its
@@ -12,7 +12,7 @@ import type { DomPathCandidate } from '../archive/populate-entity-tables/types.j
  * runs in the browser during a live crawl AND in Node (against a jsdom
  * document) in its spec, so the dom-path derivation cannot drift between
  * the two runtimes. The spec additionally pins its output against
- * {@link ../archive/populate-entity-tables/derive-dom-path.ts} (the
+ * `@nitpicker/archive`'s `populate-entity-tables/derive-dom-path.ts` (the
  * Node-side derivation the migration script uses) element-for-element.
  * @param doc - The document to walk. Defaults to the global `document`,
  *   which is how the in-browser `page.evaluate(collectImageDomPaths)`

@@ -4,9 +4,10 @@ import type {
 	FailureAttribution,
 	GetErrorKindsOptions,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { classifyErrorKind, isWithinOutageWindow } from '@nitpicker/crawler';
+import { classifyErrorKind } from '@nitpicker/archive/error-kind/classify-error-kind';
+import { isWithinOutageWindow } from '@nitpicker/archive/is-within-outage-window';
 
 import { isImageScanPhaseError } from './is-image-scan-phase-error.js';
 import { listAllOutageWindows } from './list-all-outage-windows.js';

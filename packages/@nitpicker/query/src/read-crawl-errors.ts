@@ -1,5 +1,5 @@
 import type { ErrorRecord } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Read structured crawler-level failures from `crawl_errors`.

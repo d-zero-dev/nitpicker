@@ -42,8 +42,8 @@ import process from 'node:process';
 
 import knex from 'knex';
 
-import { initSchema } from '../packages/@nitpicker/crawler/lib/archive/init-schema.js';
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { initSchema } from '../packages/@nitpicker/archive/lib/init-schema.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 import { getErrorKinds } from '../packages/@nitpicker/query/lib/get-error-kinds.js';
 import { getViewerErrorKinds } from '../packages/@nitpicker/query/lib/get-viewer-error-kinds.js';
 import { buildViewerReadModel } from '../packages/@nitpicker/query/lib/viewer-read-model/build-viewer-read-model.js';

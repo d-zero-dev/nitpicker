@@ -5,7 +5,7 @@ import type {
 import type {
 	TemplateClusterLandmarkType,
 	TemplateClusterReason,
-} from '@nitpicker/crawler';
+} from '@nitpicker/archive/db-ops/templates/types';
 
 import { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';
 

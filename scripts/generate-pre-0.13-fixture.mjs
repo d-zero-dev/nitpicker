@@ -30,8 +30,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-import Archive from '../packages/@nitpicker/crawler/lib/archive/archive.js';
-import { setupLegacyFkDb } from '../packages/@nitpicker/crawler/lib/archive/test-utils/setup-legacy-fk-db.js';
+import Archive from '../packages/@nitpicker/archive/lib/archive.js';
+import { setupLegacyFkDb } from '../packages/@nitpicker/archive/lib/test-utils/setup-legacy-fk-db.js';
 
 /**
  * Entry point.

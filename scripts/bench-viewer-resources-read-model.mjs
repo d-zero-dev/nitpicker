@@ -60,7 +60,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 
 import { applyViewerResourcesFilters } from '../packages/@nitpicker/query/lib/apply-viewer-resources-filters.js';
 import { listResources } from '../packages/@nitpicker/query/lib/list-resources.js';
@@ -142,7 +142,7 @@ const RESOURCES_MATRIX = [
  * a handful of raw MIME types, a minority 404 status, and a `compress`/`cdn`
  * population.
  * @param {number} n - The number of resource rows to seed.
- * @returns {Promise<{accessor: import('@nitpicker/crawler').ArchiveAccessor, dbFilePath: string, cleanupDir: string}>}
+ * @returns {Promise<{accessor: import('@nitpicker/archive/archive-accessor').ArchiveAccessor, dbFilePath: string, cleanupDir: string}>}
  *   The seeded, still-open archive (for `getKnex()`) and its backing dir (for size + cleanup).
  */
 async function makeDb(n) {
@@ -334,7 +334,7 @@ async function runResourcesMatrix(db, fastApp) {
 
 /**
  * Builds a Hono app wired to one `archiveId` mapped to the given accessor.
- * @param {import('@nitpicker/crawler').ArchiveAccessor} accessor - The accessor to serve.
+ * @param {import('@nitpicker/archive/archive-accessor').ArchiveAccessor} accessor - The accessor to serve.
  * @param {string} archiveId - Unique id for this phase.
  * @returns {import('hono').Hono} The configured app.
  */

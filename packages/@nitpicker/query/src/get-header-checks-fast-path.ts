@@ -3,7 +3,7 @@ import type {
 	CursorPaginatedHeaderCheckList,
 	ListViewerHeaderChecksOptions,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { checkHeaders } from './check-headers.js';
 import { listViewerHeaderChecks } from './list-viewer-header-checks.js';

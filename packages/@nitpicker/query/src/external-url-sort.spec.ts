@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { pathComparator } from '@d-zero/shared/sort/path';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { externalSortUrls } from './external-url-sort.js';

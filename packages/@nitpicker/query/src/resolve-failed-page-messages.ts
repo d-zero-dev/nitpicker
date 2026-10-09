@@ -1,4 +1,4 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { readErrorLog } from './read-error-log.js';
 
@@ -9,7 +9,7 @@ const CHUNK_SIZE = 500;
  * One resolved failure message, with the timestamp it was recorded at (when
  * known). `createdAt` is what lets `getSummary` decide whether the failure
  * falls inside a `network_outages` window — see `is-within-outage-window.ts`
- * in the crawler package. `null` only for `error.log`-sourced messages
+ * in the archive package. `null` only for `error.log`-sourced messages
  * (plain-text legacy fallback, no timestamp field), which can therefore
  * never be attributed to an outage.
  */

@@ -7,7 +7,7 @@ import type {
 	DuplicateGroupsKeysetRow,
 	DuplicateGroupsSortSpec,
 } from './viewer-duplicate-groups-cursor/types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { readKeysetWindow } from './viewer-cursor-kit/read-keyset-window.js';

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { readCrawlErrors } from './read-crawl-errors.js';

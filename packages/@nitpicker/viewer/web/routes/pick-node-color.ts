@@ -10,7 +10,7 @@ import { GRAPH_COLORS } from './graph-colors.js';
  * distinct so an operator can tell inventory pages from the crawled backbone.
  *
  * The `source: PageSource` typing forces this switch to stay exhaustive:
- * adding a fourth provenance channel to the union in `@nitpicker/crawler`
+ * adding a fourth provenance channel to the union in `@nitpicker/archive`
  * will surface as a type error (via the `satisfies never` guard) instead of
  * silently falling through to `GRAPH_COLORS.crawled`. The same union drives
  * `SourceBadge` (Isolated Pages / Unused Resources tables) — a hue change

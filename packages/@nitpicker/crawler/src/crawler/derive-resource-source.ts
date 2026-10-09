@@ -1,4 +1,4 @@
-import type { PageSource } from '../archive/types.js';
+import type { PageSource } from '@nitpicker/archive/types';
 
 /**
  * Decide which {@link PageSource} label a newly-captured sub-resource row

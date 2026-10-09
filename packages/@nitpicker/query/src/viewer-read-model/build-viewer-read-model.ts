@@ -1,6 +1,6 @@
 import type { BuildViewerReadModelOptions, PageSource } from '../types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { decodeURISafely } from '@d-zero/shared/decode-uri-safely';
@@ -117,7 +117,7 @@ const SOURCE_READ_CHUNK_SIZE = 2000;
 /**
  * Row shape read from the write-model `pages` table while populating
  * `viewer_pages`. Column names match `pages` verbatim (see
- * `@nitpicker/crawler`'s `init-schema.ts` and this package's
+ * `@nitpicker/archive`'s `init-schema.ts` and this package's
  * `list-pages.ts`, which filters/sorts on the same columns).
  */
 interface PagesSourceRow {

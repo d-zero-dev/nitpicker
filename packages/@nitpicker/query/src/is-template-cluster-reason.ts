@@ -3,7 +3,7 @@ import type {
 	TemplateClusterBlockingReason,
 	TemplateClusterLandmarkProfile,
 	TemplateClusterReason,
-} from '@nitpicker/crawler';
+} from '@nitpicker/archive/db-ops/templates/types';
 
 /**
  * Validates one `blocking[].reason`'s shape against its `kind` discriminant.

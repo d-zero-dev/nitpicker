@@ -1,4 +1,4 @@
-import type { ArchiveLockHolder } from '@nitpicker/crawler';
+import type { ArchiveLockHolder } from '@nitpicker/archive/peek-archive-lock';
 import type { ArchiveManager, ArchiveMode } from '@nitpicker/query';
 
 /**

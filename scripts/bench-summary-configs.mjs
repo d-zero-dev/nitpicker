@@ -3,7 +3,7 @@
 
 import process from 'node:process';
 
-import Archive from '../packages/@nitpicker/crawler/lib/archive/archive.js';
+import Archive from '../packages/@nitpicker/archive/lib/archive.js';
 import { getSummary } from '../packages/@nitpicker/query/lib/get-summary.js';
 
 const dbDir = process.argv[2] || '/tmp/perf-dir';

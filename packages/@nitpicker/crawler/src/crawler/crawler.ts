@@ -9,7 +9,6 @@ import type {
 	ResourceLookupResult,
 	ScrapeOutcome,
 } from './types.js';
-import type { PageDataWithDomPaths, PageSource } from '../archive/types.js';
 import type {
 	ChangePhaseEvent,
 	ConsoleLogEntry,
@@ -19,6 +18,7 @@ import type {
 } from '@d-zero/beholder';
 import type { DealController } from '@d-zero/dealer';
 import type { ExURL } from '@d-zero/shared/parse-url';
+import type { PageDataWithDomPaths, PageSource } from '@nitpicker/archive/types';
 import type { Page as PuppeteerPage } from 'puppeteer';
 
 import { existsSync } from 'node:fs';
@@ -30,11 +30,14 @@ import { delay } from '@d-zero/shared/delay';
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { retryCall } from '@d-zero/shared/retry';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
+import { computeBodyHash } from '@nitpicker/archive/body-hash/compute-body-hash';
+import { isHtmlContentType } from '@nitpicker/archive/content-type/is-html-content-type';
+import { classifyErrorKind } from '@nitpicker/archive/error-kind/classify-error-kind';
+import { findScopeEntry } from '@nitpicker/archive/scope/find-scope-entry';
+import { computeShapeKey } from '@nitpicker/archive/url-pattern/compute-shape-key';
 import c from 'ansi-colors';
 
 import pkg from '../../package.json' with { type: 'json' };
-import { computeBodyHash } from '../archive/body-hash/compute-body-hash.js';
-import { classifyErrorKind } from '../classify-error-kind.js';
 import { crawlerLog } from '../debug.js';
 
 import { applyCrawlRuntimeOptionsPatch } from './apply-crawl-runtime-options-patch.js';
@@ -47,7 +50,6 @@ import { chooseProbeHost } from './choose-probe-host.js';
 import { createChangePhaseHandler } from './create-change-phase-handler.js';
 import { decodeAuthCredential } from './decode-auth-credential.js';
 import { computeMetaSignature } from './dedupe/compute-meta-signature.js';
-import { computeShapeKey } from './dedupe/compute-shape-key.js';
 import DedupeCapTracker from './dedupe/dedupe-cap-tracker.js';
 import { isPredictedContentDuplicate } from './dedupe/is-predicted-content-duplicate.js';
 import { resolveOgUrlMismatch } from './dedupe/resolve-og-url-mismatch.js';
@@ -61,7 +63,6 @@ import { drainPhaseErrors } from './drain-phase-errors.js';
 import { evictNetworkClassifiedDestinationCacheEntries } from './evict-network-classified-destination-cache-entries.js';
 import { evictOutageTaintedDnsBurns } from './evict-outage-tainted-dns-burns.js';
 import { fetchDestination } from './fetch-destination.js';
-import { findScopeEntry } from './find-scope-entry.js';
 import { formatCrawlProgress } from './format-crawl-progress.js';
 import { generatePredictedUrls } from './generate-predicted-urls.js';
 import { handleBrowserClose } from './handle-browser-close.js';
@@ -69,7 +70,6 @@ import { handleIgnoreAndSkip } from './handle-ignore-and-skip.js';
 import { handleScrapeEnd } from './handle-scrape-end.js';
 import { handleScrapeError } from './handle-scrape-error.js';
 import { injectScopeAuth } from './inject-scope-auth.js';
-import { isHtmlContentType } from './is-html-content-type.js';
 import { isLikelyHtmlUrl } from './is-likely-html-url.js';
 import { isPuppeteerFallbackCandidate } from './is-puppeteer-fallback-candidate.js';
 import LinkList from './link-list.js';

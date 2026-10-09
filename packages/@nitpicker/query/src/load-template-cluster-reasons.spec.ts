@@ -1,9 +1,9 @@
-import type { TemplateClusterReason } from '@nitpicker/crawler';
+import type { TemplateClusterReason } from '@nitpicker/archive/db-ops/templates/types';
 
 import path from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { loadTemplateClusterReasons } from './load-template-cluster-reasons.js';

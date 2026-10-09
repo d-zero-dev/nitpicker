@@ -6,7 +6,7 @@
 		"rootDir": "./src"
 	},
 	"references": [
-		{ "path": "../crawler" },
+		{ "path": "../archive" },
 		{ "path": "../query" },
 		{ "path": "../viewer" }
 	],

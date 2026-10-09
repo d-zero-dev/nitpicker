@@ -1,7 +1,7 @@
 import type { QuerySubCommand } from './types.js';
 import type { commandDef } from '../commands/query-def.js';
 import type { InferFlags } from '@d-zero/roar';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type {
 	ListPagesOptions,
 	ListLinksOptions,

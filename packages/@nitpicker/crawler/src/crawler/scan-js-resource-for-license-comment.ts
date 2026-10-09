@@ -1,10 +1,9 @@
-import type { TechnologySignalPartial } from '../archive/meta/technologies/types.js';
+import type { TechnologySignalPartial } from '@nitpicker/archive/meta/technologies/types';
 import type { FollowResponse, RedirectableRequest } from 'follow-redirects';
 import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
 
+import { TECHNOLOGY_SIGNAL_DEFINITIONS } from '@nitpicker/archive/meta/technologies/technology-signal-definitions';
 import redirects from 'follow-redirects';
-
-import { TECHNOLOGY_SIGNAL_DEFINITIONS } from '../archive/meta/technologies/technology-signal-definitions.js';
 
 /** Default cap on bytes read from a JS resource before giving up on a match. */
 const DEFAULT_BYTE_LIMIT = 8192;

@@ -2,7 +2,7 @@ import type {
 	ListViewerExternalLinksOptions,
 	PaginatedExternalLinkList,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { applyListOrder } from './apply-list-order.js';

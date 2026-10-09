@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { backfillDedupeCapEventId } from './backfill-dedupe-cap-event-id.js';

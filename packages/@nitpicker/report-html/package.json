@@ -31,7 +31,7 @@
 	},
 	"dependencies": {
 		"@d-zero/dealer": "1.14.0",
-		"@nitpicker/crawler": "0.24.0",
+		"@nitpicker/archive": "0.24.0",
 		"@nitpicker/query": "0.24.0",
 		"@nitpicker/viewer": "0.24.0",
 		"enquirer": "2.4.1",
