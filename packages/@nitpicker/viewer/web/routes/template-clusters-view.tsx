@@ -11,11 +11,11 @@ import { useI18n } from '../i18n/use-i18n.js';
 /**
  * Template cluster analysis: a summary panel (totals, largest clusters, size
  * distribution, block-kind breakdown), clusters grouped by the
- * `@d-zero/page-cluster` Pass-0 block they were split out of, then one
+ * page-cluster Pass-0 block they were split out of, then one
  * collapsible section per
  * `page_templates.template_key` cluster, each showing page count, top
  * directories by page count, common stylesheet set computed from the
- * cluster's actual member pages, and (when captured) `@d-zero/page-cluster`'s
+ * cluster's actual member pages, and (when captured) page-cluster's
  * cluster-selection evidence — the raw key itself is an opaque blocking key
  * and is not human-readable (see `TemplateClusterSummary`'s JSDoc in
  * `@nitpicker/query`).

@@ -4,7 +4,7 @@ import type { TemplateClusterSummary } from '@nitpicker/query';
 import { parseTemplateKeyBlock } from './parse-template-key-block.js';
 
 /**
- * Lists every `@d-zero/page-cluster` Pass-0 block a cluster drew pages
+ * Lists every page-cluster Pass-0 block a cluster drew pages
  * from.
  *
  * `reason.blocking` is the authoritative list: a final cluster that Stage B

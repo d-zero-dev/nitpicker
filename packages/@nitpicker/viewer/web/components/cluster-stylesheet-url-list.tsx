@@ -22,7 +22,7 @@ export interface ClusterStylesheetUrlListProps {
 }
 
 /**
- * Renders one stylesheet-URL list — either a cluster's `@d-zero/page-cluster`
+ * Renders one stylesheet-URL list — either a cluster's page-cluster
  * blocking-distinctive CSS set or its raw common-stylesheet intersection.
  * Both call sites share this component because they render identical
  * markup (a `<ul>` of URLs plus a caveat paragraph) and differ only in

@@ -46,7 +46,7 @@ function toSizeBucketKey(pageCount: number): ClusterSizeBucketKey {
  * Aggregates the cluster list into the figures shown in the summary panel at
  * the top of the template clusters view: totals, the largest clusters, the
  * size distribution (`1` / `2–5` / `6–20` / `21+` pages), and how the
- * clusters divide into `@d-zero/page-cluster` Pass-0 blocks (block count
+ * clusters divide into page-cluster Pass-0 blocks (block count
  * and a per-kind breakdown — see `groupClustersByBlock`).
  *
  * Derived entirely from the `GET /api/template-clusters` payload — no extra

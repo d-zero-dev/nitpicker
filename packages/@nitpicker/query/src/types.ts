@@ -3773,7 +3773,7 @@ export interface DirectoryDistributionEntry {
  * One `page_templates.template_key` group's summary — see
  * {@link import('./list-page-template-clusters.js').listPageTemplateClusters}.
  *
- * `templateKey` itself is an opaque `@d-zero/page-cluster` blocking key
+ * `templateKey` itself is an opaque page-cluster blocking key
  * (e.g. `["css:166e4235afcb8b15","cluster:0"]`) — the `css:` hash cannot be
  * reversed to a filename, and a `path:` segment reflects only the shallow
  * blocking depth, not this cluster's actual member set after cross-block
@@ -3821,14 +3821,14 @@ export interface TemplateClusterSummary {
 	 */
 	commonStylesheetFileNames: string[];
 	/**
-	 * `@d-zero/page-cluster`'s cluster-selection evidence for this
+	 * page-cluster's cluster-selection evidence for this
 	 * `templateKey`, summarized for API transport — see
 	 * {@link import('./summarize-template-cluster-reason.js').summarizeTemplateClusterReason}.
 	 * `null` (not omitted) means "no reason available for this cluster",
 	 * which covers three distinct cases the caller cannot tell apart from
 	 * this field alone: a pre-cluster-reason archive (no
 	 * `page_template_clusters` table), a read-only connection that skips
-	 * schema self-heal, or a cluster `@d-zero/page-cluster` classified but
+	 * schema self-heal, or a cluster page-cluster classified but
 	 * did not emit a reason for (the classification
 	 * carries no reason in that case).
 	 */
@@ -3858,7 +3858,7 @@ export interface TemplateClusterLandmarkSummary {
 }
 
 /**
- * API-transport summary of one cluster's `@d-zero/page-cluster`
+ * API-transport summary of one cluster's page-cluster
  * cluster-selection evidence — see
  * {@link import('./summarize-template-cluster-reason.js').summarizeTemplateClusterReason}
  * for why this is a trimmed view of the verbatim
@@ -3867,9 +3867,9 @@ export interface TemplateClusterLandmarkSummary {
  */
 export interface TemplateClusterReasonSummary {
 	/**
-	 * The member count `@d-zero/page-cluster` used to derive this reason.
+	 * The member count page-cluster used to derive this reason.
 	 * **Not the same as `TemplateClusterSummary.pageCount`** — on an archive
-	 * whose page count exceeded `@d-zero/page-cluster`'s inline-processing
+	 * whose page count exceeded page-cluster's inline-processing
 	 * threshold, this is a per-block sample size, not the cluster's true
 	 * page count. Never display this as a page count.
 	 */

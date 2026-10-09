@@ -22,7 +22,7 @@ export interface TemplateClusterBlockGroupsProps {
 }
 
 /**
- * One section per `@d-zero/page-cluster` Pass-0 block, listing the clusters
+ * One section per page-cluster Pass-0 block, listing the clusters
  * that drew pages from it — the sibling relationship each cluster's own
  * section shows as cross-links, laid out as a tree. A cluster merged across
  * blocks is listed under each of them (see `groupClustersByBlock`), and its

@@ -9,7 +9,7 @@ import { isTemplateClusterReason } from './is-template-cluster-reason.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 
 /**
- * Reads the stored `@d-zero/page-cluster` cluster-selection reason for each
+ * Reads the stored page-cluster cluster-selection reason for each
  * of `templateKeys`, keyed by `template_key`.
  *
  * Filtered to `templateKeys` (the keys `listPageTemplateClusters` actually

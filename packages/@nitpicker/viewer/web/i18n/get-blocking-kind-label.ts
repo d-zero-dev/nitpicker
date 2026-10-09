@@ -7,7 +7,7 @@ import type { ClusterBlockKind, I18nValue } from '../types.js';
  *
  * Same `views.<enum>.<value>` + raw-value-fallback pattern as
  * `getErrorKindLabel`/`getAttributionLabel` — a new blocking kind introduced
- * upstream (`@d-zero/page-cluster`) does not display blank in an older
+ * by the page-cluster engine (`@nitpicker/archive`) does not display blank in an older
  * viewer build.
  * @param kind - The blocking reason kind to label.
  * @param t - The active translate function (from `useI18n()`).

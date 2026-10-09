@@ -7,7 +7,7 @@ import type { TemplateClusterLandmarkSummary } from '@nitpicker/query';
  *
  * Kept under its own `views.landmarkType` bag rather than nested under
  * `views.templateClusters` — landmark type is a general DOM concept
- * (`@d-zero/page-cluster`'s `header`/`footer`/`nav`/`aside`/`form`/`search`),
+ * (page-cluster's `header`/`footer`/`nav`/`aside`/`form`/`search`),
  * not something specific to the template-clusters view, so a future view
  * that also needs this label reuses the same translations (mirroring how
  * `views.errorKind` is shared between Summary and Errors).

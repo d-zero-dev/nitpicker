@@ -9,7 +9,7 @@ import type { Knex } from 'knex';
  *
  * - `page_templates` — one row per classified page, FK → `content_items(id)`
  * - `page_template_clusters` — one row per distinct `page_templates.template_key`,
- *   holding `@d-zero/page-cluster`'s cluster-selection evidence (no FK;
+ *   holding page-cluster's cluster-selection evidence (no FK;
  *   `template_key` is not a `page_templates` FK target, so consistency is
  *   maintained by replacing both tables together, not by a foreign key)
  * - `page_template_labels` — one row per template key: the stable
@@ -42,7 +42,7 @@ export async function createTemplateTables(instance: Knex): Promise<void> {
 	}
 
 	// One row per distinct `template_key` produced by the same classification
-	// run, holding `@d-zero/page-cluster`'s cluster-selection evidence
+	// run, holding page-cluster's cluster-selection evidence
 	// (`ClusterReason`, renamed `TemplateClusterReason` on this side) as a
 	// zstd-compressed JSON blob — same BLOB+codec+size shape as
 	// `page_html_blobs`. A column on `page_templates` was rejected: that

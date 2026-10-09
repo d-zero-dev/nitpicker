@@ -4,7 +4,7 @@ import type { TemplateClusterSummary } from '@nitpicker/query';
 import { listClusterBlocks } from './list-cluster-blocks.js';
 
 /**
- * Groups clusters by the `@d-zero/page-cluster` Pass-0 blocks they drew
+ * Groups clusters by the page-cluster Pass-0 blocks they drew
  * pages from (`listClusterBlocks`).
  *
  * A cluster Stage B merged across blocks is listed under **each** of its
