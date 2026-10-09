@@ -227,12 +227,7 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 				}
 
 				// Every adjunct FK declaration now targets content_items(id).
-				for (const table of [
-					'page_html_ref',
-					'page_jsonld',
-					'page_errors',
-					'analysis_violations',
-				]) {
+				for (const table of ['page_html_ref', 'page_jsonld', 'page_errors']) {
 					const parents = await fkParentTables(db, table);
 					expect(parents.has('content_items'), `${table} → content_items`).toBe(true);
 					expect(parents.has('pages'), `${table} must not reference pages`).toBe(false);
@@ -255,9 +250,10 @@ describe('scripts/migrate-to-0.13.mjs (integration)', () => {
 				expect(await db('page_jsonld').select('*')).toMatchObject([
 					{ kind: 'json-ld', type: 'Article' },
 				]);
-				expect(await db('analysis_violations').select('*')).toMatchObject([
-					{ validator: 'markuplint', rule: 'required-attr' },
-				]);
+				// Legacy analyze output has no current-schema counterpart, so the
+				// migration drops both tables instead of retargeting them.
+				expect(await db.schema.hasTable('analysis_violations')).toBe(false);
+				expect(await db.schema.hasTable('analysis_text_refs')).toBe(false);
 				expect(await db('page_html_ref').select('page_id')).toHaveLength(1);
 
 				// Zero FK violations against the final schema — the same

@@ -300,18 +300,6 @@ describe('mapFlagsToQueryOptions', () => {
 		});
 	});
 
-	it('maps violations flags correctly', () => {
-		expect(
-			mapFlagsToQueryOptions('violations', { validator: 'axe', severity: 'critical' }),
-		).toEqual({
-			validator: 'axe',
-			severity: 'critical',
-			rule: undefined,
-			limit: undefined,
-			offset: undefined,
-		});
-	});
-
 	it('defaults duplicates field to title', () => {
 		expect(mapFlagsToQueryOptions('duplicates', {})).toEqual({
 			field: 'title',
@@ -626,9 +614,6 @@ describe('mapFlagsToQueryOptions', () => {
 			dedupeCapEventId: 42,
 			missingAlt: true,
 			missingDimensions: true,
-			validator: 'axe',
-			severity: 'critical',
-			rule: 'rule-1',
 			field: 'description',
 			missingOnly: true,
 			technology: 'Astro',

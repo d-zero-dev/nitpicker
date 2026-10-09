@@ -32,13 +32,13 @@ describe('estimateCellBudget', () => {
 	it('lets an earlier sheet consuming less than its request roll the remainder to the next sheet', () => {
 		const allocations = estimateCellBudget(
 			[
-				{ name: 'Violations', columns: 10, estimatedRows: 5 },
-				{ name: 'Discrepancies', columns: 10, estimatedRows: 100 },
+				{ name: 'Links', columns: 10, estimatedRows: 5 },
+				{ name: 'Resources', columns: 10, estimatedRows: 100 },
 			],
 			1000,
 		);
-		// header cost = 20, remaining = 980. Violations only needs 5*10=50,
-		// leaving 930 for Discrepancies (needs 1000, fits within 930/10=93).
+		// header cost = 20, remaining = 980. Links only needs 5*10=50,
+		// leaving 930 for Resources (needs 1000, fits within 930/10=93).
 		expect(allocations[0]).toMatchObject({ maxRows: 5, truncated: false });
 		expect(allocations[1]).toMatchObject({ maxRows: 93, truncated: true });
 	});

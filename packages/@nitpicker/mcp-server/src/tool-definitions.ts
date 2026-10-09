@@ -11,7 +11,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'open_archive',
 		description:
-			'Load a Nitpicker archive source for querying. Accepts either a finished `.nitpicker` archive file OR a crawl stub directory (an `._nitpicker-*` working directory left behind when a crawl is interrupted). Returns an archiveId, the detected `mode` (`"archive"` or `"stub"`), and `crawlerPid` (the PID of a crawler currently writing the stub, or `null` for finished archives and interrupted-but-no-longer-running crawls). When `mode === "stub"`, treat the data as a point-in-time snapshot: any counts/violations may shift if the user resumes the crawl. Always call this first before using any other tools.',
+			'Load a Nitpicker archive source for querying. Accepts either a finished `.nitpicker` archive file OR a crawl stub directory (an `._nitpicker-*` working directory left behind when a crawl is interrupted). Returns an archiveId, the detected `mode` (`"archive"` or `"stub"`), and `crawlerPid` (the PID of a crawler currently writing the stub, or `null` for finished archives and interrupted-but-no-longer-running crawls). When `mode === "stub"`, treat the data as a point-in-time snapshot: any counts may shift if the user resumes the crawl. Always call this first before using any other tools.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -421,7 +421,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'search_html',
 		description:
-			'Search the stored HTML snapshots of all pages for a string or regular expression, WITHOUT running an analyze plugin and without writing to the archive. The search runs on the raw markup `get_page_html` returns, so <script>, <style>, inline style and every attribute are searchable (e.g. `fonts.example.org`, `font-family`, `gtag(`, `/UA-\\d+-\\d+/`) — unlike the analyze-search plugin, which matches DOM text nodes only. `pattern` is a plain literal substring, or `/regex/flags` (flags g, i, m) for a regular expression. Returns matching pages in page-id order with matchCount and a whitespace-collapsed snippet around the first hit, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). This is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> search-html --pattern "..." | jq`. Cannot search CSS/JS file bodies (not stored). To find pages by DOM structure (a CSS selector) rather than by text, use `match_selector`.',
+			'Search the stored HTML snapshots of all pages for a string or regular expression, without writing to the archive. The search runs on the raw markup `get_page_html` returns, so <script>, <style>, inline style and every attribute are searchable (e.g. `fonts.example.org`, `font-family`, `gtag(`, `/UA-\\d+-\\d+/`). `pattern` is a plain literal substring, or `/regex/flags` (flags g, i, m) for a regular expression. Returns matching pages in page-id order with matchCount and a whitespace-collapsed snippet around the first hit, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). This is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> search-html --pattern "..." | jq`. Cannot search CSS/JS file bodies (not stored). To find pages by DOM structure (a CSS selector) rather than by text, use `match_selector`.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -459,7 +459,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'match_selector',
 		description:
-			'Find pages whose stored HTML snapshot contains at least one element matching a CSS selector (e.g. `img:not([alt])`, `nav > a[href^="/products/"]`, `a[target="_blank"]:not([rel~="noopener"])`), WITHOUT running an analyze plugin and without writing to the archive. Use it to search by DOM structure; use `search_html` to search by text. It is an existence check per page: matching element positions and counts are not returned. Returns matching pages in page-id order as `{ pageId, url }`, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). Only the subset of CSS that can be evaluated exactly in a single pass over the markup is supported; anything else is rejected with an error that lists this grammar, never approximated.\n\n' +
+			'Find pages whose stored HTML snapshot contains at least one element matching a CSS selector (e.g. `img:not([alt])`, `nav > a[href^="/products/"]`, `a[target="_blank"]:not([rel~="noopener"])`), without writing to the archive. Use it to search by DOM structure; use `search_html` to search by text. It is an existence check per page: matching element positions and counts are not returned. Returns matching pages in page-id order as `{ pageId, url }`, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). Only the subset of CSS that can be evaluated exactly in a single pass over the markup is supported; anything else is rejected with an error that lists this grammar, never approximated.\n\n' +
 			SUPPORTED_SELECTOR_GRAMMAR +
 			'\n\nThis is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> match-selector --selector "..." | jq`. Cannot inspect CSS/JS file bodies (not stored).',
 		inputSchema: {
@@ -519,43 +519,6 @@ export const toolDefinitions: Tool[] = [
 				urlPattern: {
 					type: 'string',
 					description: 'Filter source URLs by pattern (SQL LIKE)',
-				},
-				limit: { type: 'number', description: 'Max results (default: 100)' },
-				offset: { type: 'number', description: 'Results to skip (default: 0)' },
-			},
-			required: ['archiveId'],
-		},
-	},
-	{
-		name: 'get_violations',
-		description:
-			'Get analysis violations from plugins (axe, markuplint, textlint). Filter by validator, severity, or rule. Use for accessibility and code quality reports.',
-		inputSchema: {
-			type: 'object' as const,
-			properties: {
-				archiveId: {
-					type: 'string',
-					description: 'The archive ID returned by open_archive',
-				},
-				validator: {
-					type: 'string',
-					description: 'Filter by validator name (e.g., "axe", "markuplint", "textlint")',
-				},
-				severity: { type: 'string', description: 'Filter by severity level' },
-				rule: { type: 'string', description: 'Filter by rule ID' },
-				urlPattern: {
-					type: 'string',
-					description: 'Filter URLs by SQL LIKE pattern',
-				},
-				sortBy: {
-					type: 'string',
-					enum: ['url', 'validator', 'severity', 'rule', 'message', 'code'],
-					description: 'Sort field',
-				},
-				sortOrder: {
-					type: 'string',
-					enum: ['asc', 'desc'],
-					description: 'Sort direction',
 				},
 				limit: { type: 'number', description: 'Max results (default: 100)' },
 				offset: { type: 'number', description: 'Results to skip (default: 0)' },

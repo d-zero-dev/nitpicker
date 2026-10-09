@@ -20,13 +20,13 @@ describe('createReferrersRelationalTable', () => {
 	});
 
 	it('returns sheet config with name "Referrers Relational Table" and requiresReadModel', () => {
-		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const setting = createReferrersRelationalTable(NO_ACCESSOR);
 		expect(setting.name).toBe('Referrers Relational Table');
 		expect(setting.requiresReadModel).toBe(true);
 	});
 
 	it('returns correct headers, including the new Count column', () => {
-		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const setting = createReferrersRelationalTable(NO_ACCESSOR);
 		expect(setting.createHeaders()).toEqual([
 			'Link (To)',
 			'Referrer (From)',
@@ -53,7 +53,7 @@ describe('createReferrersRelationalTable', () => {
 				},
 			]),
 		);
-		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const setting = createReferrersRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -88,7 +88,7 @@ describe('createReferrersRelationalTable', () => {
 				},
 			]),
 		);
-		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const setting = createReferrersRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -114,7 +114,7 @@ describe('createReferrersRelationalTable', () => {
 				},
 			]),
 		);
-		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const setting = createReferrersRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -140,7 +140,7 @@ describe('createReferrersRelationalTable', () => {
 				},
 			]),
 		);
-		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const setting = createReferrersRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -166,7 +166,7 @@ describe('createReferrersRelationalTable', () => {
 				})),
 			),
 		);
-		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const setting = createReferrersRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -193,7 +193,7 @@ describe('createReferrersRelationalTable', () => {
 				},
 			]),
 		);
-		const setting = createReferrersRelationalTable([], NO_ACCESSOR);
+		const setting = createReferrersRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		const onProgress = vi.fn();
 		await setting.run({

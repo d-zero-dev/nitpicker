@@ -48,22 +48,6 @@ export interface ImageStreamRow {
 	domPath: string | null;
 }
 
-/** One violation's display fields for the Violations report sheet. */
-export interface ViolationStreamRow {
-	/** Reporting validator name (e.g. "axe", "markuplint"). */
-	validator: string;
-	/** Severity label as reported by the validator. */
-	severity: string;
-	/** Rule identifier within the validator. */
-	rule: string;
-	/** Offending code snippet, or `''` when the validator reported none. */
-	code: string;
-	/** Human-readable violation message. */
-	message: string;
-	/** The page URL the violation was reported against. */
-	url: string;
-}
-
 /** One resource's metadata for the Resources report sheet. */
 export interface ResourceStreamRow {
 	/** `resource_items.id`. */

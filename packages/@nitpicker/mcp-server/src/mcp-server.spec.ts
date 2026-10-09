@@ -268,9 +268,9 @@ describe('createServer', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('ListTools で38個のツールが返される', async () => {
+	it('ListTools で37個のツールが返される', async () => {
 		const result = await listTools(server);
-		expect(result.tools).toHaveLength(38);
+		expect(result.tools).toHaveLength(37);
 		const names = result.tools.map((t) => t.name);
 		expect(names).toContain('open_archive');
 		expect(names).toContain('list_inbound_links');

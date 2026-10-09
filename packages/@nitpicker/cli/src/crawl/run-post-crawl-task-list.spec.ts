@@ -131,10 +131,10 @@ describe('runPostCrawlTaskList', () => {
 			rendered.indexOf('Classify page templates'),
 		);
 		expect(rendered.indexOf('Classify page templates')).toBeLessThan(
-			rendered.indexOf('Backfilling analysis violations'),
+			rendered.indexOf('Backfilling page content hashes'),
 		);
 		expect(rendered).not.toContain('Build viewer read model');
-		expect(rendered).toContain('Backfilling analysis violations');
+		expect(rendered).toContain('Backfilling page content hashes');
 		expect(rendered).toContain('Building anchor facts');
 		expect(rendered).toContain('Checkpointing read model');
 		expect(rendered).toContain('Write archive');

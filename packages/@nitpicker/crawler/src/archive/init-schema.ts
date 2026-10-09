@@ -61,13 +61,13 @@ export async function applyConnectionPragmas(instance: Knex): Promise<void> {
  *   `createRefTables` because most entity tables reference ref-table PKs.
  * - **Adjunct tables** ({@link createAdjunctTables}): `page_errors`,
  *   `crawl_errors`, `technology_signals`, `page_technologies`, `page_jsonld`, `list_reconcile_runs`,
- *   `analysis_text_refs` + `analysis_violations`, `page_html_blobs` +
+ *   `page_html_blobs` +
  *   `page_html_ref`. Must run AFTER `createEntityTables` because the
  *   page-scoped tables FK into `content_items(id)`.
  * - **Template classification tables** ({@link createTemplateTables}):
  *   `page_templates`, `page_template_clusters`, `page_template_labels` —
  *   the crawl-end DOM-structure classification, kept apart from the
- *   adjunct/analysis tables because it has its own producer and write path.
+ *   adjunct tables because it has its own producer and write path.
  *
  * The legacy flat write-model tables (`pages` / `anchors` / `images` /
  * `resources` / `resources-referrers`) are deliberately NOT created:
@@ -148,7 +148,7 @@ export async function initSchema(instance: Knex) {
 	await createEntityTables(instance);
 
 	// Adjunct tables that FK into `content_items` (page_errors /
-	// technology_signals / page_technologies / page_jsonld / analysis_* /
+	// technology_signals / page_technologies / page_jsonld /
 	// page_html_*) plus the standalone log tables
 	// (crawl_errors / list_reconcile_runs). MUST run after
 	// {@link createEntityTables} so the FK targets exist. DDL +
@@ -160,8 +160,8 @@ export async function initSchema(instance: Knex) {
 
 	// Template classification tables (page_templates / page_template_clusters /
 	// page_template_labels). Separate from the adjunct group because the
-	// producer is the crawl-end classification step, not the crawl write path
-	// or analyze. `page_templates` FKs into `content_items(id)`, so this too
+	// producer is the crawl-end classification step, not the crawl write path.
+	// `page_templates` FKs into `content_items(id)`, so this too
 	// MUST run after {@link createEntityTables}.
 	await createTemplateTables(instance);
 }

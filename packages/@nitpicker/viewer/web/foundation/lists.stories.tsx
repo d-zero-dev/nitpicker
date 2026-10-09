@@ -39,7 +39,7 @@ export const Nested: Story = {
 					<li>Save snapshots</li>
 				</ul>
 			</li>
-			<li>Analyze</li>
+			<li>Classify</li>
 			<li>Report</li>
 		</ol>
 	),

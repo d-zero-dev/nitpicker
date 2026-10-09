@@ -4,7 +4,6 @@ import type { Knex } from 'knex';
 
 import { attachSourceDatabase } from './attach-source-database.js';
 import { clearReplacedPageRows } from './clear-replaced-page-rows.js';
-import { copyAnalysisViolations } from './copy-analysis-violations.js';
 import { copyAnchorEdges } from './copy-anchor-edges.js';
 import { copyDictionariesForConcat } from './copy-dictionaries-for-concat.js';
 import { copyDictionariesForSplit } from './copy-dictionaries-for-split.js';
@@ -169,7 +168,6 @@ export async function transferArchiveRows(options: {
 			await copyPageTemplateClusters(trx);
 			await copyPageTemplateLabels(trx);
 			await copyPageConsoleLogs(trx);
-			await copyAnalysisViolations(trx);
 
 			callbacks?.onPhase?.(sourceIndex, 'copyingResources');
 			await copyResourceItems(trx);

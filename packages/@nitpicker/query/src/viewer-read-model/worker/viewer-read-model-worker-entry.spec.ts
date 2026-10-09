@@ -2,7 +2,7 @@ import type { MockInstance } from 'vitest';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Same tactic as @nitpicker/core's worker.spec.ts: the entry runs at module
+// The entry runs at module
 // scope (top-level await), so each test uses vi.resetModules() + dynamic
 // import() for a fresh execution, with parentPort/workerData mocked instead
 // of spawning a real thread.
@@ -95,7 +95,7 @@ describe('viewer-read-model-worker-entry', () => {
 		await import('./viewer-read-model-worker-entry.js');
 
 		expect(mockPostMessage).toHaveBeenCalledWith({ type: 'done' });
-		expect(mockConnect).toHaveBeenCalledWith('/tmp/archive-dir', null, {
+		expect(mockConnect).toHaveBeenCalledWith('/tmp/archive-dir', {
 			readOnly: false,
 		});
 		expect(mockClose).toHaveBeenCalledOnce();

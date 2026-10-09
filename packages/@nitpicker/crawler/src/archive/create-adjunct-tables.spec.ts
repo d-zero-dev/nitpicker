@@ -28,8 +28,6 @@ const ADJUNCT_TABLES = [
 	'list_reconcile_runs',
 	'network_outages',
 	'dedupe_cap_events',
-	'analysis_text_refs',
-	'analysis_violations',
 	'page_html_blobs',
 	'page_html_ref',
 	'console_log_items',
@@ -50,7 +48,6 @@ const CONTENT_ITEMS_FK_TABLES = [
 	'page_main_content_audios',
 	'page_main_content_canvases',
 	'page_main_content_custom_elements',
-	'analysis_violations',
 	'page_html_ref',
 	'page_console_logs',
 ] as const;
@@ -114,12 +111,6 @@ describe('createAdjunctTables', () => {
 		}
 		// The pre-existing table was left untouched (its custom column survives).
 		expect(await db.schema.hasColumn('technology_signals', 'marker')).toBe(true);
-	});
-
-	it('gives analysis_violations nullable line/col columns on fresh creation', async () => {
-		await createAdjunctTables(db);
-		expect(await db.schema.hasColumn('analysis_violations', 'line')).toBe(true);
-		expect(await db.schema.hasColumn('analysis_violations', 'col')).toBe(true);
 	});
 
 	it('declares network_outages with no FK and no secondary index', async () => {

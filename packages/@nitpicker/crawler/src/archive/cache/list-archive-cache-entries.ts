@@ -85,6 +85,13 @@ export async function listArchiveCacheEntries(
 const CORRUPT_QUARANTINE_SUFFIX = /\.corrupt\.\d+\.\d+$/;
 
 /**
+ * Name of the sibling scratch directory earlier versions created for
+ * analyze-plugin tables. Nothing writes it any more, so a leftover one is
+ * reported as an orphan that `cache clear` can reclaim.
+ */
+const LEGACY_TABLE_CACHE_DIR_NAME = 'table';
+
+/**
  * Classify a cache-root child by name pattern alone (no filesystem access).
  *
  * This is a heuristic: `.staging`/corrupt-quarantine suffixes are appended
@@ -98,10 +105,11 @@ const CORRUPT_QUARANTINE_SUFFIX = /\.corrupt\.\d+\.\d+$/;
  * @param name - Base name of the top-level entry.
  */
 function classifyEntryName(name: string): ArchiveCacheEntryKind {
-	if (name === 'table') {
-		return 'table';
-	}
-	if (name.endsWith('.staging') || CORRUPT_QUARANTINE_SUFFIX.test(name)) {
+	if (
+		name === LEGACY_TABLE_CACHE_DIR_NAME ||
+		name.endsWith('.staging') ||
+		CORRUPT_QUARANTINE_SUFFIX.test(name)
+	) {
 		return 'orphan';
 	}
 	return 'tar-cache';

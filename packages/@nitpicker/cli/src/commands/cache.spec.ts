@@ -107,9 +107,9 @@ describe('cache command', () => {
 		it('outputs JSON when --json is passed', async () => {
 			const entries = [
 				{
-					kind: 'table',
-					name: 'table',
-					path: '/mock-cache-root/table',
+					kind: 'orphan',
+					name: '.staging',
+					path: '/mock-cache-root/.staging',
 					sizeBytes: 2048,
 					mtimeMs: Date.now(),
 				},
@@ -249,7 +249,7 @@ describe('cache command', () => {
 			expect(exitSpy).toHaveBeenCalledWith(1);
 		});
 
-		it('never calls clearArchiveCacheRoot (must not sweep the table cache along with a single archive)', async () => {
+		it('never calls clearArchiveCacheRoot (must not sweep the whole cache root along with a single archive)', async () => {
 			const { cache } = await import('./cache.js');
 			await cache(['clear', '/tmp/existing.nitpicker'], {} as never);
 

@@ -11,12 +11,7 @@ import { retargetLegacyFkTables } from './retarget-legacy-fk-tables.js';
 import { fkParentTables } from './test-utils/fk-parent-tables.js';
 import { setupLegacyFkDb } from './test-utils/setup-legacy-fk-db.js';
 
-const RETARGETED_TABLES = [
-	'page_html_ref',
-	'page_jsonld',
-	'page_errors',
-	'analysis_violations',
-] as const;
+const RETARGETED_TABLES = ['page_html_ref', 'page_jsonld', 'page_errors'] as const;
 
 /**
  * Seeds a legacy `pages` row and its PK-preserved `content_items` twin —
@@ -107,17 +102,6 @@ describe('retargetLegacyFkTables', () => {
 			type: 'Article',
 			raw: '{"@type":"Article"}',
 		});
-		await db('analysis_text_refs').insert({ id: 1, text: 'msg', sha256: 'x'.repeat(64) });
-		await db('analysis_violations').insert({
-			page_id: 1,
-			validator: 'axe',
-			severity: 'error',
-			rule: 'label',
-			message_text_id: 1,
-			page_url_sort_key: 'https://example.com/',
-			message_sort_key: 'msg',
-			code_sort_key: '',
-		});
 		const hash = Buffer.alloc(32, 1);
 		await db('page_html_blobs').insert({
 			hash,
@@ -145,25 +129,51 @@ describe('retargetLegacyFkTables', () => {
 		expect(await db('page_jsonld').select('*')).toMatchObject([
 			{ pageId: 1, kind: 'json-ld', type: 'Article' },
 		]);
-		expect(await db('analysis_violations').select('*')).toMatchObject([
-			{ page_id: 1, validator: 'axe', rule: 'label', line: null, col: null },
-		]);
 		const htmlRefs = await db('page_html_ref').select('*');
 		expect(htmlRefs).toHaveLength(1);
 		expect(htmlRefs[0]?.page_id).toBe(1);
 	});
 
 	it('creates a missing adjunct table empty instead of failing', async () => {
-		// A 0.10 archive that never ran `analyze` has no analysis tables at all.
+		await db.raw('DROP TABLE "page_jsonld"');
+		await db.transaction(async (trx) => {
+			await retargetLegacyFkTables(trx);
+		});
+		expect(await db.schema.hasTable('page_jsonld')).toBe(true);
+		expect(await db('page_jsonld').select('*')).toEqual([]);
+		const parents = await fkParentTables(db, 'page_jsonld');
+		expect(parents.has('content_items')).toBe(true);
+	});
+
+	it('drops legacy analysis_violations / analysis_text_refs together with their rows', async () => {
+		await seedPageAndContentItem(db, 1, 'https://example.com/');
+		await db('analysis_text_refs').insert({ id: 1, text: 'msg', sha256: 'x'.repeat(64) });
+		await db('analysis_violations').insert({
+			page_id: 1,
+			validator: 'axe',
+			severity: 'error',
+			rule: 'label',
+			message_text_id: 1,
+			page_url_sort_key: 'https://example.com/',
+			message_sort_key: 'msg',
+			code_sort_key: '',
+		});
+
+		await db.transaction(async (trx) => {
+			await retargetLegacyFkTables(trx);
+		});
+
+		expect(await db.schema.hasTable('analysis_violations')).toBe(false);
+		expect(await db.schema.hasTable('analysis_text_refs')).toBe(false);
+	});
+
+	it('succeeds when the legacy analysis tables are absent', async () => {
 		await db.raw('DROP TABLE "analysis_violations"');
 		await db.raw('DROP TABLE "analysis_text_refs"');
 		await db.transaction(async (trx) => {
 			await retargetLegacyFkTables(trx);
 		});
-		expect(await db.schema.hasTable('analysis_violations')).toBe(true);
-		expect(await db('analysis_violations').select('*')).toEqual([]);
-		const parents = await fkParentTables(db, 'analysis_violations');
-		expect(parents.has('content_items')).toBe(true);
+		expect(await db.schema.hasTable('analysis_violations')).toBe(false);
 	});
 
 	it('aborts when a staged row references an id with no content_items twin', async () => {
@@ -191,9 +201,9 @@ describe('retargetLegacyFkTables', () => {
 		).rejects.toThrow(/FOREIGN KEY constraint failed/);
 	});
 
-	it('aborts when a staged table is missing a column outside the nullable-on-retarget allowlist', async () => {
-		// Unlike analysis_violations.line/col, this column loss is not on the
-		// allowlist — it must still fail loudly rather than silently null-fill.
+	it('aborts when a staged table is missing a canonical column', async () => {
+		// A column the canonical DDL has but the staged table lacks must fail
+		// loudly rather than silently null-fill.
 		await db.raw('ALTER TABLE page_errors DROP COLUMN "createdAt"');
 		await seedPageAndContentItem(db, 1, 'https://example.com/');
 		await db('page_errors').insert({ pageId: 1, phase: 'render', message: 'boom' });

@@ -4,8 +4,8 @@ import { pathExists } from './path-exists.js';
 
 /**
  * Remove an entire archive cache root, including every tar-cache entry and
- * any sibling directory living under it (e.g. the `@nitpicker/core` analyze
- * `table` cache, which is resolved as a child of the same root).
+ * any sibling directory living under it (e.g. a leftover `table` scratch
+ * directory from an earlier version).
  *
  * Pure: takes `cacheRoot` as a parameter and never resolves it itself, so
  * tests can point it at a throwaway directory instead of the real OS temp

@@ -36,15 +36,13 @@ npx @nitpicker/cli split site.nitpicker https://example.com/blog/ https://exampl
 
 ## 引き継がれるもの・引き継がれないもの
 
-- 引き継ぐ: 維持されるページに紐づく分析結果、`--inventory`/`--recrawl` の投入済み URL リスト、テンプレートの名前（再分類時の名前の継承元になる）
-- 引き継がない: `analyze` プラグインが書き込む名前空間データ。完了後にメッセージで再実行を案内します
+- 引き継ぐ: `--inventory`/`--recrawl` の投入済み URL リスト、テンプレートの名前（再分類時の名前の継承元になる）
 - ページのテンプレート分類は抽出後のページで再実行されます（元のクラスタは元アーカイブ全体で計算されたもので、抽出後の構成とは一致しないため）。`--skip-templates` でスキップできます
 - viewer read model は常に無条件で再構築されます
 
 ## 後続の作業
 
 - 指定したスコープが元のアーカイブの roots より広い場合、元では未取得の外部リンクとして記録されていたページが新スコープ内に入ることがあります。取得したい場合: `npx @nitpicker/cli crawl <out> --append <root>`
-- analyze の結果が必要: `npx @nitpicker/cli analyze <out>`
 - テンプレート分類または read model の再構築に失敗した場合: `npx @nitpicker/cli viewer-build <out>`
 
 ## オプション一覧

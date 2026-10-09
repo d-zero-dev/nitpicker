@@ -2,7 +2,6 @@ import type { CreateSheet } from './types.js';
 import type { StepContext, TaskListPipeline } from '@d-zero/dealer';
 import type { ErrorHandlerMessage, Sheets } from '@d-zero/google-sheets';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
-import type { Report } from '@nitpicker/types';
 
 import { TaskList } from '@d-zero/dealer';
 import { requireViewerReadModel } from '@nitpicker/query';
@@ -30,8 +29,6 @@ export interface CreateSheetsParams {
 	readonly sheets: Sheets;
 	/** アーカイブへの read-only アクセサ */
 	readonly accessor: ArchiveAccessor;
-	/** 監査プラグインのレポート配列 */
-	readonly reports: Report[];
 	/**
 	 * シート設定のファクトリ関数配列。**配列の順序がそのままセル予算の優先順位になる**
 	 * — 呼び出し元（`report.ts`）がユーザー選択をこの優先順位で並べ替えてから渡す。
@@ -127,7 +124,7 @@ export interface CreateSheetsParams {
  * @param params - シート作成に必要なパラメータ
  */
 export async function createSheets(params: CreateSheetsParams) {
-	const { sheets, accessor, reports, createSheetList, options } = params;
+	const { sheets, accessor, createSheetList, options } = params;
 	if (!createSheetList) {
 		sheetLog('createSheetList is empty');
 		return;
@@ -136,7 +133,7 @@ export async function createSheets(params: CreateSheetsParams) {
 
 	sheetLog('Initializing %d sheet setting(s)', createSheetList.length);
 	const settings = await Promise.all(
-		createSheetList.map((createSheet) => createSheet(reports, accessor)),
+		createSheetList.map((createSheet) => createSheet(accessor)),
 	);
 	sheetLog(
 		'Sheet settings initialized: %O',

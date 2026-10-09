@@ -1,6 +1,5 @@
 import type { Sheet } from '@d-zero/google-sheets';
 import type { ArchiveAccessor } from '@nitpicker/crawler';
-import type { Report } from '@nitpicker/types';
 import type { sheets_v4 } from 'googleapis';
 
 /** A value that may be synchronous or wrapped in a Promise. */
@@ -79,7 +78,7 @@ export interface CreateSheetSetting {
 	 * `viewer_anchor_facts`, `viewer_images`, etc.) — `report.ts` only calls
 	 * `requireViewerReadModel` once, up front, when at least one selected
 	 * sheet sets this. Sheets that read only write-model tables (Links,
-	 * Resources, Violations) must leave this `false`/omitted so a report
+	 * Resources) must leave this `false`/omitted so a report
 	 * limited to those sheets never requires a `viewer-build` run. Defaults
 	 * to `false`.
 	 */
@@ -112,12 +111,11 @@ export interface CreateSheetSetting {
 /**
  * Factory function that produces a {@link CreateSheetSetting} for one sheet.
  *
- * Receives the analyze plugin reports (for sheets like "Violations" or
- * "Discrepancies" that incorporate plugin data) and the archive accessor
- * (for `run()`/`estimateRowCount()` to query against).
+ * Receives the archive accessor (for `run()`/`estimateRowCount()` to query
+ * against).
  * @example
  * ```ts
- * const createMySheet: CreateSheet = (reports, accessor) => ({
+ * const createMySheet: CreateSheet = (accessor) => ({
  *   name: 'My Sheet',
  *   createHeaders: () => ['URL', 'Title'],
  *   estimateRowCount: async () => (await listViewerPages(accessor, { limit: 1 })).total,
@@ -143,7 +141,4 @@ export interface CreateSheetSetting {
  * });
  * ```
  */
-export type CreateSheet = (
-	reports: Report[],
-	accessor: ArchiveAccessor,
-) => Promiseable<CreateSheetSetting>;
+export type CreateSheet = (accessor: ArchiveAccessor) => Promiseable<CreateSheetSetting>;

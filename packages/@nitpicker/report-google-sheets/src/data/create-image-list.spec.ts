@@ -65,13 +65,13 @@ describe('createImageList', () => {
 	});
 
 	it('returns sheet config with name "Images" and requiresReadModel', () => {
-		const setting = createImageList()([], NO_ACCESSOR);
+		const setting = createImageList()(NO_ACCESSOR);
 		expect(setting.name).toBe('Images');
 		expect(setting.requiresReadModel).toBe(true);
 	});
 
 	it('returns correct headers, with DOM Path replacing Source Code', () => {
-		const setting = createImageList()([], NO_ACCESSOR);
+		const setting = createImageList()(NO_ACCESSOR);
 		expect(setting.createHeaders()).toEqual([
 			'Page URL',
 			'Image path (src)',
@@ -85,7 +85,7 @@ describe('createImageList', () => {
 	});
 
 	it('estimates the row count via a plain image_items COUNT(*)', async () => {
-		const setting = createImageList()([], makeAccessor(7));
+		const setting = createImageList()(makeAccessor(7));
 		await expect(setting.estimateRowCount()).resolves.toBe(7);
 	});
 
@@ -109,7 +109,7 @@ describe('createImageList', () => {
 			]),
 		);
 
-		const setting = createImageList()([], NO_ACCESSOR);
+		const setting = createImageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -131,7 +131,7 @@ describe('createImageList', () => {
 		const accessor = makeAccessor(4);
 		vi.mocked(streamAllImages).mockReturnValueOnce(oneChunk([]));
 		const urls = ['https://example.com/a'];
-		const setting = createImageList({ urls })([], accessor);
+		const setting = createImageList({ urls })(accessor);
 
 		await expect(setting.estimateRowCount()).resolves.toBe(4);
 		expect(applyEqualityOrInFilter).toHaveBeenCalledWith(
@@ -158,7 +158,7 @@ describe('createImageList', () => {
 			]),
 		);
 
-		const setting = createImageList()([], NO_ACCESSOR);
+		const setting = createImageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,

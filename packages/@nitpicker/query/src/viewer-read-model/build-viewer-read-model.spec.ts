@@ -1106,7 +1106,6 @@ describe('buildViewerReadModel', () => {
 			await buildViewerReadModel(archive, { onPhase: (phase) => phases.push(phase) });
 
 			expect(phases).toEqual([
-				'backfillingAnalysisViolations',
 				'backfillingBodyHash',
 				'backfillingAliasOfId',
 				'backfillingDedupeCapEventId',

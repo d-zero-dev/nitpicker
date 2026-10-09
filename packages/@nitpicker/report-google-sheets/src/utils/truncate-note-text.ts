@@ -4,7 +4,7 @@ import { NOTE_MAX_LENGTH } from './join-urls-for-note.js';
  * Truncates an arbitrary, already-built note string to `maxLength`,
  * appending a truncation marker when truncation actually happens. Sibling
  * to {@link joinUrlsForNote} for note content that isn't a list of URLs (a
- * page title, a JSON blob, a plugin-supplied free-text note) — both share
+ * page title, a JSON blob) — both share
  * the same {@link NOTE_MAX_LENGTH} ceiling so every note this package
  * writes stays under `Cell.provide()`'s hard cut (see `NOTE_MAX_LENGTH`'s
  * docs).

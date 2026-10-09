@@ -69,27 +69,6 @@ export type PagesFilter = Omit<
 };
 
 /**
- * Analysis violation entry, mirroring the API response shape.
- *
- * Defined here because `@nitpicker/query` keeps `ViolationEntry` internal
- * (not exported from its public surface).
- */
-export interface ViolationEntry {
-	/** The page URL. */
-	url: string;
-	/** The validator that produced this violation (axe, markuplint, etc.). */
-	validator: string;
-	/** The severity level. */
-	severity: string;
-	/** The rule ID. */
-	rule: string;
-	/** The violation message. */
-	message: string;
-	/** The source code snippet or element selector. */
-	code: string;
-}
-
-/**
  * Result of querying which pages reference a resource.
  *
  * Mirrors the API response (`@nitpicker/query` keeps this type internal).

@@ -2,7 +2,6 @@ import { parseCli } from '@d-zero/roar';
 
 import pkg from '../package.json' with { type: 'json' };
 
-import { commandDef as analyzeDef } from './commands/analyze-def.js';
 import { commandDef as cacheDef } from './commands/cache-def.js';
 import { commandDef as concatDef } from './commands/concat-def.js';
 import { commandDef as crawlDef } from './commands/crawl-def.js';
@@ -25,7 +24,6 @@ const cli = parseCli({
 	version: pkg.version,
 	commands: {
 		crawl: crawlDef,
-		analyze: analyzeDef,
 		report: reportDef,
 		pipeline: pipelineDef,
 		query: queryDef,
@@ -43,20 +41,14 @@ try {
 	// command actually invoked (issue #294) — `commandDef`s above are
 	// imported eagerly (lightweight flag/usage metadata, needed for every
 	// command's `--help`), but the implementations pull in the bulk of this
-	// CLI's dependency tree (puppeteer, every `@nitpicker/analyze-*` plugin,
-	// the Google Sheets auth stack, the React/jsdom-backed viewer server) —
-	// loading all ten unconditionally on every invocation added several
+	// CLI's dependency tree (puppeteer, the Google Sheets auth stack, the React/jsdom-backed viewer server) —
+	// loading all nine unconditionally on every invocation added several
 	// seconds before the first byte of output, regardless of which single
 	// command was actually run.
 	switch (cli.command) {
 		case 'crawl': {
 			const { crawl } = await import('./commands/crawl.js');
 			await crawl(cli.args, cli.flags);
-			break;
-		}
-		case 'analyze': {
-			const { analyze } = await import('./commands/analyze.js');
-			await analyze(cli.args, cli.flags);
 			break;
 		}
 		case 'report': {

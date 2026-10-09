@@ -2,12 +2,12 @@ import type { CreateSheet } from '../sheets/types.js';
 
 import { streamResourceReferrerEdges } from '@nitpicker/query';
 
-import { pLog } from '../debug.js';
+import { sheetLog } from '../debug.js';
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { booleanFormatError } from '../sheets/format.js';
 
-const log = pLog.extend('ResourcesRelationalTable');
+const log = sheetLog.extend('ResourcesRelationalTable');
 
 /**
  * Creates the "Resources Relational Table" sheet configuration.
@@ -25,10 +25,9 @@ const log = pLog.extend('ResourcesRelationalTable');
  * model), the same table `resource.getReferrers()` ultimately queried
  * pre-rewrite — this sheet replaces that per-resource N+1 query pattern
  * with one streamed scan.
- * @param _reports
  * @param accessor
  */
-export const createResourcesRelationalTable: CreateSheet = (_reports, accessor) => {
+export const createResourcesRelationalTable: CreateSheet = (accessor) => {
 	return {
 		name: 'Resources Relational Table',
 		createHeaders() {

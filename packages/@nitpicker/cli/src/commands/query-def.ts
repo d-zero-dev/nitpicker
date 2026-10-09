@@ -162,21 +162,6 @@ export const commandDef = {
 			type: 'number',
 			desc: 'Filter to images exceeding this dimension threshold',
 		},
-		validator: {
-			type: 'string',
-			valueName: 'name',
-			desc: 'Filter by validator name (e.g. axe, markuplint)',
-		},
-		severity: {
-			type: 'string',
-			valueName: 'level',
-			desc: 'Filter by severity level',
-		},
-		rule: {
-			type: 'string',
-			valueName: 'id',
-			desc: 'Filter by rule ID',
-		},
 		field: {
 			type: 'string',
 			valueName: 'title|description',
@@ -325,12 +310,12 @@ export const commandDef = {
 			flags: ['isExternal', 'sortBy', 'sortOrder', 'limit', 'offset'],
 		},
 		'search-html': {
-			desc: 'Search the stored HTML snapshots of all pages for a string or /regex/ (raw markup incl. <script>, <style> and attributes; no analyze step needed)',
+			desc: 'Search the stored HTML snapshots of all pages for a string or /regex/ (raw markup incl. <script>, <style> and attributes)',
 			usage: '<file> search-html --pattern <string|/regex/flags> [options]',
 			flags: ['pattern', 'urlPattern', 'directory', 'snippetLength', 'limit', 'offset'],
 		},
 		'match-selector': {
-			desc: 'List pages whose stored HTML snapshot has an element matching a CSS selector (single-pass subset: no sibling combinators, :last-child or :has(); no analyze step needed)',
+			desc: 'List pages whose stored HTML snapshot has an element matching a CSS selector (single-pass subset: no sibling combinators, :last-child or :has())',
 			usage: "<file> match-selector --selector '<css>' [options]",
 			flags: ['selector', 'urlPattern', 'directory', 'limit', 'offset'],
 		},
@@ -342,20 +327,6 @@ export const commandDef = {
 				'missingDimensions',
 				'oversizedThreshold',
 				'urlPattern',
-				'limit',
-				'offset',
-			],
-		},
-		violations: {
-			desc: 'List validator violations (axe, markuplint, …)',
-			usage: '<file> violations [options]',
-			flags: [
-				'validator',
-				'severity',
-				'rule',
-				'urlPattern',
-				'sortBy',
-				'sortOrder',
 				'limit',
 				'offset',
 			],

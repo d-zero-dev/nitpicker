@@ -61,7 +61,7 @@ yarn lint:check
 
 ```
 feat(crawler): add retry logic for failed requests
-fix(core): prevent analyze results from being silently empty
+fix(query): prevent summary counts from being silently empty
 docs: update README with new CLI options
 ```
 
@@ -86,16 +86,6 @@ docs: update README with new CLI options
 
 - **1関数1ファイルにはユニットテスト必須**
 - **テストファーストを推奨**: バグ修正や明確な仕様の機能追加では、実装より先にテスト
-
-### analyze プラグイン
-
-- `console.log` を使わない（`Lanes` が進捗表示を担当）
-- `definePlugin()` でプラグインを定義
-- `eachPage` / `eachUrl` コールバックでページ単位の分析を実装
-- **`concurrency` の宣言**: プラグインが返すオブジェクトに `concurrency: number` を含めると、`Nitpicker` が生成する専用 `WorkerPool` のサイズに使われる。省略時は `os.cpus().length`
-  - **重いプラグイン（Chrome 起動・大規模パース等）は小さく**: 例: Chrome を起動するプラグインは小さい `concurrency` にする。Chrome 1 プロセス ≒ 300〜500MB あるため CPU コア数並列だと簡単に数十 GB 消費する
-  - **軽量な DOM 解析のみは省略可**: JSDOM 単体なら CPU コア数並列でほぼ問題ない。`analyze-search` 等は宣言不要
-  - **判断基準**: 1 ページ処理時のメモリ消費 × 並列度 が 1〜2GB を超える見込みなら明示的に下げる
 
 ### Google Sheets レポートシート
 

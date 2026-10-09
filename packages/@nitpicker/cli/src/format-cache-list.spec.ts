@@ -21,9 +21,9 @@ describe('formatCacheList', () => {
 				mtimeMs: Date.parse('2026-07-20T03:11:02.000Z'),
 			},
 			{
-				kind: 'table',
-				name: 'table',
-				path: '/tmp/nitpicker/cache/table',
+				kind: 'orphan',
+				name: '.staging',
+				path: '/tmp/nitpicker/cache/.staging',
 				sizeBytes: 2048,
 				mtimeMs: Date.parse('2026-07-24T09:00:00.000Z'),
 			},
@@ -35,7 +35,7 @@ describe('formatCacheList', () => {
 		expect(output).toContain('tar-cache');
 		expect(output).toContain('12345-abcd-example');
 		expect(output).toContain('2026-07-20T03:11:02.000Z');
-		expect(output).toContain('table');
+		expect(output).toContain('.staging');
 		expect(output).toContain('2026-07-24T09:00:00.000Z');
 		expect(output).toContain('Total: 3.0 KB across 2 entries');
 	});

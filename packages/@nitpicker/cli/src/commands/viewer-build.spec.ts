@@ -260,13 +260,13 @@ describe('viewerBuild command', () => {
 		expect(process.exitCode).toBe(2);
 	});
 
-	it('renders all 22 full-build phases as individual rows when --force is passed (issue #294)', async () => {
+	it('renders all 21 full-build phases as individual rows when --force is passed (issue #294)', async () => {
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
 
 		const output = renderedOutput();
 		for (const label of [
-			'Backfilling analysis violations',
+			'Backfilling page content hashes',
 			'Computing summary',
 			'Building pages',
 			'Building anchor facts',
@@ -307,7 +307,7 @@ describe('viewerBuild command', () => {
 
 	it('reports phase changes via the row message (issue #294)', async () => {
 		// Default mockBuildViewerReadModelInWorker already drives the full
-		// 22-phase sequence (including 'buildingAnchorFacts') to completion.
+		// 21-phase sequence (including 'buildingAnchorFacts') to completion.
 		const { viewerBuild } = await import('./viewer-build.js');
 		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
 
@@ -414,7 +414,7 @@ describe('viewerBuild command', () => {
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
 		// `openPluginData: true` — otherwise `write()` below would silently
-		// drop any non-`db.sqlite` tar entry (analyze output, a saved
+		// drop any non-`db.sqlite` tar entry (a saved
 		// inventory list) from the archive (issue #99 regression guard).
 		expect(mockArchiveOpen).toHaveBeenCalledWith({
 			filePath: '/tmp/existing.nitpicker',

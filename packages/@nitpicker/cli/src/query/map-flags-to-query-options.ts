@@ -255,25 +255,6 @@ export function mapFlagsToQueryOptions(
 				offset: flags.offset,
 			};
 		}
-		case 'violations': {
-			return {
-				validator: flags.validator,
-				severity: flags.severity,
-				rule: flags.rule,
-				urlPattern: flags.urlPattern,
-				sortBy: flags.sortBy as
-					| 'url'
-					| 'validator'
-					| 'severity'
-					| 'rule'
-					| 'message'
-					| 'code'
-					| undefined,
-				sortOrder: flags.sortOrder as 'asc' | 'desc' | undefined,
-				limit: flags.limit,
-				offset: flags.offset,
-			};
-		}
 		case 'duplicates': {
 			if (flags.field != null && !['title', 'description'].includes(flags.field)) {
 				throw new Error(

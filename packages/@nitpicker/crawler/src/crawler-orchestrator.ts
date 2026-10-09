@@ -1999,13 +1999,10 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 	 * "un-picked seeds" recovery contract `getCrawlingState`'s JSDoc already
 	 * documents for `inventory`.
 	 *
-	 * **Stale analyze findings**: resetting a page deletes its
-	 * `analysis_violations` rows (see {@link resetPagesByUrls}'s JSDoc) so a
-	 * re-fetched page never shows findings from HTML that no longer exists,
-	 * but other `analyze` outputs (e.g. Discrepancies plugin reports) are not
-	 * page-scoped and cannot be selectively invalidated. When at least one
-	 * page was reset, a `crawlSessionNotice` is emitted after the crawl
-	 * completes recommending `analyze` be re-run before the next `report`.
+	 * **Stale legacy findings**: resetting a page deletes its rows in the
+	 * legacy `analysis_violations` table when the archive still carries one
+	 * (see {@link resetPagesByUrls}'s JSDoc), so a re-fetched page never keeps
+	 * findings from HTML that no longer exists.
 	 * @param archivePath - Absolute or relative path to the existing `.nitpicker`.
 	 * @param recrawlUrls - URLs to match against the archive (existing pages
 	 *   are reset; unknown URLs are ingested as new inventory seeds).
@@ -2265,11 +2262,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					await CrawlerOrchestrator.#preloadDnsBurnedHostCache(archive);
 					await orchestrator.#crawlUntilPendingClears([], { recursive: true });
 					CrawlerOrchestrator.#finalizeCrawlSession(orchestrator);
-					if (resetResult.resetUrls.length > 0) {
-						void orchestrator.emit('crawlSessionNotice', {
-							message: `[recrawl] Reset ${resetResult.resetUrls.length} page(s) — run \`analyze\` before \`report\` to refresh their findings.`,
-						});
-					}
 					await orchestrator.#setUrlOrder();
 					return orchestrator;
 				}

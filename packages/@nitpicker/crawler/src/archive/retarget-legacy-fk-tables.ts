@@ -18,35 +18,23 @@ import { convertLegacyPageTagsToInserts } from './meta/technologies/convert-lega
  * `page_technologies`). {@link retargetLegacyFkTables} handles it as a
  * special case: convert its rows, then drop it outright rather than
  * recreating it. See that function's JSDoc.
+ *
+ * `analysis_violations` / `analysis_text_refs` are likewise not listed: the
+ * current schema has no equivalent, so {@link retargetLegacyFkTables} drops
+ * them (and their rows) instead of retargeting.
  */
 const RETARGET_TABLES: readonly string[] = [
 	'page_html_ref',
 	'page_jsonld',
 	'page_errors',
-	'analysis_violations',
 ];
 
 /**
- * Canonical columns that a staged (pre-migration) table may legitimately
- * lack because {@link createAdjunctTables}'s DDL gained them after the
- * table was first lazily provisioned on the input archive (`analysis_violations`
- * predates its `line`/`col` columns — issue #225). Missing columns listed
- * here are copied back as `NULL` instead of aborting the migration; this is
- * safe only because the column did not exist when the staged data was
- * written, so `NULL` is the only value it could ever have had. Any other
- * canonical column absent from the staged table still aborts the copy (see
- * {@link retargetLegacyFkTables} JSDoc) — that case must stay loud, since a
- * genuine rename/drop cannot be told apart from benign schema growth by
- * column existence alone.
- */
-const NULLABLE_ON_RETARGET: Readonly<Record<string, readonly string[]>> = {
-	analysis_violations: ['line', 'col'],
-};
-
-/**
  * Rewrites the FK declarations of the adjunct tables from the legacy
- * `pages(id)` to `content_items(id)` by rebuilding each table, AND converts
- * `page_tags` (if present) into `technology_signals` / `page_technologies`.
+ * `pages(id)` to `content_items(id)` by rebuilding each table, converts
+ * `page_tags` (if present) into `technology_signals` / `page_technologies`,
+ * AND drops the legacy `analysis_violations` / `analysis_text_refs` tables
+ * (analyze output that that no reader or writer uses).
  * SQLite has no `ALTER TABLE … DROP CONSTRAINT`, so the only way to change
  * an FK target is to recreate the table:
  *
@@ -82,9 +70,8 @@ const NULLABLE_ON_RETARGET: Readonly<Record<string, readonly string[]>> = {
  * dropping them first would require enumerating unknown names. The
  * copy-out is cheap at these tables' scale (a handful of rows per page).
  *
- * Adjunct tables that do not exist on the input archive (e.g. a 0.10
- * archive that never ran `analyze`, so `analysis_violations` was never
- * lazily provisioned) are simply created empty by step 2.
+ * Adjunct tables that do not exist on the input archive are simply created
+ * empty by step 2.
  *
  * The migrated-archive PK-preservation contract makes the copy safe:
  * `content_items.id` reuses the legacy `pages.id` values verbatim, so
@@ -102,6 +89,13 @@ const NULLABLE_ON_RETARGET: Readonly<Record<string, readonly string[]>> = {
  * // pragma_foreign_key_list('page_errors') now reports content_items.
  */
 export async function retargetLegacyFkTables(trx: Knex): Promise<void> {
+	// Legacy analyze output: no current-schema counterpart, so the rows are
+	// discarded. The child (`analysis_violations`, which references
+	// `analysis_text_refs`) goes first so the drop is legal under
+	// `PRAGMA foreign_keys = ON`.
+	await trx.raw('DROP TABLE IF EXISTS "analysis_violations"');
+	await trx.raw('DROP TABLE IF EXISTS "analysis_text_refs"');
+
 	const staged: string[] = [];
 	for (const table of RETARGET_TABLES) {
 		if (!(await trx.schema.hasTable(table))) {
@@ -137,21 +131,9 @@ export async function retargetLegacyFkTables(trx: Knex): Promise<void> {
 		const columns: { name: string }[] = await trx
 			.select('name')
 			.from(trx.raw('pragma_table_info(?)', [table]));
-		const stagedColumns: { name: string }[] = await trx
-			.select('name')
-			.from(trx.raw('pragma_table_info(?)', [`${table}__retarget`]));
-		const stagedColumnNames = new Set(stagedColumns.map((column) => column.name));
-		const nullableOnRetarget = NULLABLE_ON_RETARGET[table] ?? [];
 		const insertColumnList = columns.map((column) => `"${column.name}"`).join(', ');
-		const selectColumnList = columns
-			.map((column) =>
-				!stagedColumnNames.has(column.name) && nullableOnRetarget.includes(column.name)
-					? `NULL AS "${column.name}"`
-					: `"${column.name}"`,
-			)
-			.join(', ');
 		await trx.raw(
-			`INSERT INTO "${table}" (${insertColumnList}) SELECT ${selectColumnList} FROM "${table}__retarget"`,
+			`INSERT INTO "${table}" (${insertColumnList}) SELECT ${insertColumnList} FROM "${table}__retarget"`,
 		);
 		await trx.raw(`DROP TABLE "${table}__retarget"`);
 	}

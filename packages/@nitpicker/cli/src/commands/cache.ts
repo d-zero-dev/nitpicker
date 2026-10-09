@@ -30,8 +30,7 @@ type CacheSubCommand = (typeof VALID_SUB_COMMANDS)[number];
  * Main entry point for the `cache` CLI command.
  *
  * Lists or clears the on-disk caches shared by viewer / MCP / query CLI
- * (the tar-extraction cache under `getArchiveCacheRoot()`) and by the
- * `analyze` command (the sibling `table` cache). Does not touch the viewer
+ * (the tar-extraction cache under `getArchiveCacheRoot()`). Does not touch the viewer
  * read model (`viewer-build --force` owns that) or any in-process cache
  * (those die with their process).
  * @param args - Positional arguments; first is the sub-command
@@ -94,10 +93,9 @@ async function runList(cacheRoot: string, flags: CacheFlags): Promise<void> {
 /**
  * Implements `nitpicker cache clear [archive]`.
  *
- * With no `archiveArg`, removes the entire cache root (the tar-extraction
- * cache and the sibling `table` cache together). With `archiveArg`, removes
- * only that archive's tar-cache entry — the `table` cache is not
- * archive-scoped and is never touched by this branch.
+ * With no `archiveArg`, removes the entire cache root (every tar-extraction
+ * cache entry together). With `archiveArg`, removes only that archive's
+ * tar-cache entry; other archives' entries are never touched by this branch.
  * @param cacheRoot - Absolute path to the cache root.
  * @param archiveArg - Optional `.nitpicker` file path from the CLI args.
  */

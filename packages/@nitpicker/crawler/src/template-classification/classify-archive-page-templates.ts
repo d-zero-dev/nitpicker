@@ -23,9 +23,8 @@ const PAGE_BATCH_SIZE = 100_000;
  * This is the crawl-end derived-data step (alongside the JS-resource scan
  * and the viewer read-model build): the crawl command runs it before the
  * archive is written, and `viewer-build` / `concat` / `split` re-run it on
- * their archive. It is deliberately **not** an `AnalyzePlugin` — it is a
- * corpus-wide batch computation (template keys are only comparable within
- * one run), whereas plugins process one page at a time.
+ * their archive. It is a corpus-wide batch computation (template keys are
+ * only comparable within one run), not a per-page one.
  *
  * Every page is loaded before clustering starts and clustered **once**,
  * never per `getPagesWithRefs` batch: per-batch keys would only be

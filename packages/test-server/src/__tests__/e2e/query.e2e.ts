@@ -90,7 +90,7 @@ describe('query search-html / pages-by-resource / resource-hosts / links (e2e)',
 		await fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
 	});
 
-	it('search-html scans stored HTML without analyze and reports scan totals', async () => {
+	it('scans stored HTML and reports scan totals', async () => {
 		const { exitCode, stdout } = await runCli(
 			['query', FIXTURE, 'search-html', '--pattern', '/<html/i', '--limit', '0'],
 			cwd,

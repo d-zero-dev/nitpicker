@@ -31,6 +31,17 @@ describe('clearArchiveCacheRoot', () => {
 		await expect(fs.access(cacheRoot)).rejects.toThrow();
 	});
 
+	it('removes a leftover table scratch directory together with the files inside it', async () => {
+		const tableDir = path.join(cacheRoot, 'table');
+		await fs.mkdir(tableDir, { recursive: true });
+		await fs.writeFile(path.join(tableDir, 'leftover.sqlite'), 'x');
+
+		await clearArchiveCacheRoot(cacheRoot);
+
+		await expect(fs.access(tableDir)).rejects.toThrow();
+		await expect(fs.access(path.join(tableDir, 'leftover.sqlite'))).rejects.toThrow();
+	});
+
 	it('is idempotent — a second call returns false', async () => {
 		await fs.mkdir(cacheRoot, { recursive: true });
 

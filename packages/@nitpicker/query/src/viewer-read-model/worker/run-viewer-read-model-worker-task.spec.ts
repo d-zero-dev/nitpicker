@@ -2,7 +2,7 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Same tactic as @nitpicker/core's worker-pool.spec.ts: no real thread is
+// No real thread is
 // ever spawned — node:worker_threads is replaced with an EventEmitter-based
 // MockWorker so tests drive the protocol by emitting events. Actually
 // spawning the compiled entry is covered by the viewer-read-model-build e2e

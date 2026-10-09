@@ -29,7 +29,6 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			images: 'Images',
 			brokenLinks: 'Broken Links',
 			externalLinks: 'External Links',
-			violations: 'Violations',
 			duplicates: 'Duplicates',
 			crawlSuppression: 'Crawl Suppression',
 			mismatches: 'Mismatches',
@@ -343,18 +342,6 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				colStatus: 'Status',
 				colReferrers: 'Referrers',
 			},
-			violations: {
-				title: 'Violations',
-				description:
-					'Findings from analyze plugins (axe, markuplint, textlint). Filter by validator or severity.',
-				colSeverity: 'Severity',
-				colValidator: 'Validator',
-				colRule: 'Rule',
-				colMessage: 'Message',
-				colUrl: 'URL',
-				filterValidator: 'Validator (axe, markuplint…)',
-				filterSeverity: 'Severity',
-			},
 			duplicates: {
 				title: 'Duplicates',
 				description: 'Groups of pages that share the same title or description.',
@@ -389,7 +376,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			errors: {
 				title: 'Connection Failures',
 				description:
-					'Hosts that never returned an HTTP response — DNS resolution, TLS, connection, or timeout failures — grouped by host, cause, and attribution. Unlike Violations / Duplicates / Mismatches, these pages were never reached at all. This is a historical log: counts here do NOT decrease after `crawl --retry-failed` recovers a page — see the Summary view for the current outstanding-failure count instead.',
+					'Hosts that never returned an HTTP response — DNS resolution, TLS, connection, or timeout failures — grouped by host, cause, and attribution. Unlike Duplicates / Mismatches, these pages were never reached at all. This is a historical log: counts here do NOT decrease after `crawl --retry-failed` recovers a page — see the Summary view for the current outstanding-failure count instead.',
 				total: '{total} failure records',
 				channelSource: 'DNS / connection / TLS source: {source}',
 				host: 'Host',
@@ -576,7 +563,6 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			images: '画像',
 			brokenLinks: 'リンク切れ',
 			externalLinks: '外部リンク',
-			violations: '違反',
 			duplicates: '重複',
 			crawlSuppression: 'クロール抑制',
 			mismatches: '不一致',
@@ -890,18 +876,6 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 				colStatus: 'ステータス',
 				colReferrers: '参照元数',
 			},
-			violations: {
-				title: '違反',
-				description:
-					'analyze プラグイン（axe・markuplint・textlint）の検出結果。バリデータや重要度で絞り込めます。',
-				colSeverity: '重要度',
-				colValidator: 'バリデータ',
-				colRule: 'ルール',
-				colMessage: 'メッセージ',
-				colUrl: 'URL',
-				filterValidator: 'バリデータ（axe, markuplint…）',
-				filterSeverity: '重要度',
-			},
 			duplicates: {
 				title: '重複',
 				description: '同じタイトルまたは説明を共有するページのグループ。',
@@ -936,7 +910,7 @@ export const translations: Record<Locale, Record<string, unknown>> = {
 			errors: {
 				title: '接続障害',
 				description:
-					'HTTPレスポンス自体が得られなかったホスト（DNS未解決・TLS失敗・接続拒否・タイムアウト）を、ホスト・原因・判定別に一覧化します。違反・重複・不一致とは異なり、これらのページはそもそも到達できていません。この画面は履歴ログであり、`crawl --retry-failed` でページが回復しても件数は減りません — 現在の未回収件数はサマリー画面を参照してください。',
+					'HTTPレスポンス自体が得られなかったホスト（DNS未解決・TLS失敗・接続拒否・タイムアウト）を、ホスト・原因・判定別に一覧化します。重複・不一致とは異なり、これらのページはそもそも到達できていません。この画面は履歴ログであり、`crawl --retry-failed` でページが回復しても件数は減りません — 現在の未回収件数はサマリー画面を参照してください。',
 				total: '失敗レコード {total} 件',
 				channelSource: 'DNS / 接続 / TLS の取得元: {source}',
 				host: 'ホスト',

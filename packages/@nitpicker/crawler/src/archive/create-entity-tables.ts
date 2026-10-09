@@ -48,7 +48,7 @@ import type { Knex } from 'knex';
  * entity PKs (`content_items` / `resource_items` / `anchor_edges` /
  * `image_items`) to match the legacy contract (`t.increments()` on
  * `pages` / `resources` / `anchors` / `images`) — this prevents rowid
- * reuse after DELETE, so external systems (analysis outputs, viewer
+ * reuse after DELETE, so external systems (viewer
  * bookmarks, Sheets exports) keyed on `content_item.id` cannot be
  * silently reassigned to a different record.
  *

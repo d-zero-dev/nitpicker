@@ -1,6 +1,6 @@
 # Nitpicker - AI Agent Guide
 
-Nitpicker は Web サイト全体をヘッドレスブラウザでクロールし、メタデータ・リンク構造・リソース・HTML スナップショットを `.nitpicker` アーカイブ（tar + SQLite）に保存するクローラー＋監査ツール。保存したアーカイブに analyze プラグインを実行し、Google Sheets レポートやローカルビューアで確認できる。Lerna + Yarn Workspaces のモノレポ（`@nitpicker/*` + test-server）。
+Nitpicker は Web サイト全体をヘッドレスブラウザでクロールし、メタデータ・リンク構造・リソース・HTML スナップショットを `.nitpicker` アーカイブ（tar + SQLite）に保存するクローラー＋監査ツール。保存したアーカイブを Google Sheets レポートやローカルビューアで確認できる。Lerna + Yarn Workspaces のモノレポ（`@nitpicker/*` + test-server）。
 
 ## 実装把握の入口
 
@@ -19,20 +19,19 @@ npx @nitpicker/cli crawl <archive> --append <URL>      # 既存アーカイブ�
 npx @nitpicker/cli crawl <archive> --retry-failed      # 失敗ページのみ再取得（永続失敗は自動除外）
 npx @nitpicker/cli crawl <archive> --inventory <urls.txt>  # URL リストとの突合で未発見ページを取り込み
 npx @nitpicker/cli crawl <archive> --recrawl <urls.txt>    # URL リストの既存ページを再取得＋未発見ページを取り込み
-npx @nitpicker/cli analyze <file>                      # analyze プラグイン実行
 npx @nitpicker/cli report <file>                       # Google Sheets レポート生成
 npx @nitpicker/cli report <file> -H                    # viewer サマリ + inner ページ一覧の静的HTML生成
 npx @nitpicker/cli report <file> -H --urls <urls.txt>  # URL リストに一致するページのみレポート（--html-dirs と AND 併用可）
-npx @nitpicker/cli pipeline <URL>                      # crawl → analyze → report を直列実行
+npx @nitpicker/cli pipeline <URL>                      # crawl → report を直列実行
 npx @nitpicker/cli query <file> <sub-command>          # アーカイブへのクエリ（JSON 出力）
 npx @nitpicker/cli query <file> match-urls --urls <urls.txt>  # URL リストとアーカイブの突合結果を診断（未収録/redirect/対象外を判別）
-npx @nitpicker/cli query <file> search-html --pattern <str|/re/flags>  # 保存済み HTML の文字列/正規表現検索（analyze 不要・書き込みなし。まず --limit 0 で total 確認）
+npx @nitpicker/cli query <file> search-html --pattern <str|/re/flags>  # 保存済み HTML の文字列/正規表現検索（書き込みなし。まず --limit 0 で total 確認）
 npx @nitpicker/cli query <file> match-selector --selector '<css>'  # 保存済み HTML に CSS セレクタ一致要素を持つページを列挙（DOM を作らない。+ ~ :last-child :has() は非対応でエラー。まず --limit 0 で total 確認）
 npx @nitpicker/cli query <file> pages-by-resource --contentTypeCategory font  # 条件に一致するリソース（フォント等）を読み込むページを逆引き（本文は未保存なので判定は取得済みファイルの URL/MIME）
 npx @nitpicker/cli query <file> resource-hosts --isExternal  # リソースのホスト別集計（サードパーティ依存の棚卸し）
 npx @nitpicker/cli viewer <file-or-stub-dir>           # ローカルビューア起動（常駐、Ctrl-C で停止）
 npx @nitpicker/cli viewer-build <archive> [--force]    # viewer read model を明示的に(再)ビルド + ページのテンプレート分類（--skip-templates で分類を省略）
-npx @nitpicker/cli cache list [--json]                 # on-disk キャッシュ一覧（tar展開キャッシュ＋analyze table、サイズ・最終更新日時）
+npx @nitpicker/cli cache list [--json]                 # on-disk キャッシュ一覧（tar展開キャッシュ、サイズ・最終更新日時）
 npx @nitpicker/cli cache clear [archive]               # on-disk キャッシュ全削除、または指定アーカイブのみ削除
 npx @nitpicker/cli concat <a> <b> [...] -o <out>       # 複数アーカイブを結合（roots 和集合、同一 URL は最も情報量の多い観測を採用。再クロール・再昇格はしない。テンプレート分類は出力で再実行）
 npx @nitpicker/cli split <archive> <URL> [...] -o <out> # 指定スコープ配下だけを新アーカイブに抽出（範囲外の被参照ページは external stub 化。テンプレート分類は出力で再実行）
@@ -98,7 +97,7 @@ yarn lint                                          # lint + prettier + cspell
 
 - `import { describe, it, expect } from 'vitest'` を明示（Vitest 4 の要件）
 - `@d-zero/shared` はサブパスエクスポート形式（`@d-zero/shared/delay`）
-- analyze プラグインで `console.log` を使わない（進捗表示は `Lanes`）
+- CLI の進捗表示は `console.log` ではなく `Lanes` を使う
 - 禁止パターン（decorator / `Promise.race` の timer 放置 / 派生文字列を作る sort 等）は ARCHITECTURE.md の「不変条件・負の知識」を正とする
 
 ## セキュリティ

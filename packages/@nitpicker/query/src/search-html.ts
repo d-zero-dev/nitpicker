@@ -39,12 +39,10 @@ function buildSnippet(
 
 /**
  * Searches the stored HTML snapshots of every in-scope page for a string or
- * regular expression, without running any analyze plugin and without
- * writing to the archive.
+ * regular expression, without writing to the archive.
  *
  * The search runs against the raw markup that `getPageHtml` returns, so
- * `<script>`, `<style>`, inline `style` and every attribute are searchable —
- * unlike `@nitpicker/analyze-search`, which matches DOM text nodes only.
+ * `<script>`, `<style>`, inline `style` and every attribute are searchable.
  *
  * Design: the scan is `scanHtmlSnapshots` — a linear walk over the
  * **distinct hashes** of the in-scope pages that decompresses each snapshot

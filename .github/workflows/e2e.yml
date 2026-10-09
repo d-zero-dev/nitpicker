@@ -15,17 +15,11 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'packages/@nitpicker/analyze-axe/**'
-      - 'packages/@nitpicker/analyze-markuplint/**'
-      - 'packages/@nitpicker/analyze-search/**'
-      - 'packages/@nitpicker/analyze-textlint/**'
       - 'packages/@nitpicker/cli/**'
-      - 'packages/@nitpicker/core/**'
       - 'packages/@nitpicker/crawler/**'
       - 'packages/@nitpicker/query/**'
       - 'packages/@nitpicker/report-google-sheets/**'
       - 'packages/@nitpicker/report-html/**'
-      - 'packages/@nitpicker/types/**'
       - 'packages/@nitpicker/viewer/**'
       - 'packages/test-server/**'
       - 'vitest.e2e.config.ts'
@@ -155,12 +149,12 @@ jobs:
               [
                 append.e2e.ts,
                 parallel-and-interval.e2e.ts,
-                analyze-pipeline.e2e.ts,
                 error-status.e2e.ts,
                 js-redirect.e2e.ts,
                 cli-process-exit.e2e.ts,
                 cli-version.e2e.ts,
                 viewer-migrated-archive.e2e.ts,
+                legacy-analysis-archive.e2e.ts,
                 dedupe-cap.e2e.ts,
               ]
     steps:

@@ -29,7 +29,6 @@ import { formatCliError } from '../format-cli-error.js';
 import { appendBridgedPhaseRows } from '../transfer/append-bridged-phase-rows.js';
 import { cleanupFailedTransfer } from '../transfer/cleanup-failed-transfer.js';
 import { formatTransferNotices } from '../transfer/format-transfer-notices.js';
-import { listPluginDataEntries } from '../transfer/list-plugin-data-entries.js';
 import { resolveTransferExitCode } from '../transfer/resolve-transfer-exit-code.js';
 import { validateTransferInputPaths } from '../transfer/validate-transfer-input-paths.js';
 import { validateTransferOutputPath } from '../transfer/validate-transfer-output-path.js';
@@ -81,7 +80,7 @@ function buildConcatRowLabels(sourceCount: number): string[] {
  * destination (`releaseHandle()`, never `close()` — see that function's
  * docs for why) and removes the destination's tmpDir/output path before
  * exiting. On success, operator notices (in-scope-but-external pages,
- * dropped analyze plugin data, a template classification or read-model
+ * a template classification or read-model
  * build failure) print AFTER
  * the `TaskList` has fully settled, never while a row is still active.
  * @param args - Positional arguments: two or more `.nitpicker` archive paths.
@@ -123,14 +122,12 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 		sourceAccessors: ArchiveAccessor[];
 		destination: ArchiveType | null;
 		writeStarted: boolean;
-		pluginDataEntries: Set<string>;
 		readModelError: string | null;
 		templateClassificationError: string | null;
 	} = {
 		sourceAccessors: [],
 		destination: null,
 		writeStarted: false,
-		pluginDataEntries: new Set(),
 		readModelError: null,
 		templateClassificationError: null,
 	};
@@ -146,14 +143,10 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 				const reportProgress = dedupeProgressMessage((message) => ctx.progress(message));
 				const accessor = await Archive.openCached(
 					inputPath,
-					null,
 					(bytes, totalBytes) => reportProgress(formatByteProgress(bytes, totalBytes)),
 					reportProgress,
 				);
 				state.sourceAccessors.push(accessor);
-				for (const entry of await listPluginDataEntries(accessor.tmpDir)) {
-					state.pluginDataEntries.add(entry);
-				}
 			});
 		}
 
@@ -254,7 +247,6 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 			appendHintRoot: result.config.roots[0]!,
 			externalInScopeCount: result.externalInScopeCount,
 			pendingCount: pendingState.pending.length,
-			pluginDataEntries: [...state.pluginDataEntries],
 			readModelError: state.readModelError,
 			templateClassificationError: state.templateClassificationError,
 		};

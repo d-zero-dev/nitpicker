@@ -28,7 +28,6 @@ import {
 	getResourceReferrers,
 	getSummaryFastPath,
 	getTechnologyInventoryFastPath,
-	getViolations,
 	listConsoleLogs,
 	listDedupeCapEvents,
 	listDuplicateBodyClusters,
@@ -491,31 +490,6 @@ export function createServer() {
 					case 'list_images': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						return jsonResult(await getImagesFastPath(accessor, omit(args, 'archiveId')));
-					}
-					case 'get_violations': {
-						const accessor = manager.get(requireString(args, 'archiveId'));
-						return jsonResult(
-							await getViolations(accessor, {
-								validator: optionalString(args, 'validator'),
-								severity: optionalString(args, 'severity'),
-								rule: optionalString(args, 'rule'),
-								urlPattern: optionalString(args, 'urlPattern'),
-								sortBy: optionalString(args, 'sortBy') as
-									| 'url'
-									| 'validator'
-									| 'severity'
-									| 'rule'
-									| 'message'
-									| 'code'
-									| undefined,
-								sortOrder: optionalString(args, 'sortOrder') as
-									| 'asc'
-									| 'desc'
-									| undefined,
-								limit: optionalNumber(args, 'limit'),
-								offset: optionalNumber(args, 'offset'),
-							}),
-						);
 					}
 					case 'list_console_logs': {
 						const accessor = manager.get(requireString(args, 'archiveId'));

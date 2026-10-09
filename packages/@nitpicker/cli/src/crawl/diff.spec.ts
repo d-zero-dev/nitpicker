@@ -215,12 +215,10 @@ describe('diff', () => {
 
 		expect(Archive.openCached).toHaveBeenCalledWith(
 			'first.nitpicker',
-			null,
 			expect.any(Function),
 		);
 		expect(Archive.openCached).toHaveBeenCalledWith(
 			'second-b.nitpicker',
-			null,
 			expect.any(Function),
 		);
 	});

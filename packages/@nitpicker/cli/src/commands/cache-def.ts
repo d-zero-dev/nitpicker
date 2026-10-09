@@ -10,7 +10,7 @@ import type { CommandDef } from '@d-zero/roar';
  * the main entry point.
  */
 export const commandDef = {
-	desc: 'List or clear on-disk viewer caches (tar-extraction cache and the analyze table cache)',
+	desc: 'List or clear the on-disk tar-extraction cache',
 	usage: ['list [options]', 'clear [archive]'],
 	flags: {
 		json: {

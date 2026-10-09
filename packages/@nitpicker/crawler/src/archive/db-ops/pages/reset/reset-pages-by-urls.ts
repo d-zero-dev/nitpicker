@@ -70,13 +70,15 @@ interface CandidateRow {
  * `content_type_id`/`content_length`/`header_set_id` cleared,
  * `first_crawled_at`/`last_crawled_at` preserved), and every derived row is
  * cleared via {@link clearPageDerivedRows} plus `page_errors` and
- * `analysis_violations` — the latter is not part of the shared helper
- * (`repromoteExternalPages` never clears it) but a re-fetched page's old
- * lint findings would otherwise report on HTML that no longer exists until
- * the next `analyze` run overwrites the whole table. `analysis_text_refs` is
- * a content-hash dictionary shared across pages and is not touched; an
- * orphaned entry is a harmless, unreferenced row, the same trade-off already
- * made for `page_html_blobs`.
+ * the legacy `analysis_violations` table when an archive still carries it.
+ * Current archives no longer create that table, but an archive written by
+ * an earlier version keeps it (FK to `content_items(id)`). The reset only
+ * UPDATEs `content_items`, so no FK violation is reachable here; the stale
+ * violation rows of a re-fetched page are removed because they describe
+ * content that is about to be replaced. The delete is guarded by `hasTable`.
+ * `analysis_text_refs` is a content-hash dictionary shared across pages and
+ * is not touched; an orphaned entry is a harmless, unreferenced row, the
+ * same trade-off already made for `page_html_blobs`.
  *
  * SELECT and UPDATE/DELETE statements are chunked to stay below SQLite's
  * `SQLITE_LIMIT_VARIABLE_NUMBER`.
@@ -151,6 +153,7 @@ export async function resetPagesByUrls(
 	const ids = resettable.map((row) => row.id);
 	const resetUrls = resettable.map((row) => row.url);
 
+	const hasLegacyViolations = await knex.schema.hasTable('analysis_violations');
 	const chunkSize = 500;
 	for (let i = 0; i < ids.length; i += chunkSize) {
 		const chunk = ids.slice(i, i + chunkSize);
@@ -166,7 +169,9 @@ export async function resetPagesByUrls(
 			// timestamp records survive the demotion.
 		});
 		await knex('page_errors').whereIn('pageId', chunk).delete();
-		await knex('analysis_violations').whereIn('page_id', chunk).delete();
+		if (hasLegacyViolations) {
+			await knex('analysis_violations').whereIn('page_id', chunk).delete();
+		}
 		await clearPageDerivedRows(knex, chunk);
 		onProgress?.(Math.min(i + chunkSize, ids.length), ids.length);
 	}

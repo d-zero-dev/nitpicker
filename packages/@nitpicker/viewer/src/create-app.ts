@@ -31,7 +31,6 @@ import { registerSummaryRoute } from './routes/register-summary-route.js';
 import { registerTechnologiesRoute } from './routes/register-technologies-route.js';
 import { registerTemplateClustersRoute } from './routes/register-template-clusters-route.js';
 import { registerUnusedResourcesRoute } from './routes/register-unused-resources-route.js';
-import { registerViolationsRoute } from './routes/register-violations-route.js';
 import { sanitizeErrorMessage } from './sanitize-error-message.js';
 import { serverTimingMiddleware } from './server-timing-middleware.js';
 
@@ -69,7 +68,6 @@ export function createApp(options: CreateAppOptions): Hono {
 	registerResourceReferrersRoute(app, context);
 	registerImagesRoute(app, context);
 	registerHeaderChecksRoute(app, context);
-	registerViolationsRoute(app, context);
 	registerDuplicatesRoute(app, context);
 	registerDedupeCapEventsRoute(app, context);
 	registerMismatchesRoute(app, context);

@@ -12,8 +12,6 @@ const SHEET_NAME_ALIASES: Record<string, SheetName> = {
 	pagelist: 'Page List',
 	pages: 'Page List',
 	links: 'Links',
-	violations: 'Violations',
-	discrepancies: 'Discrepancies',
 	resources: 'Resources',
 	images: 'Images',
 	'referrers-relational-table': 'Referrers Relational Table',

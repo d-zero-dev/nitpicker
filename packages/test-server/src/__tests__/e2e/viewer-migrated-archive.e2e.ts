@@ -57,12 +57,10 @@ describe('viewer read path on a migrated archive', () => {
 		expect(urls).toContain('http://localhost/b');
 	});
 
-	it('FK retarget を経た adjunct データが読める（analysis_violations）', async () => {
+	it('移行後は旧 analysis_violations / analysis_text_refs テーブルが残らない', async () => {
 		const knex = archive!.getKnex();
-		const violations = await knex('analysis_violations').select('validator', 'rule');
-		expect(violations).toMatchObject([
-			{ validator: 'markuplint', rule: 'required-attr' },
-		]);
+		expect(await knex.schema.hasTable('analysis_violations')).toBe(false);
+		expect(await knex.schema.hasTable('analysis_text_refs')).toBe(false);
 	});
 
 	it('page_tags は technology_signals / page_technologies に変換され、テーブル自体は残らない', async () => {

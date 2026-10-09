@@ -5,9 +5,7 @@ import type { Knex } from 'knex';
  * `createAdjunctTables` because the classification is a derived,
  * archive-wide computation produced by its own crawl-end step
  * (`classifyArchivePageTemplates`), not an observation the crawler writes per
- * page and not an analyze-plugin output (`analysis_violations`) — the two
- * lifecycles and their write paths (`db-ops/templates/` vs `db-ops/analysis/`)
- * share nothing.
+ * page.
  *
  * - `page_templates` — one row per classified page, FK → `content_items(id)`
  * - `page_template_clusters` — one row per distinct `page_templates.template_key`,
@@ -30,8 +28,7 @@ import type { Knex } from 'knex';
  */
 export async function createTemplateTables(instance: Knex): Promise<void> {
 	// One row per internal HTML page that was classified; `page_id` is both
-	// the PK and the natural key (1:1 with `content_items`), so — unlike
-	// `analysis_violations`, which is 1:many and needs a surrogate `id` —
+	// the PK and the natural key (1:1 with `content_items`), so
 	// there's nothing to index beyond the PK itself. `WITHOUT ROWID` packs
 	// rows directly in the PK b-tree, matching `page_html_ref`'s shape
 	// (small fixed-width row, PK-only lookups).

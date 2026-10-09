@@ -1,7 +1,7 @@
 {
 	"name": "@nitpicker/cli",
 	"version": "0.24.0",
-	"description": "Web site crawler, analyzer, and reporter CLI",
+	"description": "Web site crawler and reporter CLI",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
 	"engines": {
@@ -38,11 +38,6 @@
 		"@d-zero/readtext": "1.2.1",
 		"@d-zero/roar": "2.2.1",
 		"@d-zero/shared": "0.23.0",
-		"@nitpicker/analyze-axe": "0.24.0",
-		"@nitpicker/analyze-markuplint": "0.24.0",
-		"@nitpicker/analyze-search": "0.24.0",
-		"@nitpicker/analyze-textlint": "0.24.0",
-		"@nitpicker/core": "0.24.0",
 		"@nitpicker/crawler": "0.24.0",
 		"@nitpicker/query": "0.24.0",
 		"@nitpicker/report-google-sheets": "0.24.0",

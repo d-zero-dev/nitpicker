@@ -19,8 +19,8 @@ const SORT_BY_VALUES = ['totalCount', 'pageCount', 'text', 'type'] as const;
  * page they occurred on (issue #228).
  *
  * A live `GROUP BY` aggregation over `console_log_items` +
- * `page_console_logs`, following the simpler pattern `getViolations` uses
- * (no dedicated read-model table / fast-path dispatch): unlike
+ * `page_console_logs` (no dedicated read-model table / fast-path
+ * dispatch): unlike
  * `viewer_header_checks` / `viewer_duplicates`, there is no pre-#228
  * legacy data this needs to fall back to, so a read-model layer would add
  * `VIEWER_READ_MODEL_SCHEMA_VERSION` churn without an existing-data

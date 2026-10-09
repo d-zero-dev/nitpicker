@@ -16,7 +16,7 @@
  * 1. Receives `{ tmpDir, task }` via `workerData` (constructor payload — no
  *    post-spawn handshake, so no boot race).
  * 2. Opens its own writable connection with
- *    `Archive.connect(tmpDir, null, { readOnly: false })`. This is the
+ *    `Archive.connect(tmpDir, { readOnly: false })`. This is the
  *    archive-owning process reconnecting to a tmpDir it extracted itself
  *    (see that method's JSDoc) — the parent thread already holds the
  *    archive lock, and worker threads share the parent's PID, so the
@@ -28,8 +28,7 @@
  * 4. Closes its DB connection (always — the parent's `archive.write()`
  *    checkpoint must not race a dangling worker handle), posts `done` or
  *    `error`, and exits via `setImmediate(() => process.exit(0))` so the
- *    final message flushes first (same technique as
- *    `@nitpicker/core`'s worker entry).
+ *    final message flushes first.
  *
  * The message protocol is defined in `./types.ts`.
  * @module
@@ -60,7 +59,7 @@ const { tmpDir, task } = workerData as ViewerReadModelWorkerData;
 // Promise — an uncaught throw here would surface as a less descriptive
 // `worker 'error'` event instead.
 try {
-	const accessor = await Archive.connect(tmpDir, null, { readOnly: false });
+	const accessor = await Archive.connect(tmpDir, { readOnly: false });
 	try {
 		if (task === 'backfills') {
 			// viewer-build's maintenance path for an already-current read

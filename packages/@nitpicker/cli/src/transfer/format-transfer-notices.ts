@@ -4,9 +4,9 @@ import type { TransferOutcome } from './types.js';
  * Formats the operator-facing notices for a finished `concat`/`split` run
  * — each one names a leftover follow-up action and the exact command to
  * run, in this fixed order: in-scope-but-external pages (concat only),
- * pending pages, dropped analyze plugin data, a page template classification
- * failure, then a read-model build failure. Every notice is independent (an empty condition contributes no
- * line), so the result can be empty (nothing to report).
+ * pending pages, a page template classification failure, then a
+ * read-model build failure. Every notice is independent (an empty condition
+ * contributes no line), so the result can be empty (nothing to report).
  * @param outcome - See {@link TransferOutcome}.
  * @returns Zero or more single-line notices, in the order above.
  * @example
@@ -32,13 +32,6 @@ export function formatTransferNotices(outcome: TransferOutcome): string[] {
 			: `npx @nitpicker/cli crawl ${outcome.outputPath} --append ${outcome.appendHintRoot}`;
 		lines.push(
 			`Warning: ${outcome.pendingCount} URL${plural} in the output archive are still pending (unexpected — please report this). ${hint}`,
-		);
-	}
-
-	if (outcome.pluginDataEntries.length > 0) {
-		lines.push(
-			`Analyze plugin data was not carried over (${outcome.pluginDataEntries.join(', ')}). ` +
-				`Re-run: npx @nitpicker/cli analyze ${outcome.outputPath}`,
 		);
 	}
 
