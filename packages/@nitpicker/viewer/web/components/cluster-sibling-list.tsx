@@ -10,7 +10,7 @@ export interface ClusterSiblingListProps {
 
 /**
  * Renders the sibling clusters that split off the same
- * `@d-zero/page-cluster` blocking group as the current cluster, each linking
+ * page-cluster blocking group as the current cluster, each linking
  * to its own filtered pages list.
  * @param props - The sibling cluster keys to render.
  * @returns The `<dt>`/`<dd>` pair element, or `null` when `siblingClusterKeys` is empty.

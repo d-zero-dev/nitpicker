@@ -33,7 +33,7 @@ export interface TemplateClusterItemProps {
  * name is a label, since it is the heading otherwise), top directories by
  * page count, the common stylesheet set computed from the cluster's actual
  * member pages, the raw template key and, when captured,
- * `@d-zero/page-cluster`'s cluster-selection evidence — sits in a
+ * page-cluster's cluster-selection evidence — sits in a
  * `<details>` so a page of clusters scans by heading.
  * @param props - The cluster to render.
  * @returns The `<section>` element for this cluster.

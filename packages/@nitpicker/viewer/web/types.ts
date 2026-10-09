@@ -186,7 +186,7 @@ export interface ClusterHeadingParts {
 }
 
 /**
- * Which `@d-zero/page-cluster` Pass-0 blocking stage a block key came from —
+ * Which page-cluster Pass-0 blocking stage a block key came from —
  * the `reason.kind` values plus `unknown` for a template key whose block
  * key prefix this viewer build does not recognize.
  */
@@ -252,7 +252,7 @@ export interface TemplateClusterOverview {
 	blockKinds: ClusterBlockKindOverview[];
 }
 
-/** Every cluster that drew pages from one `@d-zero/page-cluster` Pass-0 block. */
+/** Every cluster that drew pages from one page-cluster Pass-0 block. */
 export interface ClusterBlockGroup {
 	/** The block the clusters share. */
 	block: ClusterBlockRef;

@@ -15,7 +15,7 @@ export interface ClusterReasonSectionProps {
 }
 
 /**
- * Renders one cluster's `@d-zero/page-cluster` cluster-selection evidence
+ * Renders one cluster's page-cluster cluster-selection evidence
  * (blocking reason, common DOM structure tokens, common landmarks, sibling
  * clusters), or a "not captured" notice when `cluster.reason` is `null`.
  * @param props - The cluster whose reason to render.

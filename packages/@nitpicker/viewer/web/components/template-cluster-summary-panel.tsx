@@ -23,7 +23,7 @@ const SIZE_BUCKET_LABEL_KEYS: Record<ClusterSizeBucketKey, string> = {
 /**
  * Summary at the top of the template clusters view: headline counts, the
  * largest clusters, the cluster size distribution, and how the clusters
- * divide into `@d-zero/page-cluster` Pass-0 blocks by kind.
+ * divide into page-cluster Pass-0 blocks by kind.
  * @param props - The precomputed overview.
  * @returns The summary section element.
  */

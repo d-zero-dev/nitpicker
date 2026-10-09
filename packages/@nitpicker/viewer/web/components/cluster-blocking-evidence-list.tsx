@@ -10,7 +10,7 @@ export interface ClusterBlockingEvidenceListProps {
 }
 
 /**
- * Renders the `@d-zero/page-cluster` blocking-key evidence for one cluster's
+ * Renders the page-cluster blocking-key evidence for one cluster's
  * reason: which Pass-0 block(s) formed it and why (CSS-distinctive stylesheet
  * set or path-derived key).
  *

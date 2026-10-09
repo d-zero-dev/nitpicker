@@ -12,7 +12,7 @@ export interface ClusterStructuralCoreTokenListProps {
 }
 
 /**
- * Renders the DOM-structure tokens `@d-zero/page-cluster` found common to
+ * Renders the DOM-structure tokens page-cluster found common to
  * every member of a Pass-0 block, plus a "N more" note when the reason
  * summary truncated the full token list for API transport.
  *

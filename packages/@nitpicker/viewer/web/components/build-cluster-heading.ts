@@ -10,7 +10,7 @@ import { buildClusterHeadingParts } from './build-cluster-heading-parts.js';
  * of being re-derived independently there).
  *
  * Priority: the reason's distinctive stylesheet filenames (the strongest
- * signal — the exact CSS set `@d-zero/page-cluster` used to blocking-key
+ * signal — the exact CSS set page-cluster used to blocking-key
  * this cluster, after site-wide-chrome and non-first-party filtering),
  * falling back to the raw common-stylesheet-intersection filenames, then
  * the top directories by page count, and finally the raw template key when

@@ -7,7 +7,7 @@ const KIND_BY_PREFIX: ReadonlyMap<string, ClusterBlockKind> = new Map([
 ]);
 
 /**
- * Extracts the `@d-zero/page-cluster` Pass-0 block key out of a
+ * Extracts the page-cluster Pass-0 block key out of a
  * `page_templates.template_key`.
  *
  * A template key is the JSON array `["<blockKey>","cluster:<n>"]` — the
