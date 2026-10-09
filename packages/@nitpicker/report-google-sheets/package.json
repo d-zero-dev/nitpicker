@@ -44,7 +44,7 @@
 		"@nitpicker/crawler": "0.24.0",
 		"@types/debug": "4.1.13",
 		"googleapis": "173.0.0",
-		"vitest": "5.0.2"
+		"vitest": "5.0.3"
 	},
 	"gitHead": "32b83ee38eba7dfd237adb1b41f69e049e8d4ceb"
 }
