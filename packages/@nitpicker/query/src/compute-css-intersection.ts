@@ -4,13 +4,13 @@
  *
  * **A deliberately simpler, always-available complement to
  * `TemplateClusterSummary.reason.distinctiveStylesheetUrls`, not a
- * reimplementation of it.** `@d-zero/page-cluster` derives a `css:<hash>`
+ * reimplementation of it.** page-cluster derives a `css:<hash>`
  * template key by first dropping stylesheet hrefs referenced by 90%+ of a
  * homogeneous page corpus (site-wide chrome like a shared reset/font
  * stylesheet) and restricting to first-party hosts before hashing what's
  * left — that filtered result is what `distinctiveStylesheetUrls` reports
- * (via `ClusterReason.blocking[].reason.distinctiveStylesheetHrefs`, public
- * since `@d-zero/page-cluster@0.5.2`'s `build-cluster-reason` export). This
+ * (via `ClusterReason.blocking[].reason.distinctiveStylesheetHrefs`, built
+ * by the engine's `build-cluster-reason.ts`). This
  * function instead computes a **raw intersection**: a stylesheet loaded by
  * every page in the cluster *and* by most other pages on the site (e.g. a
  * shared `common.css`) still shows up as "common to this cluster", which is
@@ -18,7 +18,7 @@
  * separate metrics rather than one replacing the other because
  * `distinctiveStylesheetUrls` is unavailable whenever
  * `TemplateClusterSummary.reason` is `null` (a pre-cluster-reason archive,
- * a read-only connection, or a cluster `@d-zero/page-cluster` didn't emit a
+ * a read-only connection, or a cluster page-cluster didn't emit a
  * reason for) and is undefined for `kind:'path'`/`kind:'orphanMerge'`
  * clusters (no CSS blocking involved at all) — this function has neither
  * limitation, since it derives its answer directly from the cluster's

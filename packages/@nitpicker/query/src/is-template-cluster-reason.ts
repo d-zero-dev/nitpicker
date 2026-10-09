@@ -69,9 +69,9 @@ function isTemplateClusterLandmarkProfile(
  * which then throws inside `summarizeTemplateClusterReason` (e.g. reading
  * `.kind` off a non-object `reason`) instead of being caught here.
  *
- * `@d-zero/page-cluster`'s `ClusterReason` is not versioned against the
- * archive format — an archive written with an older/newer version of that
- * library could carry a payload this reader doesn't recognize. This guard
+ * The page-cluster engine's `ClusterReason` is not versioned against the
+ * archive format — an archive written by an older/newer nitpicker could
+ * carry a payload this reader doesn't recognize. This guard
  * is the boundary that keeps a shape mismatch from surfacing as a crash
  * deep inside the viewer: an unrecognized payload is treated as "no reason
  * available" (mirroring `decodeJsonRef`'s own fail-closed-to-`null`
