@@ -51,6 +51,17 @@
 			"rangeStrategy": "auto"
 		},
 		{
+			"description": "Cargo: Cargo.lock (committed) pins exact versions; bump the Cargo.toml requirement alongside it instead of rewriting it to an `=` pin",
+			"matchManagers": ["cargo"],
+			"rangeStrategy": "bump"
+		},
+		{
+			"description": "napi-rs crates are released together and must agree on the Node-API binding ABI",
+			"groupName": "napi-rs",
+			"matchManagers": ["cargo"],
+			"matchPackageNames": ["napi", "napi-derive", "napi-build"]
+		},
+		{
 			"groupName": "puppeteer",
 			"matchPackageNames": [
 				"puppeteer",

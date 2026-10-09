@@ -1,0 +1,9 @@
+# Pinned (not `stable`) so local builds, CI, and the glibc-2.28 release
+# container all compile the native addon with the same compiler. Lives at the
+# repository root because rustup resolves this file from the working
+# directory, and the root `yarn lint` / `yarn test:rust` scripts run cargo
+# from here.
+[toolchain]
+channel = "1.98.1"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

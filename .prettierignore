@@ -6,6 +6,7 @@
 **/.fixture-stub-cwd/
 **/.fixture-tmp/
 **/*.nitpicker
+**/target/
 yarn.lock
 # page-cluster's HTML fixtures are tokenizer input: reformatting changes test results
 packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/

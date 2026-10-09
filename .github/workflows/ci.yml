@@ -16,12 +16,74 @@ jobs:
           node-version: 26.8.1
           cache: yarn
       - run: yarn install --immutable
+      # Also compiles @nitpicker/core's native addon for this runner (cargo is
+      # preinstalled on GitHub-hosted runners; the version comes from
+      # rust-toolchain.toml). Published binaries are built separately by
+      # build-core.yml against an older glibc.
       - run: yarn build
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: build-output
-          path: packages/**/lib/
+          path: |
+            packages/**/lib/
+            packages/@nitpicker/core/*.node
           retention-days: 1
+
+  # Release builds of the native addon (glibc 2.28 container + macOS), each
+  # checked against the body-hash golden fixture on its own platform.
+  core-prebuilt:
+    uses: ./.github/workflows/build-core.yml
+
+  # The platform packages must ship exactly their binary: place the
+  # prebuilt artifacts as Publish does and inspect the would-be tarballs.
+  core-platform-packages:
+    needs: core-prebuilt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.8.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: core-darwin-arm64
+          path: packages/@nitpicker/core-darwin-arm64/
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: core-linux-x64-gnu
+          path: packages/@nitpicker/core-linux-x64-gnu/
+      - name: Check tarball contents
+        run: |
+          for platform in darwin-arm64 linux-x64-gnu; do
+            dir="packages/@nitpicker/core-$platform"
+            npm pack --dry-run --json "./$dir" > "pack-$platform.json"
+            node -e '
+              const [pack] = require(process.argv[1]);
+              const files = pack.files.map((f) => f.path).sort();
+              const expected = ["README.md", "core." + process.argv[2] + ".node", "package.json"];
+              if (JSON.stringify(files) !== JSON.stringify(expected)) {
+                console.error("unexpected tarball contents for " + process.argv[2] + ": " + files.join(", "));
+                process.exit(1);
+              }
+              console.log(process.argv[2] + ": " + files.join(", "));
+            ' "./pack-$platform.json" "$platform"
+          done
+
+  # Unit + golden tests of the Rust crates themselves (no Node involved).
+  # rustfmt / clippy run in the lint job via `yarn lint:check`.
+  rust-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Node 26 dropped the bundled corepack, so install it explicitly first.
+      - run: npm install -g corepack
+      - run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.8.1
+          cache: yarn
+      - run: yarn install --immutable
+      - run: yarn test:rust
 
   test:
     needs: build

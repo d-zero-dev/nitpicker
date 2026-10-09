@@ -1,8 +1,4 @@
-import { computeContentHash } from '../populate-ref-tables/compute-content-hash.js';
-
-import { extractBody } from './extract-body.js';
-import { maskDynamicIds } from './mask-dynamic-ids.js';
-import { normalizeUrlLikeStrings } from './normalize-url-like-strings.js';
+import { computeBodyHash as computeBodyHashNative } from '@nitpicker/core/compute-body-hash';
 
 /**
  * Computes a content hash of a page's `<body>`, after normalizing away the
@@ -15,7 +11,14 @@ import { normalizeUrlLikeStrings } from './normalize-url-like-strings.js';
  * intermediate string is never stored. The unmasked original HTML remains
  * fully recoverable from `page_html_blobs`, so nothing is lost by discarding
  * it here.
- * @param html - A full HTML document string (or fragment).
+ *
+ * The computation runs in the native addon (`@nitpicker/core`). The
+ * JavaScript stages next to this file (`extract-body.ts`,
+ * `normalize-url-like-strings.ts`, `mask-dynamic-ids.ts`) are no longer on
+ * this path; they stay only as the oracle for
+ * `compute-body-hash.parity.spec.ts`, which pins the addon to their output.
+ * @param html - A full HTML document string (or fragment). Lone surrogates
+ *   are encoded as U+FFFD, as `Buffer.from(html, 'utf8')` does.
  * @returns 32-byte SHA-256 hash of the masked `<body>` content, ready to
  *   insert into a `BLOB` column.
  * @example
@@ -26,8 +29,5 @@ import { normalizeUrlLikeStrings } from './normalize-url-like-strings.js';
  * ```
  */
 export function computeBodyHash(html: string): Buffer {
-	const body = extractBody(html);
-	const normalized = normalizeUrlLikeStrings(body);
-	const masked = maskDynamicIds(normalized);
-	return computeContentHash(masked);
+	return computeBodyHashNative(Buffer.from(html, 'utf8'));
 }

@@ -1,0 +1,28 @@
+{
+	"name": "@nitpicker/core-darwin-arm64",
+	"version": "0.24.0",
+	"description": "Prebuilt @nitpicker/core native addon for macOS on Apple silicon",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"engines": {
+		"node": ">=24.11.0"
+	},
+	"os": [
+		"darwin"
+	],
+	"cpu": [
+		"arm64"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/core-darwin-arm64"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"main": "core.darwin-arm64.node",
+	"files": [
+		"core.darwin-arm64.node"
+	]
+}

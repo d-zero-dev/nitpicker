@@ -83,7 +83,7 @@ export default [
 		rules: reactRuleSet,
 	},
 	{
-		ignores: ['**/dist/**/*', '**/lib/**/*'],
+		ignores: ['**/dist/**/*', '**/lib/**/*', '**/target/**/*'],
 	},
 	findStorybookConfig('storybook:recommended:setup'),
 	{

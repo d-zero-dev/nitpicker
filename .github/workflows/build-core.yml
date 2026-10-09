@@ -1,0 +1,76 @@
+name: Build @nitpicker/core prebuilt binaries
+
+# Builds the native addon for every published platform, checks each binary
+# against the body-hash golden fixture on the platform it targets, and
+# uploads it as an artifact (`core-darwin-arm64` / `core-linux-x64-gnu`).
+# Called by CI (so a PR proves the release build still works) and by Publish
+# (which places the artifacts into the platform packages before publishing).
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x64-gnu:
+    runs-on: ubuntu-latest
+    # glibc 2.28 — the same floor as Node.js 24's own Linux binaries, so the
+    # addon loads on any Linux (WSL2 included) that can run a supported Node.
+    # Building on the runner itself would link against its much newer glibc.
+    container: quay.io/pypa/manylinux_2_28_x86_64:latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # rustup reads the pinned toolchain from rust-toolchain.toml on first use.
+      - name: Install rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: |
+          cargo build --release --locked --package nitpicker_napi --manifest-path packages/@nitpicker/core/Cargo.toml
+          cp packages/@nitpicker/core/target/release/libnitpicker_napi.so core.linux-x64-gnu.node
+      - name: Check the glibc symbol floor
+        run: |
+          newest=$(objdump -T core.linux-x64-gnu.node | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -Vu | tail -n 1)
+          echo "newest glibc symbol version: $newest"
+          if [ "$(printf '%s\n2.28\n' "$newest" | sort -V | tail -n 1)" != "2.28" ]; then
+            echo "::error::core.linux-x64-gnu.node requires glibc $newest (> 2.28)"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: core-linux-x64-gnu
+          path: core.linux-x64-gnu.node
+          if-no-files-found: error
+          retention-days: 1
+
+  # The build container has no Node, so the binary is loaded and checked on a
+  # regular runner, under the oldest supported Node (Node-API is ABI-stable).
+  verify-linux-x64-gnu:
+    needs: linux-x64-gnu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.20.0
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: core-linux-x64-gnu
+      - run: node packages/@nitpicker/core/scripts/verify-prebuilt.mjs core.linux-x64-gnu.node
+
+  darwin-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.20.0
+      - run: node packages/@nitpicker/core/scripts/build-native.mjs
+      - run: node packages/@nitpicker/core/scripts/verify-prebuilt.mjs packages/@nitpicker/core/core.darwin-arm64.node
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: core-darwin-arm64
+          path: packages/@nitpicker/core/core.darwin-arm64.node
+          if-no-files-found: error
+          retention-days: 1

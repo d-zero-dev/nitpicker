@@ -1,0 +1,2 @@
+# Tabs, matching the repository-wide `.editorconfig` (`indent_style = tab`).
+hard_tabs = true

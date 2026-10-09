@@ -2839,6 +2839,7 @@ __metadata:
   dependencies:
     "@d-zero/fs": "npm:0.2.7"
     "@d-zero/shared": "npm:0.23.0"
+    "@nitpicker/core": "npm:0.24.0"
     "@types/debug": "npm:4.1.13"
     "@types/fs-extra": "npm:11.0.4"
     "@types/tar": "npm:7.0.87"
@@ -2872,6 +2873,32 @@ __metadata:
     enquirer: "npm:2.4.1"
   bin:
     nitpicker: ./bin/nitpicker.js
+  languageName: unknown
+  linkType: soft
+
+"@nitpicker/core-darwin-arm64@npm:0.24.0, @nitpicker/core-darwin-arm64@workspace:packages/@nitpicker/core-darwin-arm64":
+  version: 0.0.0-use.local
+  resolution: "@nitpicker/core-darwin-arm64@workspace:packages/@nitpicker/core-darwin-arm64"
+  languageName: unknown
+  linkType: soft
+
+"@nitpicker/core-linux-x64-gnu@npm:0.24.0, @nitpicker/core-linux-x64-gnu@workspace:packages/@nitpicker/core-linux-x64-gnu":
+  version: 0.0.0-use.local
+  resolution: "@nitpicker/core-linux-x64-gnu@workspace:packages/@nitpicker/core-linux-x64-gnu"
+  languageName: unknown
+  linkType: soft
+
+"@nitpicker/core@npm:0.24.0, @nitpicker/core@workspace:packages/@nitpicker/core":
+  version: 0.0.0-use.local
+  resolution: "@nitpicker/core@workspace:packages/@nitpicker/core"
+  dependencies:
+    "@nitpicker/core-darwin-arm64": "npm:0.24.0"
+    "@nitpicker/core-linux-x64-gnu": "npm:0.24.0"
+  dependenciesMeta:
+    "@nitpicker/core-darwin-arm64":
+      optional: true
+    "@nitpicker/core-linux-x64-gnu":
+      optional: true
   languageName: unknown
   linkType: soft
 

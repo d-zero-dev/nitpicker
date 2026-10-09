@@ -1,0 +1,31 @@
+{
+	"name": "@nitpicker/core-linux-x64-gnu",
+	"version": "0.24.0",
+	"description": "Prebuilt @nitpicker/core native addon for x64 Linux with glibc >= 2.28 (including WSL2)",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"engines": {
+		"node": ">=24.11.0"
+	},
+	"os": [
+		"linux"
+	],
+	"cpu": [
+		"x64"
+	],
+	"libc": [
+		"glibc"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/core-linux-x64-gnu"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"main": "core.linux-x64-gnu.node",
+	"files": [
+		"core.linux-x64-gnu.node"
+	]
+}

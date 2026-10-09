@@ -24,6 +24,13 @@ npx @nitpicker/cli viewer ./example.com.nitpicker
 
 CLI の詳細な使い方と全オプションは [@nitpicker/cli README](./packages/@nitpicker/cli/README.md) を参照してください。
 
+## 動作環境
+
+- Node.js 24.11 以上
+- macOS（Apple silicon）、または Linux x64 で glibc 2.28 以上（WSL2 を含む）
+
+計算コア [@nitpicker/core](./packages/@nitpicker/core/README.md) はビルド済みのネイティブアドオンとして配布しており、JavaScript のフォールバックはありません。上記以外のプラットフォーム（Intel Mac、linux-arm64、musl、Windows ネイティブ）では起動時に対応表を含むエラーで終了します。
+
 ## `.nitpicker` アーカイブ
 
 `.nitpicker` は `crawl` が生成するアーカイブファイルです。クロール結果、レンダリング後の HTML スナップショット、リンク、ネットワークリソース、画像情報などを保存します。
@@ -36,6 +43,7 @@ CLI の詳細な使い方と全オプションは [@nitpicker/cli README](./pack
 | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | [@nitpicker/archive](./packages/@nitpicker/archive/README.md)                           | `.nitpicker` アーカイブの読み書き・移行・結合分割 |
 | [@nitpicker/cli](./packages/@nitpicker/cli/README.md)                                   | クロール、レポート、クエリ、ビューアを実行するCLI |
+| [@nitpicker/core](./packages/@nitpicker/core/README.md)                                 | Rust（Node-API）製の計算コア                      |
 | [@nitpicker/crawler](./packages/@nitpicker/crawler/README.md)                           | ヘッドレスブラウザによるクロール                  |
 | [@nitpicker/query](./packages/@nitpicker/query/README.md)                               | `.nitpicker` アーカイブのクエリ関数               |
 | [@nitpicker/report-google-sheets](./packages/@nitpicker/report-google-sheets/README.md) | Google Sheets向けレポート出力                     |

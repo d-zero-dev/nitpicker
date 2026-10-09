@@ -20,6 +20,9 @@ Lerna **fixed モード**のため、全パッケージが同一バージョン�
 | --------------------------------- |
 | `@nitpicker/archive`              |
 | `@nitpicker/cli`                  |
+| `@nitpicker/core`                 |
+| `@nitpicker/core-darwin-arm64`    |
+| `@nitpicker/core-linux-x64-gnu`   |
 | `@nitpicker/crawler`              |
 | `@nitpicker/mcp-server`           |
 | `@nitpicker/query`                |
@@ -30,6 +33,14 @@ Lerna **fixed モード**のため、全パッケージが同一バージョン�
 `packages/test-server` は `private: true` なので publish されない。バージョンは上がるが npm には出ない。
 
 **npm に未公開の新規パッケージ（`@nitpicker/archive` 等）を含むリリースでは、tag push より前に npm 側の Trusted Publisher 登録が済んでいることをユーザーに確認する。** 未登録だとそのパッケージの OIDC publish だけが失敗し、それに exact pin で依存する `@nitpicker/cli` などがインストールできなくなる。
+
+`npm trust` は registry に一度も存在しないパッケージには設定できない（`404 Not Found`）。新規パッケージは、ユーザーが手動で 1 回だけプレースホルダー版を publish して名前を確保し、その後に `npm trust github <パッケージ名> --file publish.yml --repository d-zero-dev/nitpicker --allow-publish --yes` で登録する。手順の詳細はオーケストレーションディレクトリの `npm-oidc-trusted-publishing-setup.md`「初回publish（新規パッケージ）のブートストラップ」を参照。プラットフォーム別パッケージ（`@nitpicker/core-*`）のプレースホルダーには `.node` を含めず、バージョンを `0.0.0` にする — lerna の固定バージョンと衝突せず、`@nitpicker/core` が exact pin で参照することもない。
+
+## ネイティブアドオン（`@nitpicker/core`）の注意
+
+- `@nitpicker/core` には JavaScript のフォールバックがない。プラットフォーム別パッケージが `.node` なしで publish されると、そのプラットフォームで `npx @nitpicker/cli` が起動しなくなる。`publish.yml` は `build-core.yml` の 2 バイナリ（glibc 2.28 コンテナの linux-x64-gnu、macOS の darwin-arm64）がそろい、それぞれ golden fixture の検証を通ってから publish する
+- 手順 10 の検証に加えて、darwin-arm64 と WSL2（linux-x64-gnu）の実機で `npx @nitpicker/cli@<version> crawl <URL>` が起動することをユーザーに確認してもらう。CI の検証はバイナリ単体の読み込みまでで、npm からのインストール経路（`optionalDependencies` の解決）は実機でしか確かめられない
+- 対応プラットフォームの制限（darwin-arm64 と linux-x64 glibc >= 2.28 のみ）を初めて含むリリースでは、リリースノートに書く
 
 # 手順
 
@@ -167,7 +178,7 @@ npm view @nitpicker/cli dist-tags
 - **dist-tag が意図通りか**。正式リリースは `latest`、プレリリースは `alpha` / `beta` / `rc` / `next`。`publish.yml` は `lerna.json` の `version` 文字列から判定する（`-alpha` → `alpha`、`-` を含む → `next`、それ以外 → `latest`）
 - provenance が付与されているか（`npm view <package> --json` の `dist.attestations`）
 
-fixed モードでも**一部のパッケージだけ publish される（部分 publish）**ことがある。上表の13パッケージを個別に確認し、漏れがあればユーザーに報告する。
+fixed モードでも**一部のパッケージだけ publish される（部分 publish）**ことがある。上表の全パッケージを個別に確認し、漏れがあればユーザーに報告する。
 
 **ここが success の判定点**。npm 上の状態を確認するまでリリース完了と判断してはいけない。
 

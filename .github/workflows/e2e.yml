@@ -17,6 +17,7 @@ on:
     paths:
       - 'packages/@nitpicker/archive/**'
       - 'packages/@nitpicker/cli/**'
+      - 'packages/@nitpicker/core/**'
       - 'packages/@nitpicker/crawler/**'
       - 'packages/@nitpicker/query/**'
       - 'packages/@nitpicker/report-google-sheets/**'
@@ -24,6 +25,7 @@ on:
       - 'packages/@nitpicker/viewer/**'
       - 'packages/test-server/**'
       - 'vitest.e2e.config.ts'
+      - 'rust-toolchain.toml'
       - '.github/workflows/e2e.yml'
 
 # A new push to the same ref supersedes any in-flight run.
@@ -54,7 +56,10 @@ jobs:
       # files that flipped `hashFiles('packages/**/*.ts')` between save & restore.
       - uses: actions/cache/save@v6.1.0
         with:
-          path: packages/**/lib
+          # The native addon lands outside lib/ (`core.<platform>.node`).
+          path: |
+            packages/**/lib
+            packages/@nitpicker/core/*.node
           key: e2e-build-node26-${{ github.sha }}
           enableCrossOsArchive: true
 
@@ -111,6 +116,8 @@ jobs:
                 # ~130 s pushed it past the 15-minute timeout, while this
                 # shard finished in ~9.5 min without it.
                 legacy-analysis-archive.e2e.ts,
+                # No crawl — reopens the committed fixture only (~2 s).
+                body-hash-stored-parity.e2e.ts,
               ]
           - id: inventory-snapshot
             files:
@@ -126,6 +133,8 @@ jobs:
                 main-contents.e2e.ts,
                 query.e2e.ts,
                 template-classification.e2e.ts,
+                # Lightest shard as of 2026-10-09 (10m23s); ~40 s locally.
+                crawl-sigint.e2e.ts,
               ]
           - id: retry-exclude
             # concat.e2e.ts and split.e2e.ts both landed here (not split
@@ -176,7 +185,9 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
       - uses: actions/cache/restore@v6.1.0
         with:
-          path: packages/**/lib
+          path: |
+            packages/**/lib
+            packages/@nitpicker/core/*.node
           key: e2e-build-node26-${{ github.sha }}
           enableCrossOsArchive: true
           fail-on-cache-miss: true

@@ -43,11 +43,15 @@ npx @nitpicker/cli split <archive> <URL> [...] -o <out> # 指定スコープ配�
 
 ```sh
 yarn test                                          # ユニットテスト（Vitest）
+yarn test:rust                                     # Rust のユニットテスト（@nitpicker/core の crate、cargo test）
 yarn vitest run --config vitest.e2e.config.ts      # E2E（maxWorkers: 1、test-server はOS割り当ての動的ポート）
 yarn workspace @nitpicker/viewer test:e2e          # viewer の Playwright E2E
-yarn build                                         # 全パッケージビルド
-yarn lint                                          # lint + prettier + cspell
+yarn build                                         # 全パッケージビルド（@nitpicker/core のネイティブアドオンを cargo でビルドする）
+yarn lint                                          # lint + prettier + cspell + rustfmt + clippy
 ```
+
+- **Rust ツールチェーン必須**: `@nitpicker/core` は Rust（napi-rs）のネイティブアドオンで、`yarn build` が `cargo build` を呼ぶ。バージョンはルートの `rust-toolchain.toml` で固定（rustup が自動取得）。セットアップは CONTRIBUTING.md。cargo も `yarn test:rust` / `yarn lint` 経由で実行し、直接叩かない
+- **ネイティブアドオンは prebuilt 配布のみ・フォールバックなし**: 対応は darwin-arm64 と linux-x64（glibc 2.28 以上）。ローカルビルドは `packages/@nitpicker/core/core.<platform>.node`（gitignore 済み）に置かれ、ローダーが優先的に読む
 
 - **1関数1ファイルにはユニットテスト必須**。バグ修正や仕様が明確な変更はテストファースト
 - E2E で外部リンクは `127.0.0.1` でシミュレートする（`localhost` と別ホスト名扱い）

@@ -27,6 +27,13 @@ yarn test
 - **Node.js** 24 以上（Volta でバージョン管理推奨）
 - **Yarn** 4.x（`corepack enable` で自動有効化）
 - **npm は使用しない**: すべてのコマンドは `yarn` 経由で実行
+- **Rust ツールチェーン**（[rustup](https://rustup.rs/)）: `yarn build` が `@nitpicker/core` のネイティブアドオンを `cargo` でビルドするため必須。バージョンはリポジトリルートの `rust-toolchain.toml` で固定しており、rustup が初回の `cargo` 実行時に自動で取得する（rustfmt / clippy を含む）
+- **開発できるホスト**: macOS（Apple silicon）と Linux x64（glibc、WSL2 を含む）。それ以外ではネイティブアドオンをビルド・読み込みできない
+
+```sh
+# rustup が未導入の場合のみ
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
 ## 開発ワークフロー
 
@@ -48,10 +55,13 @@ yarn build
 # ユニットテスト
 yarn test
 
+# Rust のユニットテスト（@nitpicker/core の crate）
+yarn test:rust
+
 # E2E テスト
 yarn vitest run --config vitest.e2e.config.ts
 
-# lint
+# lint（rustfmt / clippy を含む）
 yarn lint:check
 ```
 

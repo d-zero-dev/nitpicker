@@ -284,6 +284,7 @@
 	"dependencies": {
 		"@d-zero/fs": "0.2.7",
 		"@d-zero/shared": "0.23.0",
+		"@nitpicker/core": "0.24.0",
 		"debug": "4.4.3",
 		"fs-extra": "11.4.1",
 		"htmlparser2": "12.0.0",
