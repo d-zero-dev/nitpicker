@@ -77,14 +77,14 @@ describe('resolveBlockKeys', () => {
 		// Both pages load their site's own first-party stylesheet plus a
 		// third-party font. Without filtering, the font shows up as a
 		// distinctive shared href and can affect css: key generation.
-		// With `host` provided, direct comparison drops fonts.googleapis.com.
+		// With `host` provided, direct comparison drops fonts.cdn.example.
 		const pages = [
 			{
 				paths: ['a'],
 				host: 'example.com',
 				stylesheetHrefs: [
 					'https://example.com/a.css',
-					'https://fonts.googleapis.com/css?family=x',
+					'https://fonts.cdn.example/css?family=x',
 				],
 			},
 			{
@@ -92,7 +92,7 @@ describe('resolveBlockKeys', () => {
 				host: 'example.com',
 				stylesheetHrefs: [
 					'https://example.com/a.css',
-					'https://fonts.googleapis.com/css?family=x',
+					'https://fonts.cdn.example/css?family=x',
 				],
 			},
 		];

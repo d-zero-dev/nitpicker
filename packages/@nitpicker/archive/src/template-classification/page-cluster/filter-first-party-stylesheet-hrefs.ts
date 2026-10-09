@@ -23,10 +23,10 @@ function tryGetHost(href: string): string | undefined {
  * for that fallback's known limitations.
  *
  * Confirmed on real crawl data (302 pages): a handful of articles embedding
- * a YouTube video pulled in `youtube.com`'s own player stylesheet plus a
+ * a video player pulled in the video host's own player stylesheet plus a
  * per-embed tracking URL that resembles a stylesheet reference; other
  * articles embedding a particular widget pulled in two extra
- * `fonts.googleapis.com` URLs beyond the site's usual one. Both are
+ * third-party webfont URLs beyond the site's usual one. Both are
  * incidental to whatever third-party content a page happens to embed, not
  * evidence of which template the page uses — but
  * {@link ./resolve-blocking-group-keys.js | resolveBlockingGroupKeys}'s
@@ -44,7 +44,7 @@ function tryGetHost(href: string): string | undefined {
  * cannot mistake a third party for the first party regardless of how many
  * pages happen to also embed it. Added after a real crawl (302 pages) hit
  * the dominant-host fallback's tie case: every single page loaded both its
- * own first-party stylesheet *and* the same `fonts.googleapis.com` webfont
+ * own first-party stylesheet *and* the same third-party webfont
  * request (a common sitewide pattern, not a rare misconfiguration), so both
  * hosts tied at "referenced by 100% of pages" and the fallback's `>`-only
  * tie-break (see below) picked whichever host happened to be counted first
@@ -100,18 +100,18 @@ function tryGetHost(href: string): string | undefined {
  * // Without `host`: falls back to dominant-host inference (ties possible).
  * filterFirstPartyStylesheetHrefs([
  * 	{ stylesheetHrefs: ['https://example.com/a.css', 'https://example.com/b.css'] },
- * 	{ stylesheetHrefs: ['https://example.com/a.css', 'https://fonts.googleapis.com/css?family=x'] },
+ * 	{ stylesheetHrefs: ['https://example.com/a.css', 'https://fonts.cdn.example/css?family=x'] },
  * ]);
  * // [
  * // 	{ stylesheetHrefs: ['https://example.com/a.css', 'https://example.com/b.css'] },
- * // 	{ stylesheetHrefs: ['https://example.com/a.css'] }, // fonts.googleapis.com dropped
+ * // 	{ stylesheetHrefs: ['https://example.com/a.css'] }, // fonts.cdn.example dropped
  * // ]
  *
  * // With `host`: direct per-page comparison, immune to ties.
  * filterFirstPartyStylesheetHrefs([
  * 	{
  * 		host: 'example.com',
- * 		stylesheetHrefs: ['https://example.com/a.css', 'https://fonts.googleapis.com/css?family=x'],
+ * 		stylesheetHrefs: ['https://example.com/a.css', 'https://fonts.cdn.example/css?family=x'],
  * 	},
  * ]);
  * // [{ host: 'example.com', stylesheetHrefs: ['https://example.com/a.css'] }]

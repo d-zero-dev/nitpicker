@@ -354,7 +354,7 @@ describe('resolvePageClusterKeys', () => {
 			{ paths: ['news', '2'], stylesheetHrefs: ['https://example.com/a.css'], html },
 			{
 				paths: ['news', '3'],
-				stylesheetHrefs: ['https://fonts.googleapis.com/css?family=x'],
+				stylesheetHrefs: ['https://fonts.cdn.example/css?family=x'],
 				html,
 			},
 			{ paths: ['other'], stylesheetHrefs: ['https://example.com/b.css'], html },
@@ -374,7 +374,7 @@ describe('resolvePageClusterKeys', () => {
 				paths: ['news', '3'],
 				stylesheetHrefs: [
 					'https://example.com/a.css',
-					'https://fonts.googleapis.com/css?family=x',
+					'https://fonts.cdn.example/css?family=x',
 				],
 				html,
 			},
@@ -411,7 +411,7 @@ describe('resolvePageClusterKeys', () => {
 				paths: ['news', '3'],
 				stylesheetHrefs: [
 					'https://example.com/a.css',
-					'https://fonts.googleapis.com/css?family=x',
+					'https://fonts.cdn.example/css?family=x',
 				],
 				html: htmlPost,
 			},
@@ -430,20 +430,20 @@ describe('resolvePageClusterKeys', () => {
 	});
 
 	test("providing each page's host avoids a dominant-host tie mistakenly keeping a sitewide third party over the real first party (regression test for a real crawl finding)", () => {
-		// 10 pages: every page loads *some* fonts.googleapis.com stylesheet
+		// 10 pages: every page loads *some* fonts.cdn.example stylesheet
 		// plus its own first-party one, tying the third-party host and the
 		// first-party host at "referenced by 10/10 pages" — the exact shape
 		// confirmed on a real 302-page crawl. dept-a/dept-b share one
-		// identical googleapis query string (their only distinguishing
+		// identical font-CDN query string (their only distinguishing
 		// signal if that third party wins the tie); the 8 filler pages each
-		// use a *different* googleapis query string (so it never looks like
+		// use a *different* font-CDN query string (so it never looks like
 		// a shared template signal on its own) and their own unique
 		// first-party stylesheet.
 		//
-		// Without `host`, the tie-break keeps googleapis.com (inserted first
+		// Without `host`, the tie-break keeps fonts.cdn.example (inserted first
 		// below), so dept-a/dept-b's real, distinguishing first-party
 		// stylesheets (a.css vs b.css) are dropped and their identical
-		// surviving googleapis href wrongly becomes a shared css: block,
+		// surviving font-CDN href wrongly becomes a shared css: block,
 		// causing Stage A to merge dept-a and dept-b (wrong).
 		//
 		// With `host` supplied, each page's real first-party stylesheet
@@ -460,7 +460,7 @@ describe('resolvePageClusterKeys', () => {
 				paths: ['dept-a', '1'],
 				host: 'example.com',
 				stylesheetHrefs: [
-					'https://fonts.googleapis.com/css?family=shared',
+					'https://fonts.cdn.example/css?family=shared',
 					'https://example.com/a.css',
 				],
 				html,
@@ -469,7 +469,7 @@ describe('resolvePageClusterKeys', () => {
 				paths: ['dept-b', '1'],
 				host: 'example.com',
 				stylesheetHrefs: [
-					'https://fonts.googleapis.com/css?family=shared',
+					'https://fonts.cdn.example/css?family=shared',
 					'https://example.com/b.css',
 				],
 				html,
@@ -479,7 +479,7 @@ describe('resolvePageClusterKeys', () => {
 			paths: [`filler-${i}`],
 			host: 'example.com',
 			stylesheetHrefs: [
-				`https://fonts.googleapis.com/css?family=filler-${i}`,
+				`https://fonts.cdn.example/css?family=filler-${i}`,
 				`https://example.com/filler-${i}.css`,
 			],
 			html,
@@ -487,7 +487,7 @@ describe('resolvePageClusterKeys', () => {
 		const pages = [...targetPages, ...fillerPages];
 
 		// Without host the blocking is wrong: dept-a/dept-b land in the same
-		// css: block (googleapis wins the tie) and Stage A merges them.
+		// css: block (the font CDN wins the tie) and Stage A merges them.
 		const withoutHost = resolvePageClusterKeys(
 			pages.map(({ paths, stylesheetHrefs, html: pageHtml }) => ({
 				paths,

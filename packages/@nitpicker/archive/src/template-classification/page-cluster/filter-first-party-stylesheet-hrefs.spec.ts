@@ -12,7 +12,7 @@ describe('filterFirstPartyStylesheetHrefs', () => {
 			{
 				stylesheetHrefs: [
 					'https://example.com/a.css',
-					'https://fonts.googleapis.com/css?family=x',
+					'https://fonts.cdn.example/css?family=x',
 				],
 			},
 		]);
@@ -37,7 +37,7 @@ describe('filterFirstPartyStylesheetHrefs', () => {
 			{
 				stylesheetHrefs: [
 					'https://example.com/a.css',
-					'https://www.youtube.com/s/player.css',
+					'https://www.video.example/s/player.css',
 				],
 			},
 		]);
@@ -64,14 +64,14 @@ describe('filterFirstPartyStylesheetHrefs', () => {
 			{
 				host: 'example.com',
 				stylesheetHrefs: [
-					'https://fonts.googleapis.com/css?family=x',
+					'https://fonts.cdn.example/css?family=x',
 					'https://example.com/a.css',
 				],
 			},
 			{
 				host: 'example.com',
 				stylesheetHrefs: [
-					'https://fonts.googleapis.com/css?family=x',
+					'https://fonts.cdn.example/css?family=x',
 					'https://example.com/b.css',
 				],
 			},
@@ -84,10 +84,7 @@ describe('filterFirstPartyStylesheetHrefs', () => {
 		const result = filterFirstPartyStylesheetHrefs([
 			{ host: 'example.com', stylesheetHrefs: ['https://example.com/a.css'] },
 			{
-				stylesheetHrefs: [
-					'https://example.com/a.css',
-					'https://fonts.googleapis.com/css',
-				],
+				stylesheetHrefs: ['https://example.com/a.css', 'https://fonts.cdn.example/css'],
 			},
 		]);
 		expect(result[0]?.stylesheetHrefs).toEqual(['https://example.com/a.css']);
@@ -111,8 +108,8 @@ describe('filterFirstPartyStylesheetHrefs', () => {
 			{
 				stylesheetHrefs: [
 					'https://example.com/site.css',
-					'https://fonts.googleapis.com/css?family=a',
-					'https://fonts.googleapis.com/css?family=b',
+					'https://fonts.cdn.example/css?family=a',
+					'https://fonts.cdn.example/css?family=b',
 				],
 			},
 			{ stylesheetHrefs: ['https://example.com/site.css'] },
@@ -126,7 +123,10 @@ describe('filterFirstPartyStylesheetHrefs', () => {
 			{ stylesheetHrefs: ['http://example.com/a.css'] },
 			{ stylesheetHrefs: ['https://example.com/a.css'] },
 			{
-				stylesheetHrefs: ['https://cdn-evil.com/x.css', 'https://cdn-evil.com/y.css'],
+				stylesheetHrefs: [
+					'https://cdn-evil.example/x.css',
+					'https://cdn-evil.example/y.css',
+				],
 			},
 		]);
 		expect(result[0]?.stylesheetHrefs).toEqual(['http://example.com/a.css']);
@@ -138,10 +138,7 @@ describe('filterFirstPartyStylesheetHrefs', () => {
 		const result = filterFirstPartyStylesheetHrefs([
 			{
 				paths: ['news', '1'],
-				stylesheetHrefs: [
-					'https://example.com/a.css',
-					'https://fonts.googleapis.com/css',
-				],
+				stylesheetHrefs: ['https://example.com/a.css', 'https://fonts.cdn.example/css'],
 			},
 			{ paths: ['news', '2'], stylesheetHrefs: ['https://example.com/a.css'] },
 		]);
