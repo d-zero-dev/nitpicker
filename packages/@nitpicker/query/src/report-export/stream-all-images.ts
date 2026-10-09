@@ -23,7 +23,7 @@ export interface StreamAllImagesOptions {
  * Streams every `image_items` row for the Images report sheet.
  *
  * Plain `image_items.id` keyset pagination (`id > lastId`), matching
- * `streamAllResourcesRaw`/`streamAllViolations`: the report has no filter UI
+ * `streamAllResourcesRaw`: the report has no filter UI
  * and always wants every image in one linear sweep, so this bypasses the
  * viewer UI's `listViewerImages` (which recomputes `countViewerImagesTotal`'s
  * `COUNT(*)` on every page — appropriate for a small UI page, not a

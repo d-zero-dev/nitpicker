@@ -18,7 +18,7 @@ import { report } from './report.js';
  */
 async function sheetNamesOf(createSheetList: readonly CreateSheet[]): Promise<string[]> {
 	const settings = await Promise.all(
-		createSheetList.map((createSheet) => createSheet([], {} as never)),
+		createSheetList.map((createSheet) => createSheet({} as never)),
 	);
 	return settings.map((setting) => setting.name);
 }
@@ -73,14 +73,6 @@ vi.mock('./open-report-archive.js', () => ({
 	}),
 }));
 
-vi.mock('./load-config.js', () => ({
-	loadConfig: vi.fn().mockResolvedValue({}),
-}));
-
-vi.mock('./reports/get-plugin-reports.js', () => ({
-	getPluginReports: vi.fn().mockResolvedValue([]),
-}));
-
 vi.mock('./sheets/create-sheets.js', () => ({
 	createSheets: vi.fn().mockResolvedValue(),
 }));
@@ -90,7 +82,6 @@ describe('report', () => {
 		filePath: './test.nitpicker',
 		sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
 		credentialFilePath: './credentials.json',
-		configPath: null,
 	};
 
 	beforeEach(() => {
@@ -118,7 +109,6 @@ describe('report', () => {
 		await report({
 			filePath: baseParams.filePath,
 			sheetUrl: baseParams.sheetUrl,
-			configPath: null,
 			all: true,
 		});
 
@@ -181,7 +171,7 @@ describe('report', () => {
 		expect(mockAsyncDispose).toHaveBeenCalledTimes(1);
 	});
 
-	it('passes 8 sheets to createSheets when all=true (Summary is a no-op)', async () => {
+	it('passes 6 sheets to createSheets when all=true (Summary is a no-op)', async () => {
 		const { createSheets } = await import('./sheets/create-sheets.js');
 
 		await report({ ...baseParams, all: true });
@@ -195,13 +185,18 @@ describe('report', () => {
 					expect.any(Function),
 					expect.any(Function),
 					expect.any(Function),
-					expect.any(Function),
-					expect.any(Function),
 				]),
 			}),
 		);
 		const call = vi.mocked(createSheets).mock.calls[0]?.[0];
-		expect(call?.createSheetList).toHaveLength(8);
+		await expect(sheetNamesOf(call?.createSheetList ?? [])).resolves.toStrictEqual([
+			'Page List',
+			'Links',
+			'Resources',
+			'Images',
+			'Referrers Relational Table',
+			'Resources Relational Table',
+		]);
 	});
 
 	it('warns and generates no sheet when "Summary" is selected (not yet implemented)', async () => {
@@ -225,21 +220,29 @@ describe('report', () => {
 		await report({ ...baseParams, all: false });
 
 		const call = vi.mocked(createSheets).mock.calls[0]?.[0];
-		expect(call?.createSheetList).toHaveLength(3);
+		await expect(sheetNamesOf(call?.createSheetList ?? [])).resolves.toStrictEqual([
+			'Page List',
+			'Links',
+			'Resources',
+		]);
 	});
 
 	describe('--urls', () => {
-		it('restricts --all to the 4 URL-filterable sheets (Page List/Links/Violations/Images)', async () => {
+		it('restricts --all to the 3 URL-filterable sheets (Page List/Links/Images)', async () => {
 			resolveAndValidatePageListUrlFilter.mockResolvedValue(['https://example.com/a']);
 			const { createSheets } = await import('./sheets/create-sheets.js');
 
 			await report({ ...baseParams, all: true, urls: ['https://example.com/a'] });
 
 			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
-			expect(call?.createSheetList).toHaveLength(4);
+			await expect(sheetNamesOf(call?.createSheetList ?? [])).resolves.toStrictEqual([
+				'Page List',
+				'Links',
+				'Images',
+			]);
 		});
 
-		it('restricts the interactive picker choices to the 4 URL-filterable sheets', async () => {
+		it('restricts the interactive picker choices to the 3 URL-filterable sheets', async () => {
 			resolveAndValidatePageListUrlFilter.mockResolvedValue(['https://example.com/a']);
 			const promptSpy = vi
 				.spyOn(enquirer, 'prompt')
@@ -249,7 +252,7 @@ describe('report', () => {
 
 			expect(promptSpy).toHaveBeenCalledWith([
 				expect.objectContaining({
-					choices: ['Page List', 'Links', 'Violations', 'Images'],
+					choices: ['Page List', 'Links', 'Images'],
 				}),
 			]);
 		});
@@ -297,7 +300,14 @@ describe('report', () => {
 			expect(resolveAndValidatePageListUrlFilter).not.toHaveBeenCalled();
 			expect(warnUnmatchedPageListUrls).not.toHaveBeenCalled();
 			const call = vi.mocked(createSheets).mock.calls[0]?.[0];
-			expect(call?.createSheetList).toHaveLength(8);
+			await expect(sheetNamesOf(call?.createSheetList ?? [])).resolves.toStrictEqual([
+				'Page List',
+				'Links',
+				'Resources',
+				'Images',
+				'Referrers Relational Table',
+				'Resources Relational Table',
+			]);
 		});
 	});
 

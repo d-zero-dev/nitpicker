@@ -7,9 +7,8 @@ import { pathExists } from './path-exists.js';
  * {@link import('./resolve-archive-cache-dir.js').resolveArchiveCacheDir}).
  *
  * Deliberately scoped to exactly `cacheDir` — it never touches sibling
- * entries under the same cache root (in particular, the `@nitpicker/core`
- * analyze `table` cache is never archive-scoped and must survive a
- * per-archive clear).
+ * entries under the same cache root (in particular, other archives'
+ * tar-cache entries must survive a per-archive clear).
  * @param cacheDir - Absolute path to the single cache entry to remove.
  * @returns `true` if `cacheDir` existed and was removed, `false` if it was
  *   already absent.

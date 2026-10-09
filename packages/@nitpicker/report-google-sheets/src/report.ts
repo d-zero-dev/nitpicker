@@ -8,19 +8,15 @@ import {
 } from '@nitpicker/query';
 import enquirer from 'enquirer';
 
-import { createDiscrepancies } from './data/create-discrepancies.js';
 import { createImageList } from './data/create-image-list.js';
 import { createLinks } from './data/create-links.js';
 import { createPageList } from './data/create-page-list.js';
 import { createReferrersRelationalTable } from './data/create-referrers-relational-table.js';
 import { createResourcesRelationalTable } from './data/create-resources-relational-table.js';
 import { createResources } from './data/create-resources.js';
-import { createViolations } from './data/create-violations.js';
 import { log } from './debug.js';
 import { isDriveFolderUrl } from './is-drive-folder-url.js';
-import { loadConfig } from './load-config.js';
 import { openReportArchive } from './open-report-archive.js';
-import { getPluginReports } from './reports/get-plugin-reports.js';
 import { resolveSpreadsheetUrl } from './resolve-spreadsheet-url.js';
 import { createSheets } from './sheets/create-sheets.js';
 
@@ -35,8 +31,6 @@ import { createSheets } from './sheets/create-sheets.js';
 export const SHEET_PRIORITY_ORDER = [
 	'Page List',
 	'Links',
-	'Violations',
-	'Discrepancies',
 	'Resources',
 	'Images',
 	'Referrers Relational Table',
@@ -52,9 +46,6 @@ export type SheetName = (typeof SHEET_PRIORITY_ORDER)[number];
  * unambiguous meaning. The rest are excluded from both `--all` and the
  * interactive picker when `--urls` is given:
  *
- * - `Discrepancies` compares two URLs per row (`leftSourceUrl`/
- *   `rightSourceUrl`) — which side matching `--urls` should keep is
- *   undefined.
  * - `Resources` / `Resources Relational Table` are many-to-many with pages
  *   (one resource can be referenced by many pages), and the dedupe-mode
  *   aggregation is precomputed at `viewer-build` time across the whole
@@ -65,12 +56,7 @@ export type SheetName = (typeof SHEET_PRIORITY_ORDER)[number];
  *   "restrict to these pages" means.
  * - `Summary` has no generator at all (see the `switch` below).
  */
-const URL_FILTERABLE_SHEETS: readonly SheetName[] = [
-	'Page List',
-	'Links',
-	'Violations',
-	'Images',
-];
+const URL_FILTERABLE_SHEETS: readonly SheetName[] = ['Page List', 'Links', 'Images'];
 
 /**
  * Parameters for {@link report}.
@@ -95,8 +81,6 @@ export interface ReportParams {
 	 * `./credentials.json` fallback before calling here.
 	 */
 	readonly credentialFilePath?: string;
-	/** Path to the nitpicker config file, or `null` for defaults. */
-	readonly configPath: string | null;
 	/** When `true`, generate all sheets without interactive prompt. */
 	readonly all?: boolean;
 	/** When `true`, suppress progress display output. */
@@ -117,8 +101,8 @@ export interface ReportParams {
 	/**
 	 * Restricts generation to pages matching these URLs (raw, pre-normalization —
 	 * normalized internally against the archive's `disableQueries` config via
-	 * `resolveAndValidatePageListUrlFilter`). When set, only the four sheets whose
-	 * rows are one-per-page (`Page List`, `Links`, `Violations`, `Images`) are
+	 * `resolveAndValidatePageListUrlFilter`). When set, only the three sheets whose
+	 * rows are one-per-page (`Page List`, `Links`, `Images`) are
 	 * eligible for generation — see {@link URL_FILTERABLE_SHEETS}'s docs for why
 	 * the rest are excluded. An empty array is rejected by
 	 * `resolveAndValidatePageListUrlFilter` rather than silently falling back to
@@ -157,10 +141,9 @@ export interface ReportParams {
  * 1. Authenticates with Google Sheets API using OAuth2 credentials.
  * 2. Opens the `.nitpicker` archive (read-only, via `openReportArchive` —
  *    see that function's docs for why this replaced `Archive.open`).
- * 3. Loads analyze plugin reports from the archive.
- * 4. Presents an interactive multi-select prompt for the user to
+ * 3. Presents an interactive multi-select prompt for the user to
  *    choose which sheets to generate.
- * 5. Delegates to `createSheets()` for cell-budget-aware, priority-ordered
+ * 4. Delegates to `createSheets()` for cell-budget-aware, priority-ordered
  *    data generation and upload, including its `TaskList` progress display
  *    and Google Sheets API rate-limit (429/403/5xx/ECONNRESET) backoff
  *    display — see `create-sheets.ts`'s docs.
@@ -177,7 +160,6 @@ export interface ReportParams {
  *   filePath: './output.nitpicker',
  *   sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
  *   credentialFilePath: './credentials.json',
- *   configPath: './nitpicker.config.json',
  * });
  * ```
  * @example
@@ -186,7 +168,6 @@ export interface ReportParams {
  * await report({
  *   filePath: './output.nitpicker',
  *   sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
- *   configPath: null,
  * });
  * ```
  * @example
@@ -196,7 +177,6 @@ export interface ReportParams {
  *   filePath: './output.nitpicker',
  *   sheetUrl: 'https://docs.google.com/spreadsheets/d/xxx/edit',
  *   credentialFilePath: './credentials.json',
- *   configPath: null,
  *   sheets: ['Page List', 'Links'],
  * });
  * ```
@@ -206,7 +186,6 @@ export async function report(params: ReportParams) {
 		filePath,
 		sheetUrl,
 		credentialFilePath,
-		configPath,
 		all,
 		silent,
 		dedupeResources,
@@ -246,19 +225,6 @@ export async function report(params: ReportParams) {
 		params.urls === undefined
 			? undefined
 			: await resolveAndValidatePageListUrlFilter(accessor, params.urls, collectWarning);
-
-	log('Loading config');
-	const config = await loadConfig(configPath);
-	log('Config loaded');
-
-	const plugins = config.plugins?.analyze
-		? Object.keys(config.plugins.analyze)
-		: undefined;
-	log('Loaded plugins: %O', plugins);
-
-	log('Loading plugin reports');
-	const reports = await getPluginReports(accessor);
-	log('Plugin reports loaded: %d', reports.length);
 
 	const availableSheetNames =
 		normalizedUrls === undefined ? SHEET_PRIORITY_ORDER : URL_FILTERABLE_SHEETS;
@@ -324,14 +290,6 @@ export async function report(params: ReportParams) {
 				createSheetList.push(createLinks({ urls: normalizedUrls }));
 				break;
 			}
-			case 'Violations': {
-				createSheetList.push(createViolations({ urls: normalizedUrls }));
-				break;
-			}
-			case 'Discrepancies': {
-				createSheetList.push(createDiscrepancies);
-				break;
-			}
 			case 'Resources': {
 				createSheetList.push(createResources({ dedupe: dedupeResources }));
 				break;
@@ -361,7 +319,7 @@ export async function report(params: ReportParams) {
 		}
 	}
 
-	// Created only now — after archive/config/selection errors and prompt
+	// Created only now — after archive/selection errors and prompt
 	// cancellation can no longer happen — so a failed or aborted run does not
 	// leave an empty Spreadsheet behind in the Drive folder.
 	const targetUrl = await resolveSpreadsheetUrl({
@@ -387,7 +345,6 @@ export async function report(params: ReportParams) {
 	await createSheets({
 		sheets,
 		accessor,
-		reports,
 		createSheetList,
 		options: {
 			onWarn: (message) => warnings.push(message),

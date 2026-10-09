@@ -10,7 +10,6 @@ const BASE: TransferOutcome = {
 	appendHintRoot: 'https://example.com/',
 	externalInScopeCount: 0,
 	pendingCount: 0,
-	pluginDataEntries: [],
 	readModelError: null,
 	templateClassificationError: null,
 };
@@ -43,15 +42,6 @@ describe('formatTransferNotices', () => {
 		expect(line).toContain('list-mode');
 	});
 
-	it('reports dropped plugin data with the analyze hint', () => {
-		const [line] = formatTransferNotices({
-			...BASE,
-			pluginDataEntries: ['analysis'],
-		});
-		expect(line).toContain('analysis');
-		expect(line).toContain('analyze /out/merged.nitpicker');
-	});
-
 	it('reports a read-model build failure with the rebuild hint', () => {
 		const [line] = formatTransferNotices({
 			...BASE,
@@ -70,21 +60,19 @@ describe('formatTransferNotices', () => {
 		expect(line).toContain('viewer-build /out/merged.nitpicker');
 	});
 
-	it('reports every applicable notice, in the fixed external/pending/plugin-data/templates/read-model order', () => {
+	it('reports every applicable notice, in the fixed external/pending/templates/read-model order', () => {
 		const lines = formatTransferNotices({
 			...BASE,
 			externalInScopeCount: 1,
 			pendingCount: 1,
-			pluginDataEntries: ['analysis'],
 			templateClassificationError: 'oops',
 			readModelError: 'boom',
 		});
-		expect(lines).toHaveLength(5);
+		expect(lines).toHaveLength(4);
 		expect(lines[0]).toContain('external links');
 		expect(lines[1]).toContain('Warning:');
 		expect(lines[1]).toContain('pending');
-		expect(lines[2]).toContain('Analyze plugin data');
-		expect(lines[3]).toContain('page template classification failed');
-		expect(lines[4]).toContain('read model build failed');
+		expect(lines[2]).toContain('page template classification failed');
+		expect(lines[3]).toContain('read model build failed');
 	});
 });

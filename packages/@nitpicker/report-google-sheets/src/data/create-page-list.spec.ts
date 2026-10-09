@@ -144,13 +144,13 @@ describe('createPageList', () => {
 	});
 
 	it('returns sheet config with name "Page List" and requiresReadModel', () => {
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		expect(setting.name).toBe('Page List');
 		expect(setting.requiresReadModel).toBe(true);
 	});
 
 	it('returns the documented base headers', () => {
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const headers = setting.createHeaders();
 		expect(headers[0]).toBe('Title');
 		expect(headers[1]).toBe('Full Title');
@@ -161,18 +161,9 @@ describe('createPageList', () => {
 		expect(headers).toContain('scroll_height_mobile');
 	});
 
-	it('appends plugin report headers after the base columns', () => {
-		const setting = createPageList()(
-			[{ name: 'plugin', pageData: { headers: { custom: 'Custom Column' }, data: {} } }],
-			NO_ACCESSOR,
-		);
-		const headers = setting.createHeaders();
-		expect(headers.at(-1)).toBe('Custom Column');
-	});
-
 	it('estimates the row count via countPageListRows, with no urls filter by default', async () => {
 		vi.mocked(countPageListRows).mockResolvedValue(42);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		await expect(setting.estimateRowCount()).resolves.toBe(42);
 		expect(countPageListRows).toHaveBeenCalledWith(NO_ACCESSOR, { urls: undefined });
 	});
@@ -181,7 +172,7 @@ describe('createPageList', () => {
 		vi.mocked(countPageListRows).mockResolvedValue(1);
 		vi.mocked(streamPageListRows).mockReturnValueOnce(oneChunk([makeStreamRow()]));
 		const urls = ['https://example.com/page'];
-		const setting = createPageList({ urls })([], NO_ACCESSOR);
+		const setting = createPageList({ urls })(NO_ACCESSOR);
 
 		await setting.estimateRowCount();
 		expect(countPageListRows).toHaveBeenCalledWith(NO_ACCESSOR, { urls });
@@ -198,7 +189,7 @@ describe('createPageList', () => {
 
 	it('streams rows without any lazy thunks (pins the OOM fix)', async () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(oneChunk([makeStreamRow()]));
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -221,7 +212,7 @@ describe('createPageList', () => {
 				}),
 			]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -241,7 +232,7 @@ describe('createPageList', () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(
 			oneChunk([makeStreamRow({ title: 'Post 1 | My Blog', displayTitle: 'Post 1' })]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -260,7 +251,7 @@ describe('createPageList', () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(
 			oneChunk([makeStreamRow({ title: longTitle })]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -293,7 +284,7 @@ describe('createPageList', () => {
 			]),
 		);
 
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -313,7 +304,7 @@ describe('createPageList', () => {
 
 	it('falls back to EMPTY_FACTS-shaped zeros when a page has no outbound-link entry', async () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(oneChunk([makeStreamRow()]));
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -337,7 +328,7 @@ describe('createPageList', () => {
 				}),
 			]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -356,7 +347,7 @@ describe('createPageList', () => {
 			new Map([[5, ['https://example.com/old']]]),
 		);
 
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -374,7 +365,7 @@ describe('createPageList', () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(
 			oneChunk([makeStreamRow({ redirectDestUrl: null })]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -394,7 +385,7 @@ describe('createPageList', () => {
 				}),
 			]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -424,7 +415,7 @@ describe('createPageList', () => {
 				}),
 			]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -454,7 +445,7 @@ describe('createPageList', () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(
 			oneChunk([makeStreamRow({ lang: null })]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -469,7 +460,7 @@ describe('createPageList', () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(
 			oneChunk([makeStreamRow({ status: null })]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -480,68 +471,6 @@ describe('createPageList', () => {
 		expect(cellValue(mock.rows[0]![15]!)).toBe(-1);
 	});
 
-	it('adds plugin report data columns from pageData keyed by URL', async () => {
-		vi.mocked(streamPageListRows).mockReturnValueOnce(
-			oneChunk([makeStreamRow({ url: 'https://example.com/page' })]),
-		);
-		const setting = createPageList()(
-			[
-				{
-					name: 'plugin',
-					pageData: {
-						headers: { score: 'Score' },
-						data: { 'https://example.com/page': { score: { value: 95 } } },
-					},
-				},
-			],
-			NO_ACCESSOR,
-		);
-		const mock = createMockSheet();
-		await setting.run({
-			sheet: mock.sheet,
-			maxRows: Infinity,
-			estimatedTotal: 1,
-			onProgress: () => {},
-		});
-
-		const headers = setting.createHeaders();
-		const scoreIndex = headers.indexOf('Score');
-		expect(cellValue(mock.rows[0]![scoreIndex]!)).toBe(95);
-	});
-
-	it('truncates an extremely long plugin-supplied note', async () => {
-		const longNote = 'x'.repeat(10_000);
-		vi.mocked(streamPageListRows).mockReturnValueOnce(
-			oneChunk([makeStreamRow({ url: 'https://example.com/page' })]),
-		);
-		const setting = createPageList()(
-			[
-				{
-					name: 'plugin',
-					pageData: {
-						headers: { score: 'Score' },
-						data: { 'https://example.com/page': { score: { value: 95 } } },
-						options: { 'https://example.com/page': { score: { note: longNote } } },
-					},
-				},
-			],
-			NO_ACCESSOR,
-		);
-		const mock = createMockSheet();
-		await setting.run({
-			sheet: mock.sheet,
-			maxRows: Infinity,
-			estimatedTotal: 1,
-			onProgress: () => {},
-		});
-
-		const headers = setting.createHeaders();
-		const scoreIndex = headers.indexOf('Score');
-		const note = cellNote(mock.rows[0]![scoreIndex]!)!;
-		expect(note.length).toBeLessThan(10_000);
-		expect(note).toContain('truncated');
-	});
-
 	it('skips a page across cursor pages once maxRows is reached', async () => {
 		vi.mocked(streamPageListRows).mockReturnValueOnce(
 			oneChunk([
@@ -549,7 +478,7 @@ describe('createPageList', () => {
 				makeStreamRow({ url: 'https://example.com/b', pageId: 2 }),
 			]),
 		);
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -562,7 +491,7 @@ describe('createPageList', () => {
 	});
 
 	it('calls frozen, conditionalFormat, and hideCol in updateSheet', async () => {
-		const setting = createPageList()([], NO_ACCESSOR);
+		const setting = createPageList()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await mock.sheet.setHeaders(setting.createHeaders());
 		await setting.updateSheet!(mock.sheet);

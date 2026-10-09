@@ -7,6 +7,7 @@ import { createAdjunctTables } from '../../../create-adjunct-tables.js';
 import { createEntityTables } from '../../../create-entity-tables.js';
 import { createRefTables } from '../../../create-ref-tables.js';
 import { LibsqlDialect } from '../../../libsql-dialect.js';
+import { createLegacyAnalysisTables } from '../../../test-utils/create-legacy-analysis-tables.js';
 import { seedContentItem } from '../../../test-utils/seed-content-item.js';
 
 import { resetPagesByUrls } from './reset-pages-by-urls.js';
@@ -125,7 +126,8 @@ describe('resetPagesByUrls', () => {
 		expect(row.is_external).toBe(1);
 	});
 
-	it('deletes analysis_violations rows for a reset page but not analysis_text_refs', async () => {
+	it('deletes legacy analysis_violations rows for a reset page but not analysis_text_refs', async () => {
+		await createLegacyAnalysisTables(db);
 		const url = 'https://example.com/with-violation';
 		const pageId = await seedContentItem(db, url, { contentType: 'text/html' });
 		const [textRef] = await db('analysis_text_refs')
@@ -148,6 +150,18 @@ describe('resetPagesByUrls', () => {
 		expect(violations).toHaveLength(0);
 		const textRefs = await db('analysis_text_refs').where('id', textRef.id);
 		expect(textRefs).toHaveLength(1);
+	});
+
+	it('resets a page on an archive that has no analysis_violations table', async () => {
+		const url = 'https://example.com/no-legacy-table';
+		const pageId = await seedContentItem(db, url, { contentType: 'text/html' });
+		expect(await db.schema.hasTable('analysis_violations')).toBe(false);
+
+		const result = await resetPagesByUrls(db, [url]);
+
+		expect(result.resetUrls).toEqual([url]);
+		const row = await db('content_items').where('id', pageId).first();
+		expect(row.scraped).toBe(0);
 	});
 
 	it('is a no-op for a page that is already scraped = 0', async () => {

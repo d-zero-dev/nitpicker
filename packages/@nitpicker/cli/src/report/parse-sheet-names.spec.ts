@@ -39,9 +39,7 @@ describe('parseSheetNames', () => {
 		]);
 	});
 
-	it('violations・discrepancies・images・summary をそれぞれ解決する', () => {
-		expect(parseSheetNames('violations')).toStrictEqual(['Violations']);
-		expect(parseSheetNames('discrepancies')).toStrictEqual(['Discrepancies']);
+	it('images・summary をそれぞれ解決する', () => {
 		expect(parseSheetNames('images')).toStrictEqual(['Images']);
 		expect(parseSheetNames('summary')).toStrictEqual(['Summary']);
 	});
@@ -73,6 +71,18 @@ describe('parseSheetNames', () => {
 
 	it('同じシート名を複数回指定すると、そのまま重複して返す（呼び出し側の責務）', () => {
 		expect(parseSheetNames('pages,pages')).toStrictEqual(['Page List', 'Page List']);
+	});
+
+	it('未対応のシート名 violations はエラーを投げる', () => {
+		expect(() => parseSheetNames('violations')).toThrow(
+			'Unknown sheet name: "violations"',
+		);
+	});
+
+	it('未対応のシート名 discrepancies はエラーを投げる', () => {
+		expect(() => parseSheetNames('discrepancies')).toThrow(
+			'Unknown sheet name: "discrepancies"',
+		);
 	});
 
 	it('空文字列を渡すとエラーを投げる', () => {

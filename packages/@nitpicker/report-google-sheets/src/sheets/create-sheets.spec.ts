@@ -75,10 +75,9 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
-					name: 'Violations',
+					name: 'Resources',
 					createHeaders: () => ['A', 'B'],
 					estimateRowCount: () => Promise.resolve(0),
 					run: () => Promise.resolve(),
@@ -94,7 +93,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'Page List',
@@ -104,7 +102,7 @@ describe('createSheets', () => {
 					run: () => Promise.resolve(),
 				}),
 				makeCreateSheet({
-					name: 'Violations',
+					name: 'Resources',
 					createHeaders: () => ['A', 'B'],
 					estimateRowCount: () => Promise.resolve(0),
 					run: () => Promise.resolve(),
@@ -127,7 +125,6 @@ describe('createSheets', () => {
 		const runPromise = createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -185,7 +182,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -218,7 +214,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'Big Sheet',
@@ -263,7 +258,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -305,7 +299,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -376,7 +369,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -428,7 +420,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -460,7 +451,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -488,7 +478,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -520,7 +509,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -548,7 +536,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',
@@ -578,7 +565,6 @@ describe('createSheets', () => {
 		await createSheets({
 			sheets,
 			accessor: NO_ACCESSOR,
-			reports: [],
 			createSheetList: [
 				makeCreateSheet({
 					name: 'A',

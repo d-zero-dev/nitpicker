@@ -8,21 +8,19 @@ import {
 	streamPageListRows,
 } from '@nitpicker/query';
 
-import { pLog, reportLog } from '../debug.js';
+import { sheetLog } from '../debug.js';
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { booleanFormatError } from '../sheets/format.js';
 import { joinUrlsForNote } from '../utils/join-urls-for-note.js';
-import { nonNullFilter } from '../utils/non-null-filter.js';
 import { truncateNoteText } from '../utils/truncate-note-text.js';
 
-const log = pLog.extend('PageList');
+const log = sheetLog.extend('PageList');
 
 /**
  * Creates the "Page List" sheet configuration -- the primary sitemap-style report.
  *
- * This is the most complex sheet, combining crawler metadata with analyze
- * plugin data into a comprehensive per-page inventory:
+ * This is the most complex sheet, turning crawler metadata into a comprehensive per-page inventory:
  *
  * - **URL decomposition**: Protocol, domain, and up to 10 path segments for
  *   hierarchical filtering in the spreadsheet — computed once at read-model
@@ -35,7 +33,6 @@ const log = pLog.extend('PageList');
  *   (status >= 400, excluding 401 which is often auth-protected) — fetched
  *   per cursor batch via `getOutboundLinkFactsByPageIds`.
  * - **SEO metadata**: description, keywords, canonical, alternate, OGP, etc.
- * - **Plugin columns**: Dynamic columns from analyze plugin `pageData`.
  *
  * Conditional formatting highlights:
  * - Bad links (non-zero count)
@@ -80,12 +77,8 @@ const log = pLog.extend('PageList');
 export function createPageList(options?: { urls?: readonly string[] }): CreateSheet {
 	const urls = options?.urls;
 
-	return (reports, accessor) => {
+	return (accessor) => {
 		let maxDepth = 0;
-
-		const reportPageData = reports
-			.map((r) => (r.pageData ? { name: r.name, pageData: r.pageData } : null))
-			.filter(nonNullFilter);
 
 		return {
 			name: 'Page List',
@@ -155,12 +148,6 @@ export function createPageList(options?: { urls?: readonly string[] }): CreateSh
 					'scroll_height_desktop',
 					'scroll_height_mobile',
 				];
-
-				for (const report of reports) {
-					if (report.pageData) {
-						headers.push(...Object.values(report.pageData.headers));
-					}
-				}
 
 				return headers;
 			},
@@ -376,59 +363,6 @@ export function createPageList(options?: { urls?: readonly string[] }): CreateSh
 							),
 							createCellData({ value: dash(item.scrollHeightMobile) }, defaultCellFormat),
 						];
-
-						for (const report of reportPageData) {
-							const tableData = report.pageData.data[item.url];
-							const options = report.pageData.options
-								? report.pageData.options[item.url]
-								: null;
-
-							if (!tableData) {
-								reportLog("%s did'nt have table of %s", report.name, item.url);
-								continue;
-							}
-
-							reportLog('Add %s to table from %s', item.url, report.name);
-							data.push(
-								...Object.keys(report.pageData.headers).map((key) => {
-									const option = options ? options[key] || null : null;
-									const cellData = tableData[key];
-
-									const format: Record<string, unknown> = {};
-									let note: string | undefined;
-
-									if (option) {
-										if (option.bold) {
-											format.bold = !!option.bold;
-										}
-										if (option.fontFamily != null) {
-											format.fontFamily = `${option.fontFamily}`;
-										}
-										if (option.fontSize != null) {
-											format.fontSize = +option.fontSize;
-										}
-										if (option.italic != null) {
-											format.italic = !!option.italic;
-										}
-										if (option.strike != null) {
-											format.strikethrough = !!option.strike;
-										}
-										if (option.underline != null) {
-											format.underline = !!option.underline;
-										}
-
-										note = truncateNoteText(cellData?.note || `${option.note || ''}`);
-									}
-
-									const value = cellData?.value;
-
-									return createCellData(
-										{ value, textFormat: format, note, ifNull: false },
-										defaultCellFormat,
-									);
-								}),
-							);
-						}
 
 						await sheet.appendRow(data);
 						sent++;

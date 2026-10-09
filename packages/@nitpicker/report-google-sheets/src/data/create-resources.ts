@@ -149,7 +149,7 @@ async function countResourceGroups(accessor: ArchiveAccessor): Promise<number> {
 export function createResources(options?: CreateResourcesOptions): CreateSheet {
 	const dedupe = options?.dedupe === true;
 
-	return (_reports, accessor) => {
+	return (accessor) => {
 		if (!dedupe) {
 			return {
 				name: 'Resources',

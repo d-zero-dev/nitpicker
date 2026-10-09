@@ -11,7 +11,6 @@ import { resolveRequestHeaders } from '../crawl/resolve-request-headers.js';
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
 
-import { analyze } from './analyze.js';
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
 import { startCrawl } from './crawl.js';
 import { report } from './report.js';
@@ -22,10 +21,9 @@ type PipelineFlags = InferFlags<typeof commandDef.flags>;
 /**
  * Main entry point for the `pipeline` CLI command.
  *
- * Executes the full workflow sequentially: crawl → analyze → report.
- * The crawl step generates a `.nitpicker` archive, which is then passed
- * to the analyze step. If `--sheet` is provided, the report step runs
- * last to publish results to Google Sheets.
+ * Executes the full workflow sequentially: crawl → report.
+ * The crawl step generates a `.nitpicker` archive. If `--sheet` is provided,
+ * the report step then publishes it to Google Sheets.
  *
  * When the crawl step encounters only external link errors and `--strict`
  * is not set, the pipeline exits with code 2 (warning).
@@ -50,7 +48,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 	// Step 1: Crawl
 	if (!silent) {
 		// eslint-disable-next-line no-console
-		console.log('\n📡 [pipeline] Step 1/3: Crawling...');
+		console.log('\n📡 [pipeline] Step 1/2: Crawling...');
 	}
 
 	let archivePath: string;
@@ -124,26 +122,11 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		throw error;
 	}
 
-	// Step 2: Analyze
-	if (!silent) {
-		// eslint-disable-next-line no-console
-		console.log('\n🔍 [pipeline] Step 2/3: Analyzing...');
-	}
-	await analyze([archivePath], {
-		all: flags.all,
-		plugin: flags.plugin,
-		verbose: flags.verbose,
-		silent: flags.silent,
-		searchKeywords: flags.searchKeywords,
-		searchScope: flags.searchScope,
-		axeLang: flags.axeLang,
-	});
-
-	// Step 3: Report (only if --sheet is provided)
+	// Step 2: Report (only if --sheet is provided)
 	if (flags.sheet) {
 		if (!silent) {
 			// eslint-disable-next-line no-console
-			console.log('\n📊 [pipeline] Step 3/3: Reporting...');
+			console.log('\n📊 [pipeline] Step 2/2: Reporting...');
 		}
 		await report([archivePath], {
 			html: undefined,
@@ -157,7 +140,6 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			// as `urls` above.
 			sheets: undefined,
 			credentials: flags.credentials,
-			config: flags.config,
 			all: flags.all,
 			dedupeResources: flags.dedupeResources,
 			verbose: flags.verbose,
@@ -165,7 +147,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		});
 	} else if (!silent) {
 		// eslint-disable-next-line no-console
-		console.log('\n📊 [pipeline] Step 3/3: Skipped (no --sheet specified)');
+		console.log('\n📊 [pipeline] Step 2/2: Skipped (no --sheet specified)');
 	}
 
 	if (!silent) {

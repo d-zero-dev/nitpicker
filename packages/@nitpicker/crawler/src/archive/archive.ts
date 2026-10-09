@@ -42,9 +42,8 @@ import { safePath } from './safe-path.js';
  * An Archive wraps a SQLite database into a tar archive. HTML bodies live
  * inside the same DB as zstd-compressed BLOBs (see #75), so `db.sqlite` is
  * normally the tar's only entry — but it is not the only entry the format
- * allows: {@link ArchiveAccessor.setData} (namespace-scoped analyze output)
- * and {@link Archive.saveInventorySourceList} (a saved `--inventory`
- * source list) add plain files alongside it. It extends
+ * allows: {@link Archive.saveInventorySourceList} (a saved `--inventory`
+ * source list) adds plain files alongside it. It extends
  * {@link ArchiveAccessor} to provide read access to stored data.
  *
  * Use the static factory methods ({@link Archive.create}, {@link Archive.open},
@@ -105,7 +104,7 @@ export default class Archive extends ArchiveAccessor {
 		db: Database,
 		releaseLock: () => Promise<void>,
 	) {
-		super(tmpDir, db, '');
+		super(tmpDir, db);
 		this.#filePath = filePath;
 		this.#tmpDir = tmpDir;
 		this.#db = db;
@@ -461,29 +460,6 @@ export default class Archive extends ArchiveAccessor {
 		return this.#closeOnce;
 	}
 	/**
-	 * Replaces the archive's analysis violations with a fresh SQL-backed set.
-	 *
-	 * Thin facade over {@link Database.replaceAnalysisViolations}; kept on
-	 * `Archive` so the analyze pipeline can persist violations without
-	 * reaching into the low-level database class directly.
-	 * @param violations - Flat analyze violations.
-	 */
-	async replaceAnalysisViolations(
-		violations: readonly {
-			validator: string;
-			severity: string;
-			rule: string;
-			code?: string | null;
-			message: string;
-			url: string;
-			line?: number | null;
-			col?: number | null;
-		}[],
-	): Promise<void> {
-		await this.#db.replaceAnalysisViolations(violations);
-	}
-
-	/**
 	 * Replaces the archive's DOM-structure template classification
 	 * with a fresh SQL-backed set.
 	 *
@@ -566,12 +542,10 @@ export default class Archive extends ArchiveAccessor {
 	 * omits the source file's absolute path for the same reason; see
 	 * `CrawlerOrchestrator.inventory`'s `source` param).
 	 *
-	 * This bypasses the namespace-scoped {@link ArchiveAccessor.setData} API
-	 * (that one is reserved for analyze plugins and requires a namespace) —
-	 * this always lands under the fixed `inventory/` prefix regardless of
-	 * how this accessor was constructed. Callers that need to read the
-	 * saved list back can use the inherited `getData(`inventory/${sha256}`,
-	 * 'txt')`, since it resolves to the same path when no namespace is set.
+	 * The file always lands under the fixed `inventory/` prefix. Callers that
+	 * need to read the saved list back can use the inherited
+	 * `getData(`inventory/${sha256}`, 'txt')`, which resolves to the same
+	 * path under tmpDir.
 	 *
 	 * No entry is ever removed here — same accepted gap as `page_html_blobs`
 	 * (a future #23 GC pass will sweep unreachable hashes across both). A
@@ -735,8 +709,7 @@ export default class Archive extends ArchiveAccessor {
 	 * `db.sqlite`, renames the temporary working directory to the archive's
 	 * basename, and tars the **entire tmpDir**. `db.sqlite` is normally the
 	 * only entry (HTML lives as BLOBs in the DB, not a `snapshot-html.zip`),
-	 * but a namespace-scoped `setData` write (analyze output) or
-	 * `saveInventorySourceList` (a saved `--inventory` source list) adds
+	 * but `saveInventorySourceList` (a saved `--inventory` source list) adds
 	 * extra files under tmpDir that get tarred right alongside it.
 	 *
 	 * This is why every writer path that reaches `write()` must open with
@@ -875,7 +848,6 @@ export default class Archive extends ArchiveAccessor {
 	 * the tmpDir's owner (see `acquireArchiveLock` for the cross-process
 	 * case) — this method does not acquire any lock itself.
 	 * @param tmpDir - The path to the temporary directory containing the database.
-	 * @param namespace - An optional namespace for scoping data access within the archive.
 	 * @param options - Connection options.
 	 * @param options.readOnly - Defaults to `true`. Pass `false` to obtain a
 	 *   writable accessor against a tmpDir the calling process itself owns.
@@ -887,16 +859,12 @@ export default class Archive extends ArchiveAccessor {
 	 * // Writable escape hatch — only against a tmpDir this process owns
 	 * // (e.g. the viewer-read-model worker thread reconnecting to the
 	 * // parent's Archive.open extraction):
-	 * const writable = await Archive.connect(ownTmpDir, null, { readOnly: false });
+	 * const writable = await Archive.connect(ownTmpDir, { readOnly: false });
 	 */
-	static async connect(
-		tmpDir: string,
-		namespace: string | null = null,
-		options: { readOnly?: boolean } = {},
-	) {
+	static async connect(tmpDir: string, options: { readOnly?: boolean } = {}) {
 		const readOnly = options.readOnly ?? true;
 		const db = await Archive.#connectDB(tmpDir, { readOnly });
-		const archive = new ArchiveAccessor(tmpDir, db, namespace, { readOnly });
+		const archive = new ArchiveAccessor(tmpDir, db, { readOnly });
 		return archive;
 	}
 	/**
@@ -931,7 +899,6 @@ export default class Archive extends ArchiveAccessor {
 	 * NOT use this path — they need the lock + write-back semantics of
 	 * {@link Archive.open}.
 	 * @param filePath - Absolute path to the `.nitpicker` file.
-	 * @param namespace - Optional namespace forwarded to {@link ArchiveAccessor}.
 	 * @param onExtractProgress - Forwarded to {@link extractArchiveToCache} —
 	 *   see that function's docs for the cache-hit/miss contract.
 	 * @param onLog - Forwarded to the cache-miss migration pass (issue #294)
@@ -951,7 +918,6 @@ export default class Archive extends ArchiveAccessor {
 	 */
 	static async openCached(
 		filePath: string,
-		namespace: string | null = null,
 		onExtractProgress?: (readBytes: number, totalBytes: number) => void,
 		onLog?: (message: string) => void,
 	): Promise<ArchiveAccessor> {
@@ -967,7 +933,7 @@ export default class Archive extends ArchiveAccessor {
 			onExtractProgress,
 			onLog,
 		);
-		return await Archive.connect(cacheDir, namespace);
+		return await Archive.connect(cacheDir);
 	}
 	/**
 	 * Creates a new archive at the specified file path.
@@ -1003,7 +969,7 @@ export default class Archive extends ArchiveAccessor {
 	/**
 	 * Opens an existing archive file (`.nitpicker`) by extracting it to a temporary directory.
 	 * @param options - Options including the file path, optional working directory,
-	 *                  and whether to extract plugin data.
+	 *                  and whether to extract non-db tar entries.
 	 * @returns An Archive instance with the extracted data loaded.
 	 */
 	static async open(options: ArchiveOptions & ArchiveOpenOptions) {
@@ -1224,10 +1190,9 @@ type ArchiveOptions = {
 type ArchiveOpenOptions = {
 	/**
 	 * When `false` (the default), only `db.sqlite` is extracted into tmpDir.
-	 * When `true`, every tar entry is extracted, including non-namespace
-	 * files written via {@link ArchiveAccessor.setData} (analyze output) or
-	 * {@link Archive.saveInventorySourceList} (a saved `--inventory` source
-	 * list).
+	 * When `true`, every tar entry is extracted, including the non-database
+	 * files written by {@link Archive.saveInventorySourceList} (a saved
+	 * `--inventory` source list).
 	 *
 	 * Every writer path that later calls {@link Archive.write} MUST pass
 	 * `true`: `write()` re-tars whatever is currently in tmpDir, so a

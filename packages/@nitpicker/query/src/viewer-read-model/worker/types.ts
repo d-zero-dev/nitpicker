@@ -13,7 +13,7 @@ import type {
  * Only a directory path crosses the thread boundary: a live `ArchiveAccessor`
  * (and the `Knex` instance inside it) holds functions and native handles that
  * structured clone cannot transfer, so the worker reconnects to the same
- * SQLite database itself via `Archive.connect(tmpDir, null, { readOnly: false })`.
+ * SQLite database itself via `Archive.connect(tmpDir, { readOnly: false })`.
  */
 export interface ViewerReadModelWorkerData {
 	/**
@@ -37,15 +37,15 @@ export interface ViewerReadModelWorkerData {
 
 /**
  * Every message the viewer-read-model worker posts back to the main thread
- * (issue #294). One worker performs exactly one build, so unlike
- * `@nitpicker/core`'s pool protocol there is no `taskId` correlation — the
+ * (issue #294). One worker performs exactly one build, so there is no
+ * `taskId` correlation (a pool protocol would need one) — the
  * stream is strictly `phase`/`progress` updates followed by a single terminal
  * `done` or `error`.
  *
  * `error` carries only the message string: an `Error` instance survives
  * structured clone, but the main-thread wrapper re-wraps it anyway to get a
  * stack trace pointing at the calling side, so the extra fidelity would be
- * unused (same trade-off as `@nitpicker/core`'s `result.error` field).
+ * unused.
  */
 export type ViewerReadModelWorkerMessage =
 	| {

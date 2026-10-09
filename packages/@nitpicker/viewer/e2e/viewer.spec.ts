@@ -630,7 +630,6 @@ const VIEW_PATHS = [
 	'/images',
 	'/broken-links',
 	'/external-links',
-	'/violations',
 	'/duplicates',
 	'/mismatches',
 	'/console-logs',

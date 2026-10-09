@@ -2,22 +2,22 @@ import type { CommandDef } from '@d-zero/roar';
 
 /**
  * Command definition for the `pipeline` sub-command.
- * Merges flags from crawl, analyze, and report into a single command
- * that executes the full crawl → analyze → report workflow sequentially.
+ * Merges flags from crawl and report into a single command
+ * that executes the full crawl → report workflow sequentially.
  *
  * Split from `pipeline.ts` (issue #294) so `cli.ts` can import this
  * lightweight flag/usage metadata eagerly for every command's `--help`
  * output, while the actual implementation — which statically imports
- * `crawl.ts`/`analyze.ts`/`report.ts` (it genuinely needs all three to run
+ * `crawl.ts`/`report.ts` (it genuinely needs both to run
  * the combined workflow) — loads lazily, only for the command the user
  * actually invoked. See `pipeline.ts`'s `pipeline` function for the main
  * entry point.
  */
-// TODO: フラグ定義が crawl.ts / analyze.ts / report.ts と重複している。
+// TODO: フラグ定義が crawl.ts / report.ts と重複している。
 // @d-zero/roar の CommandDef 型制約により合成が困難なため手動同期が必要。
-// crawl / analyze / report にフラグを追加・変更した際はここも更新すること。
+// crawl / report にフラグを追加・変更した際はここも更新すること。
 export const commandDef = {
-	desc: 'Run crawl → analyze → report sequentially',
+	desc: 'Run crawl → report sequentially',
 	usage: '<URL> [options]',
 	flags: {
 		// crawl flags
@@ -189,39 +189,12 @@ export const commandDef = {
 			group: 'Crawl options',
 			desc: 'Skip the page template classification (DOM-structure clustering into per-site templates) that otherwise runs at the end of the crawl; run it later with `viewer-build`',
 		},
-		// analyze flags
+		// report flags
 		all: {
 			type: 'boolean',
-			group: 'Analyze options',
-			desc: 'Run all analysis plugins and generate all report sheets without interactive prompt',
+			group: 'Report options',
+			desc: 'Generate all report sheets without interactive prompt',
 		},
-		plugin: {
-			type: 'string',
-			isMultiple: true,
-			valueName: 'name',
-			group: 'Analyze options',
-			desc: 'Specify plugins to run (e.g. --plugin @nitpicker/analyze-axe --plugin @nitpicker/analyze-textlint)',
-		},
-		searchKeywords: {
-			type: 'string',
-			isMultiple: true,
-			valueName: 'keyword',
-			group: 'Analyze options',
-			desc: 'Keywords for analyze-search plugin (overrides config file)',
-		},
-		searchScope: {
-			type: 'string',
-			valueName: 'selector',
-			group: 'Analyze options',
-			desc: 'CSS selector to narrow search scope for analyze-search plugin (overrides config file)',
-		},
-		axeLang: {
-			type: 'string',
-			valueName: 'lang',
-			group: 'Analyze options',
-			desc: 'BCP 47 language tag for analyze-axe plugin (overrides config file)',
-		},
-		// report flags
 		sheet: {
 			shortFlag: 'S',
 			type: 'string',
@@ -235,13 +208,6 @@ export const commandDef = {
 			valueName: 'path',
 			group: 'Report options',
 			desc: 'Path to credentials file. When omitted, falls back to the GOOGLE_AUTH_CREDENTIALS environment variable, then ./credentials.json if it exists, then Application Default Credentials (keep this file secure and out of version control)',
-		},
-		config: {
-			shortFlag: 'c',
-			type: 'string',
-			valueName: 'path',
-			group: 'Report options',
-			desc: 'Path to config file',
 		},
 		dedupeResources: {
 			type: 'boolean',

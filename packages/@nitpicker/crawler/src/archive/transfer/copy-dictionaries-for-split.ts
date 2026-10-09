@@ -61,7 +61,7 @@ async function collectContentItemLevelNeeds(trx: Knex): Promise<void> {
 
 /**
  * Collects dictionary ids referenced by page-scoped data (`page_meta`,
- * `anchor_edges`, `image_items`, `analysis_violations`) — only from `full`
+ * `anchor_edges`, `image_items`) — only from `full`
  * pages, since `stub` rows never get any of these copied
  * (`copy-page-meta.ts` et al. only ever read `full`-action rows).
  * @param trx - Transaction with the source ATTACHed.
@@ -123,18 +123,6 @@ async function collectPageScopedNeeds(trx: Knex): Promise<void> {
 		INSERT OR IGNORE INTO xfer_need_text_refs (src_id)
 		SELECT ii.dom_path_text_id FROM ${SRC}.image_items ii
 		JOIN xfer_ci_plan p ON p.src_id = ii.page_id AND p.action = ${FULL}
-	`);
-
-	await trx.raw(`
-		INSERT OR IGNORE INTO xfer_need_analysis_text_refs (src_id)
-		SELECT av.message_text_id FROM ${SRC}.analysis_violations av
-		JOIN xfer_ci_plan p ON p.src_id = av.page_id AND p.action = ${FULL}
-	`);
-	await trx.raw(`
-		INSERT OR IGNORE INTO xfer_need_analysis_text_refs (src_id)
-		SELECT av.code_text_id FROM ${SRC}.analysis_violations av
-		JOIN xfer_ci_plan p ON p.src_id = av.page_id AND p.action = ${FULL}
-		WHERE av.code_text_id IS NOT NULL
 	`);
 }
 

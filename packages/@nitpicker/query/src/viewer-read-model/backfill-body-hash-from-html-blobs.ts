@@ -11,7 +11,7 @@ const CHUNK_SIZE = 500;
  *
  * Runs only during explicit viewer-read-model builds (`viewer-build`, or the
  * automatic build at crawl completion), never on read-only open — the same
- * placement as `backfillAnalysisViolationsFromJson`. Pages crawled after this
+ * placement as the other read-model backfills. Pages crawled after this
  * feature shipped already have `body_hash` set at write time
  * (`update-page.ts`), so in practice this only has work to do on archives
  * crawled before it existed.

@@ -62,7 +62,7 @@ async function countImages(
 export function createImageList(options?: { urls?: readonly string[] }): CreateSheet {
 	const urls = options?.urls;
 
-	return (_reports, accessor) => {
+	return (accessor) => {
 		return {
 			name: 'Images',
 			requiresReadModel: true,

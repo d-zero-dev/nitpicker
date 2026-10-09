@@ -502,7 +502,7 @@ describe('connect: readOnly option', () => {
 		await archive.setPage(makePageData('/writable-connect', '<html></html>'));
 		await archive.releaseHandle();
 
-		const writable = await Archive.connect(tmpDir, null, { readOnly: false });
+		const writable = await Archive.connect(tmpDir, { readOnly: false });
 		try {
 			expect(writable.readOnly).toBe(false);
 			await expect(

@@ -86,7 +86,6 @@ export { getViewerLinkGraph } from './get-viewer-link-graph.js';
 export { getViewerReadModelVersion } from './viewer-read-model/get-viewer-read-model-version.js';
 export { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model/viewer-read-model-schema-version.js';
 export { getViewerSummary } from './get-viewer-summary.js';
-export { getViolations } from './get-violations.js';
 export { hasViewerReadModel } from './viewer-read-model/has-viewer-read-model.js';
 export { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
 export { listConsoleLogs } from './list-console-logs.js';
@@ -158,7 +157,5 @@ export { streamAnchorFactEdges } from './report-export/stream-anchor-fact-edges.
 export type { AnchorFactEdgeStreamRow } from './report-export/types.js';
 export { streamResourceReferrerEdges } from './report-export/stream-resource-referrer-edges.js';
 export type { ResourceReferrerEdgeStreamRow } from './report-export/types.js';
-export { streamAllViolations } from './report-export/stream-all-violations.js';
-export type { ViolationStreamRow } from './report-export/types.js';
 export { warnUnmatchedPageListUrls } from './report-export/warn-unmatched-page-list-urls.js';
 export * from './types.js';

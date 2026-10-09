@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { ExitCode } from '../exit-code.js';
 
-import { analyze as analyzeFn } from './analyze.js';
 import { CrawlAggregateError } from './crawl-aggregate-error.js';
 import { startCrawl as startCrawlFn } from './crawl.js';
 import { pipeline } from './pipeline.js';
@@ -33,10 +32,6 @@ vi.mock('@nitpicker/crawler', async () => {
 		PendingUrlsRemainError: actual.PendingUrlsRemainError,
 	};
 });
-
-vi.mock('./analyze.js', () => ({
-	analyze: vi.fn(),
-}));
 
 vi.mock('./report.js', () => ({
 	report: vi.fn(),
@@ -79,13 +74,8 @@ describe('pipeline command', () => {
 		output: undefined,
 		strict: undefined,
 		all: undefined,
-		plugin: undefined,
-		searchKeywords: undefined,
-		searchScope: undefined,
-		axeLang: undefined,
 		sheet: undefined,
 		credentials: './credentials.json',
-		config: undefined,
 		verbose: undefined,
 		silent: undefined,
 	} as const;
@@ -113,9 +103,8 @@ describe('pipeline command', () => {
 		expect(exitSpy).toHaveBeenCalledWith(ExitCode.Fatal);
 	});
 
-	it('runs crawl then analyze without report when --sheet is not provided', async () => {
+	it('runs crawl without report when --sheet is not provided', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], defaultFlags);
 
@@ -132,17 +121,10 @@ describe('pipeline command', () => {
 				append: [],
 			}),
 		);
-		expect(analyzeFn).toHaveBeenCalledWith(
-			['/tmp/site.nitpicker'],
-			expect.objectContaining({
-				all: undefined,
-				plugin: undefined,
-				verbose: undefined,
-			}),
-		);
 		expect(reportFn).not.toHaveBeenCalled();
+		expect(consoleLogSpy).toHaveBeenCalledWith('\n📡 [pipeline] Step 1/2: Crawling...');
 		expect(consoleLogSpy).toHaveBeenCalledWith(
-			'\n📊 [pipeline] Step 3/3: Skipped (no --sheet specified)',
+			'\n📊 [pipeline] Step 2/2: Skipped (no --sheet specified)',
 		);
 	});
 
@@ -157,7 +139,6 @@ describe('pipeline command', () => {
 
 	it('--header / --authorization を解決して requestHeaders として startCrawl に渡す', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
 			...defaultFlags,
@@ -180,7 +161,6 @@ describe('pipeline command', () => {
 
 	it("forwards --dedupe-cap/--dedupe-map-cap to startCrawl (pipeline.ts hand-writes its own flags object rather than reusing crawl.ts's mapper, see the TODO on commandDef.flags)", async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
 			...defaultFlags,
@@ -199,7 +179,6 @@ describe('pipeline command', () => {
 
 	it('forwards --skip-templates to startCrawl', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], { ...defaultFlags, skipTemplates: true });
 
@@ -209,10 +188,9 @@ describe('pipeline command', () => {
 		);
 	});
 
-	it('runs crawl, analyze, and report when --sheet is provided', async () => {
+	it('runs crawl and report when --sheet is provided', async () => {
 		const sheetUrl = 'https://docs.google.com/spreadsheets/d/xxx';
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 		vi.mocked(reportFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
@@ -225,10 +203,6 @@ describe('pipeline command', () => {
 			['https://example.com'],
 			expect.objectContaining({ image: true }),
 		);
-		expect(analyzeFn).toHaveBeenCalledWith(
-			['/tmp/site.nitpicker'],
-			expect.objectContaining({ all: true }),
-		);
 		expect(reportFn).toHaveBeenCalledWith(
 			['/tmp/site.nitpicker'],
 			expect.objectContaining({
@@ -237,11 +211,12 @@ describe('pipeline command', () => {
 				all: true,
 			}),
 		);
+		expect(consoleLogSpy).toHaveBeenCalledWith('\n📡 [pipeline] Step 1/2: Crawling...');
+		expect(consoleLogSpy).toHaveBeenCalledWith('\n📊 [pipeline] Step 2/2: Reporting...');
 	});
 
 	it('passes an omitted --credentials through to the report step as undefined', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 		vi.mocked(reportFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
@@ -256,9 +231,8 @@ describe('pipeline command', () => {
 		);
 	});
 
-	it('passes verbose and silent flags to all steps', async () => {
+	it('passes verbose and silent flags to the crawl step', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
 			...defaultFlags,
@@ -270,15 +244,10 @@ describe('pipeline command', () => {
 			expect.any(Array),
 			expect.objectContaining({ verbose: true, silent: undefined }),
 		);
-		expect(analyzeFn).toHaveBeenCalledWith(
-			expect.any(Array),
-			expect.objectContaining({ verbose: true, silent: undefined }),
-		);
 	});
 
-	it('passes silent flag to analyze and report', async () => {
+	it('passes silent flag to crawl and report', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 		vi.mocked(reportFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
@@ -291,43 +260,15 @@ describe('pipeline command', () => {
 			expect.any(Array),
 			expect.objectContaining({ silent: true }),
 		);
-		expect(analyzeFn).toHaveBeenCalledWith(
-			expect.any(Array),
-			expect.objectContaining({ silent: true }),
-		);
 		expect(reportFn).toHaveBeenCalledWith(
 			expect.any(Array),
 			expect.objectContaining({ silent: true }),
 		);
 	});
 
-	it('passes analyze-specific flags correctly', async () => {
-		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
-
-		await pipeline(['https://example.com'], {
-			...defaultFlags,
-			plugin: ['@nitpicker/analyze-axe'],
-			searchKeywords: ['test'],
-			searchScope: '.main',
-			axeLang: 'ja',
-		});
-
-		expect(analyzeFn).toHaveBeenCalledWith(
-			expect.any(Array),
-			expect.objectContaining({
-				plugin: ['@nitpicker/analyze-axe'],
-				searchKeywords: ['test'],
-				searchScope: '.main',
-				axeLang: 'ja',
-			}),
-		);
-	});
-
-	it('passes crawl output path to analyze and report', async () => {
+	it('passes crawl output path to report', async () => {
 		const archivePath = '/custom/output/site.nitpicker';
 		vi.mocked(startCrawlFn).mockResolvedValue(archivePath);
-		vi.mocked(analyzeFn).mockResolvedValue();
 		vi.mocked(reportFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
@@ -336,13 +277,11 @@ describe('pipeline command', () => {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 		});
 
-		expect(analyzeFn).toHaveBeenCalledWith([archivePath], expect.any(Object));
 		expect(reportFn).toHaveBeenCalledWith([archivePath], expect.any(Object));
 	});
 
 	it('passes --single flag to startCrawl', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
 			...defaultFlags,
@@ -363,24 +302,11 @@ describe('pipeline command', () => {
 			'Crawl failed',
 		);
 
-		expect(analyzeFn).not.toHaveBeenCalled();
-		expect(reportFn).not.toHaveBeenCalled();
-	});
-
-	it('propagates error when analyze rejects', async () => {
-		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockRejectedValue(new Error('Analyze failed'));
-
-		await expect(pipeline(['https://example.com'], defaultFlags)).rejects.toThrow(
-			'Analyze failed',
-		);
-
 		expect(reportFn).not.toHaveBeenCalled();
 	});
 
 	it('propagates error when report rejects', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 		vi.mocked(reportFn).mockRejectedValue(new Error('Report failed'));
 
 		await expect(
@@ -393,7 +319,6 @@ describe('pipeline command', () => {
 
 	it('suppresses pipeline log output when --silent is set', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
 			...defaultFlags,
@@ -406,7 +331,6 @@ describe('pipeline command', () => {
 
 	it('suppresses pipeline log output when --silent is set with --sheet', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 		vi.mocked(reportFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
@@ -420,7 +344,6 @@ describe('pipeline command', () => {
 
 	it('shows completion message after all steps', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], defaultFlags);
 
@@ -493,7 +416,6 @@ describe('pipeline command', () => {
 
 	it('passes --strict flag to startCrawl', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], {
 			...defaultFlags,
@@ -508,7 +430,6 @@ describe('pipeline command', () => {
 
 	it('crawl 開始前に assertChromeIsInstalled を呼び出す', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], defaultFlags);
 
@@ -527,12 +448,10 @@ describe('pipeline command', () => {
 			'Chrome executable not found at: /fake/chrome',
 		);
 		expect(startCrawlFn).not.toHaveBeenCalled();
-		expect(analyzeFn).not.toHaveBeenCalled();
 	});
 
 	it('crawl 開始前に assertPuppeteerSharedWithBeholder を呼び出す', async () => {
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
-		vi.mocked(analyzeFn).mockResolvedValue();
 
 		await pipeline(['https://example.com'], defaultFlags);
 
@@ -551,6 +470,5 @@ describe('pipeline command', () => {
 			"crawler's puppeteer and @d-zero/beholder's puppeteer differ",
 		);
 		expect(startCrawlFn).not.toHaveBeenCalled();
-		expect(analyzeFn).not.toHaveBeenCalled();
 	});
 });

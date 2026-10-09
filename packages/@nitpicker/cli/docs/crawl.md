@@ -98,7 +98,7 @@ npx @nitpicker/cli crawl https://example.com
 
 長時間クロールは Ctrl+C で停止できます。停止時には、完成済みの `.nitpicker` とは別に、未完了クロールの作業状態を保持するstubディレクトリが残ります。
 
-stubディレクトリは「途中まで進んだクロールの状態」です。完成した成果物ではないため、`analyze` や `report` の入力にはせず、`--resume` で再開します。
+stubディレクトリは「途中まで進んだクロールの状態」です。完成した成果物ではないため、`report` などの入力にはせず、`--resume` で再開します。
 
 ```sh
 npx @nitpicker/cli crawl --resume <stub-dir>

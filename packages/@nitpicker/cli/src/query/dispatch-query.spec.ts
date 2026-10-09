@@ -42,7 +42,6 @@ vi.mock('@nitpicker/query', () => ({
 	getImagesFastPath: vi
 		.fn()
 		.mockResolvedValue({ items: [], total: 0, offset: 0, limit: 100 }),
-	getViolations: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 	getDuplicatesFastPath: vi.fn().mockResolvedValue({
 		items: [],
 		total: 0,
@@ -340,13 +339,6 @@ describe('dispatchQuery', () => {
 		const result = await dispatchQuery(mockAccessor, 'images', emptyFlags);
 		expect(result).toEqual({ items: [], total: 0, offset: 0, limit: 100 });
 		expect(getImagesFastPath).toHaveBeenCalledWith(mockAccessor, expect.any(Object));
-	});
-
-	it('dispatches violations sub-command', async () => {
-		const { getViolations } = await import('@nitpicker/query');
-		const result = await dispatchQuery(mockAccessor, 'violations', emptyFlags);
-		expect(result).toEqual({ items: [], total: 0 });
-		expect(getViolations).toHaveBeenCalledWith(mockAccessor, expect.any(Object));
 	});
 
 	it('dispatches duplicates sub-command with default field through the fast path', async () => {

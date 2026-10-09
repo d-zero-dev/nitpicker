@@ -15,7 +15,6 @@ import { getErrorKinds } from '../get-error-kinds.js';
 import { getSummary } from '../get-summary.js';
 
 import { backfillAliasOfId } from './backfill-alias-of-id.js';
-import { backfillAnalysisViolationsFromJson } from './backfill-analysis-violations-from-json.js';
 import { backfillBodyHashFromHtmlBlobs } from './backfill-body-hash-from-html-blobs.js';
 import { backfillDedupeCapEventId } from './backfill-dedupe-cap-event-id.js';
 import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
@@ -617,8 +616,7 @@ function toViewerPageInsertRow(
  * Performs a full rebuild of the viewer read model: backfills
  * `page_meta.body_hash` for any page whose stored HTML predates that column
  * (see `backfillBodyHashFromHtmlBlobs` — a write-model catch-up, not part of
- * the read model itself, run here for the same reason as
- * `backfillAnalysisViolationsFromJson` below). This alone does NOT guarantee
+ * the read model itself, run here because it only runs on explicit builds). This alone does NOT guarantee
  * every pre-existing archive gets backfilled: `ensureViewerReadModel`'s
  * schema-version gate skips calling this function entirely once an
  * archive's read model is already current, and `body_hash` did not change
@@ -800,11 +798,6 @@ export async function buildViewerReadModel(
 	const relayBackfillProgress = (processed: number, total: number) => {
 		onProgress?.({ insertedRows: processed, totalRows: total });
 	};
-	onPhase?.('backfillingAnalysisViolations');
-	// Not wired to `onProgress`: a single all-or-nothing `replaceAnalysisViolations`
-	// call with no countable unit, and a fast no-op on any archive already
-	// backfilled once — unlike the three per-page backfills below.
-	await backfillAnalysisViolationsFromJson(accessor);
 	onPhase?.('backfillingBodyHash');
 	await backfillBodyHashFromHtmlBlobs(accessor, relayBackfillProgress);
 	// Runs after body_hash: alias_of_id's Tier B (trailing-slash) grouping

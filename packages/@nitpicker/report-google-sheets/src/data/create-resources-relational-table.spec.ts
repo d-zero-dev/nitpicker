@@ -20,13 +20,13 @@ describe('createResourcesRelationalTable', () => {
 	});
 
 	it('returns sheet config with name "Resources Relational Table", no read-model dependency', () => {
-		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const setting = createResourcesRelationalTable(NO_ACCESSOR);
 		expect(setting.name).toBe('Resources Relational Table');
 		expect(setting.requiresReadModel).toBeFalsy();
 	});
 
 	it('returns correct headers', () => {
-		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const setting = createResourcesRelationalTable(NO_ACCESSOR);
 		expect(setting.createHeaders()).toEqual([
 			'Referred Page (From)',
 			'Resource (To)',
@@ -50,7 +50,7 @@ describe('createResourcesRelationalTable', () => {
 				},
 			]),
 		);
-		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const setting = createResourcesRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -81,7 +81,7 @@ describe('createResourcesRelationalTable', () => {
 				})),
 			),
 		);
-		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const setting = createResourcesRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -106,7 +106,7 @@ describe('createResourcesRelationalTable', () => {
 				},
 			]),
 		);
-		const setting = createResourcesRelationalTable([], NO_ACCESSOR);
+		const setting = createResourcesRelationalTable(NO_ACCESSOR);
 		const mock = createMockSheet();
 		const onProgress = vi.fn();
 		await setting.run({

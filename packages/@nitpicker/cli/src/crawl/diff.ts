@@ -47,13 +47,11 @@ export async function diff(a: string, b: string, options?: DiffOptions): Promise
 	log('%braille% Extracting archive A%dots%');
 	await using archiveA = await Archive.openCached(
 		a,
-		null,
 		createByteProgressLogger(log, 'Extracting archive A'),
 	);
 	log('%braille% Extracting archive B%dots%');
 	await using archiveB = await Archive.openCached(
 		b,
-		null,
 		createByteProgressLogger(log, 'Extracting archive B'),
 	);
 

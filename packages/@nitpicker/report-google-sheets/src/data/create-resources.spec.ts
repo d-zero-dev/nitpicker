@@ -102,7 +102,7 @@ describe('createResources (raw mode)', () => {
 	});
 
 	it('returns sheet config with name "Resources" and the raw headers', () => {
-		const setting = createResources()([], makeAccessor(0));
+		const setting = createResources()(makeAccessor(0));
 		expect(setting.name).toBe('Resources');
 		expect(setting.requiresReadModel).toBeFalsy();
 		expect(setting.createHeaders()).toEqual([
@@ -116,7 +116,7 @@ describe('createResources (raw mode)', () => {
 	});
 
 	it('estimates the row count via a resource_items COUNT(*)', async () => {
-		const setting = createResources()([], makeAccessor(42));
+		const setting = createResources()(makeAccessor(42));
 		await expect(setting.estimateRowCount()).resolves.toBe(42);
 	});
 
@@ -126,7 +126,7 @@ describe('createResources (raw mode)', () => {
 			new Map([[1, ['https://example.com/a', 'https://example.com/b']]]),
 		);
 
-		const setting = createResources()([], makeAccessor(1));
+		const setting = createResources()(makeAccessor(1));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -146,7 +146,7 @@ describe('createResources (raw mode)', () => {
 
 	it('reports onProgress against ctx.estimatedTotal, not maxRows (issue: misleading progress denominator)', async () => {
 		vi.mocked(streamAllResourcesRaw).mockReturnValue(oneChunk([makeRow()]));
-		const setting = createResources()([], makeAccessor(1));
+		const setting = createResources()(makeAccessor(1));
 		const mock = createMockSheet();
 		const onProgress = vi.fn();
 		await setting.run({
@@ -166,7 +166,7 @@ describe('createResources (raw mode)', () => {
 				makeRow({ resourceId: 3 }),
 			]),
 		);
-		const setting = createResources()([], makeAccessor(3));
+		const setting = createResources()(makeAccessor(3));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -185,7 +185,7 @@ describe('createResources (dedupe mode)', () => {
 	});
 
 	it('returns sheet config with requiresReadModel and the dedupe headers, including Count and Query Pattern', () => {
-		const setting = createResources({ dedupe: true })([], makeAccessor(0));
+		const setting = createResources({ dedupe: true })(makeAccessor(0));
 		expect(setting.name).toBe('Resources');
 		expect(setting.requiresReadModel).toBe(true);
 		expect(setting.createHeaders()).toEqual([
@@ -201,7 +201,7 @@ describe('createResources (dedupe mode)', () => {
 	});
 
 	it('estimates the row count via a viewer_resource_groups COUNT(*)', async () => {
-		const setting = createResources({ dedupe: true })([], makeAccessor(7));
+		const setting = createResources({ dedupe: true })(makeAccessor(7));
 		await expect(setting.estimateRowCount()).resolves.toBe(7);
 	});
 
@@ -220,7 +220,7 @@ describe('createResources (dedupe mode)', () => {
 			]),
 		);
 
-		const setting = createResources({ dedupe: true })([], makeAccessor(1));
+		const setting = createResources({ dedupe: true })(makeAccessor(1));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -245,7 +245,7 @@ describe('createResources (dedupe mode)', () => {
 			oneChunk([makeGroup({ referrerCount: 0, referrerNote: null })]),
 		);
 
-		const setting = createResources({ dedupe: true })([], makeAccessor(1));
+		const setting = createResources({ dedupe: true })(makeAccessor(1));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -261,7 +261,7 @@ describe('createResources (dedupe mode)', () => {
 			oneChunk([makeGroup({ referrerNote: 'https://example.com/x\n'.repeat(1000) })]),
 		);
 
-		const setting = createResources({ dedupe: true })([], makeAccessor(1));
+		const setting = createResources({ dedupe: true })(makeAccessor(1));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -281,7 +281,7 @@ describe('createResources (dedupe mode)', () => {
 				makeGroup({ canonicalUrl: 'https://example.com/b.js' }),
 			]),
 		);
-		const setting = createResources({ dedupe: true })([], makeAccessor(2));
+		const setting = createResources({ dedupe: true })(makeAccessor(2));
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -295,7 +295,7 @@ describe('createResources (dedupe mode)', () => {
 
 	it('reports onProgress against ctx.estimatedTotal', async () => {
 		vi.mocked(streamResourceGroups).mockReturnValueOnce(oneChunk([makeGroup()]));
-		const setting = createResources({ dedupe: true })([], makeAccessor(1));
+		const setting = createResources({ dedupe: true })(makeAccessor(1));
 		const mock = createMockSheet();
 		const onProgress = vi.fn();
 		await setting.run({

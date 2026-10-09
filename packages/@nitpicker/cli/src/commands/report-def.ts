@@ -39,19 +39,13 @@ export const commandDef = {
 		urls: {
 			type: 'string',
 			valueName: 'file',
-			desc: 'Restrict the report to pages matching this newline-delimited URL list file (blank lines and # comments ignored). Combines with --html-dirs (AND). For Google Sheets, restricts sheet generation to Page List/Links/Violations/Images.',
+			desc: 'Restrict the report to pages matching this newline-delimited URL list file (blank lines and # comments ignored). Combines with --html-dirs (AND). For Google Sheets, restricts sheet generation to Page List/Links/Images.',
 		},
 		credentials: {
 			shortFlag: 'C',
 			type: 'string',
 			valueName: 'path',
 			desc: 'Path to credentials file. When omitted, falls back to the GOOGLE_AUTH_CREDENTIALS environment variable, then ./credentials.json if it exists, then Application Default Credentials (keep this file secure and out of version control)',
-		},
-		config: {
-			shortFlag: 'c',
-			type: 'string',
-			valueName: 'path',
-			desc: 'Path to config file',
 		},
 		all: {
 			type: 'boolean',
@@ -60,7 +54,7 @@ export const commandDef = {
 		sheets: {
 			type: 'string',
 			valueName: 'name,...',
-			desc: 'Comma-separated sheet names to generate without interactive prompt (aliases: pages/page-list, links, violations, discrepancies, resources, images, referrers-rel-table, resources-rel-table, summary). Overrides --all and the interactive picker. For Google Sheets only.',
+			desc: 'Comma-separated sheet names to generate without interactive prompt (aliases: pages/page-list, links, resources, images, referrers-rel-table, resources-rel-table, summary). Overrides --all and the interactive picker. For Google Sheets only.',
 		},
 		dedupeResources: {
 			type: 'boolean',

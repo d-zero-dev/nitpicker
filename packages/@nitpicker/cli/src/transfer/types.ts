@@ -2,13 +2,13 @@
  * Everything `format-transfer-notices.ts`/`resolve-transfer-exit-code.ts`
  * need to know about a finished `concat`/`split` run — gathered by
  * `commands/concat.ts`/`commands/split.ts` from the crawler-side result
- * plus their own bookkeeping (pending check, plugin-data listing,
+ * plus their own bookkeeping (pending check,
  * read-model build outcome), and printed/exit-coded only AFTER the
  * `TaskList` has fully settled (never while a row is still active — see
  * those commands' own docs for why).
  */
 export interface TransferOutcome {
-	/** The output archive's absolute path, for the `crawl`/`analyze`/`viewer-build` hint commands. */
+	/** The output archive's absolute path, for the `crawl`/`viewer-build` hint commands. */
 	readonly outputPath: string;
 	/** `true` when the output's `roots` came from a `fromList` archive (split always rejects these, so this is concat-only). */
 	readonly fromList: boolean;
@@ -25,8 +25,6 @@ export interface TransferOutcome {
 	readonly externalInScopeCount: number;
 	/** `getCrawlingState().pending.length` on the finished output archive. */
 	readonly pendingCount: number;
-	/** Plugin-data directory names dropped from any source, deduplicated. */
-	readonly pluginDataEntries: readonly string[];
 	/** The viewer read-model build's failure message, or `null` if it succeeded. */
 	readonly readModelError: string | null;
 	/**

@@ -11,7 +11,6 @@ import type {
 	SearchHtmlOptions,
 	MatchSelectorOptions,
 	ListImagesOptions,
-	GetViolationsOptions,
 	GetDuplicatesFastPathOptions,
 	FindMismatchesFastPathOptions,
 	ListConsoleLogsOptions,
@@ -38,7 +37,6 @@ import {
 	getResourceReferrers,
 	getSummaryFastPath,
 	getTechnologyInventoryFastPath,
-	getViolations,
 	listConsoleLogs,
 	listDedupeCapEvents,
 	listDuplicateBodyClusters,
@@ -165,9 +163,6 @@ export async function dispatchQuery(
 		}
 		case 'images': {
 			return getImagesFastPath(accessor, options as ListImagesOptions);
-		}
-		case 'violations': {
-			return getViolations(accessor, options as GetViolationsOptions);
 		}
 		case 'duplicates': {
 			return getDuplicatesFastPath(accessor, options as GetDuplicatesFastPathOptions);

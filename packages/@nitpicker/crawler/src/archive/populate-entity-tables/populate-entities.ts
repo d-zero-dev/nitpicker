@@ -102,9 +102,8 @@ export async function populateEntityTables(
 	// reference is its own DEFERRABLE INITIALLY DEFERRED
 	// `redirect_dest_id`, which is validated at COMMIT so a mid-trx
 	// wipe-and-refill is legal. No external table has an enforced FK
-	// into `content_items` (viewer read-model tables and
-	// `analysis_violations` reference `pages(id)` or hold logical-only
-	// pointers), so the truncation stops here.
+	// into `content_items` (viewer read-model tables
+	// hold logical-only pointers), so the truncation stops here.
 	await trx('image_items').delete();
 	await trx('anchor_edges').delete();
 	await trx('resource_ref_edges').delete();

@@ -67,20 +67,17 @@ description: Git 操作ルール
 @d-zero/beholder（外部）
       ↑
       └── crawler ── @nitpicker/cli ← @d-zero/roar（外部）
-           ↑              ↑      ↑
-           │             core   report-google-sheets
-           │              ↑
-           │         analyze-* プラグイン
+           ↑              ↑
+           │       report-google-sheets
            └── @d-zero/dealer（外部）
 ```
 
-| ティア | パッケージ                                                                                                       |
-| ------ | ---------------------------------------------------------------------------------------------------------------- |
-| 0      | `types`                                                                                                          |
-| 1      | `crawler`, `core`                                                                                                |
-| 2      | `analyze-axe`, `analyze-markuplint`, `analyze-search`, `analyze-textlint`, `report-google-sheets`, `report-html` |
-| 3      | `cli`（統合 CLI）                                                                                                |
-| —      | `test-server`（E2E テスト専用、プロダクションコードには非依存）                                                  |
+| ティア | パッケージ                                                      |
+| ------ | --------------------------------------------------------------- |
+| 0      | `crawler`                                                       |
+| 1      | `report-google-sheets`, `report-html`                           |
+| 2      | `cli`（統合 CLI）                                               |
+| —      | `test-server`（E2E テスト専用、プロダクションコードには非依存） |
 
 - 同一ティア内では順序不問
 - ルート設定の変更（`tsconfig.json`, CI 等）はパッケージの変更より先にコミット
@@ -94,7 +91,7 @@ description: Git 操作ルール
 - Conventional Commits を使用すること
   - 使用するタイプ: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
   - 使用するスコープ:
-    - 各パッケージ名（ネームスペースなし）: `crawler`, `core`, `types`, `analyze-axe`, `analyze-markuplint`, `analyze-search`, `analyze-textlint`, `report-google-sheets`, `report-html`, `cli`
+    - 各パッケージ名（ネームスペースなし）: `crawler`, `report-google-sheets`, `report-html`, `cli`
     - `repo`, `deps`, `github`
 - メッセージ本文の各行は100文字以下
 - 件名は sentence-case, start-case, pascal-case, upper-case にしない

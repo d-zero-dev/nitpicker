@@ -26,7 +26,6 @@ import { SummaryView } from './routes/summary-view.js';
 import { TechnologiesView } from './routes/technologies-view.js';
 import { TemplateClustersView } from './routes/template-clusters-view.js';
 import { UnusedResourcesView } from './routes/unused-resources-view.js';
-import { ViolationsView } from './routes/violations-view.js';
 
 /**
  * Shared TanStack Query client. Server data is read-only and rarely changes.
@@ -85,7 +84,6 @@ export function App() {
 									<Route path="/broken-links" element={<BrokenLinksView />} />
 									<Route path="/external-links" element={<ExternalLinksView />} />
 									<Route path="/graph" element={<GraphView />} />
-									<Route path="/violations" element={<ViolationsView />} />
 									<Route path="/duplicates" element={<DuplicatesView />} />
 									<Route path="/crawl-suppression" element={<CrawlSuppressionView />} />
 									<Route path="/mismatches" element={<MismatchesView />} />

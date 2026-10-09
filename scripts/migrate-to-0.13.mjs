@@ -51,11 +51,13 @@
  *    ref tables populated earlier stay committed but are additive.
  * 5. **Adjunct FK retarget** — `createAdjunctTables` guarantees the
  *    adjunct set exists (`crawl_errors` / `inventory_runs` and the
- *    `content_items`-referencing five), then `retargetLegacyFkTables`
+ *    `content_items`-referencing tables), then `retargetLegacyFkTables`
  *    rebuilds `page_html_ref` / `page_tags` / `page_jsonld` /
- *    `page_errors` / `analysis_violations` so their FK declarations
+ *    `page_errors` so their FK declarations
  *    point at `content_items(id)` instead of the legacy `pages(id)`
- *    (SQLite has no `ALTER TABLE … DROP CONSTRAINT`). Runs with
+ *    (SQLite has no `ALTER TABLE … DROP CONSTRAINT`) and drops the legacy
+ *    `analysis_violations` / `analysis_text_refs` tables, which have no
+ *    current-schema counterpart. Runs with
  *    `PRAGMA foreign_keys = ON` so the data copy validates row-level
  *    integrity as it goes. Recorded in `_migrate_progress` so a
  *    resumed run skips it once done.

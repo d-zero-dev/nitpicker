@@ -6795,7 +6795,7 @@ describe('Database read-only mode', () => {
 		// readonly: true })`) is NOT relied on — libsql 0.5.x accepts
 		// the flag but does not enforce it at the SQL layer. The
 		// read-only invariant is upheld through `#init` skipping
-		// migrations + `ArchiveAccessor.setData` namespace guards.
+		// migrations.
 		const dbPath = path.resolve(workingDir, 'readonly-mode.sqlite');
 		await removeIfExists(dbPath);
 		const writer = await Database.connect({ filename: dbPath });

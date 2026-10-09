@@ -9,13 +9,10 @@ import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
  * set of stylesheet URLs it references — keyed by `page_id` rather than by
  * URL string.
  *
- * This is a `page_id`-keyed sibling of `@nitpicker/core`'s
- * `collectPageStylesheetUrls`: that function resolves each page's `id` all
- * the way to its URL (needed by template classification, which only has
- * `Page.url.href` on hand), but callers that already have a `page_id` (e.g.
- * grouping stylesheet sets by `page_templates.template_key`) don't need that
- * extra resolution pass — skipping it removes one of the three SQL passes
- * entirely.
+ * Keying by `page_id` (rather than resolving each id all the way to its URL)
+ * suits callers that already have a `page_id` (e.g. grouping stylesheet sets
+ * by `page_templates.template_key`): they need no URL-resolution pass, which
+ * removes one of the three SQL passes entirely.
  *
  * Reads in two narrow passes instead of one wide JOIN, to avoid materializing
  * the full page×stylesheet edge set at once:

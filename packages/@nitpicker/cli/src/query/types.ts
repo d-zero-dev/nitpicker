@@ -10,7 +10,6 @@ export type QuerySubCommand =
 	| 'links'
 	| 'resources'
 	| 'images'
-	| 'violations'
 	| 'duplicates'
 	| 'duplicate-bodies'
 	| 'mismatches'
@@ -53,7 +52,6 @@ export const VALID_SUB_COMMANDS = [
 	'links',
 	'resources',
 	'images',
-	'violations',
 	'duplicates',
 	'duplicate-bodies',
 	'mismatches',

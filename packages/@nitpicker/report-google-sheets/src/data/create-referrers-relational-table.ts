@@ -2,12 +2,12 @@ import type { CreateSheet } from '../sheets/types.js';
 
 import { streamAnchorFactEdges } from '@nitpicker/query';
 
-import { pLog } from '../debug.js';
+import { sheetLog } from '../debug.js';
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { booleanFormatError } from '../sheets/format.js';
 
-const log = pLog.extend('ReferrersRelationalTable');
+const log = sheetLog.extend('ReferrersRelationalTable');
 
 /**
  * Creates the "Referrers Relational Table" sheet configuration.
@@ -28,10 +28,9 @@ const log = pLog.extend('ReferrersRelationalTable');
  * resolution) is still shown as a note on the "Link (To)" cell whenever it
  * differs from the resolved destination, and the `Count` column reports how
  * many raw anchor occurrences this edge summarizes.
- * @param _reports
  * @param accessor
  */
-export const createReferrersRelationalTable: CreateSheet = (_reports, accessor) => {
+export const createReferrersRelationalTable: CreateSheet = (accessor) => {
 	return {
 		name: 'Referrers Relational Table',
 		requiresReadModel: true,

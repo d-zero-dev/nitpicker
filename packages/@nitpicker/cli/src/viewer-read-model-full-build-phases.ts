@@ -9,7 +9,6 @@ import type { ViewerReadModelBuildPhase } from '@nitpicker/query';
  * (issue #294).
  */
 export const VIEWER_READ_MODEL_FULL_BUILD_PHASES: readonly ViewerReadModelBuildPhase[] = [
-	'backfillingAnalysisViolations',
 	'backfillingBodyHash',
 	'backfillingAliasOfId',
 	'backfillingDedupeCapEventId',

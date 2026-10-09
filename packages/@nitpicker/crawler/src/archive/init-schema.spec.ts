@@ -44,8 +44,6 @@ describe('initSchema', () => {
 			'page_technologies',
 			'page_jsonld',
 			'list_reconcile_runs',
-			'analysis_text_refs',
-			'analysis_violations',
 			// Template classification tables (createTemplateTables).
 			'page_templates',
 			'page_template_clusters',

@@ -39,7 +39,7 @@ type ReportFlags = InferFlags<typeof commandDef.flags>;
  * raw (un-normalized) to whichever backend runs — each backend normalizes
  * against its own archive's `disableQueries` setting after opening it. It
  * combines with `--html-dirs` (AND); for Google Sheets it also restricts
- * sheet generation to Page List/Links/Violations/Images (see
+ * sheet generation to Page List/Links/Images (see
  * `@nitpicker/report-google-sheets`'s `report()` docs).
  *
  * `--sheet <url>` accepts a Spreadsheet URL, or a Drive folder URL — the
@@ -132,7 +132,6 @@ export async function report(args: string[], flags: ReportFlags) {
 		}
 	}
 
-	const configFilePath = flags.config || null;
 	const isTTY = process.stdout.isTTY;
 	const all = flags.all || !isTTY;
 	const verbose = !!flags.verbose || !isTTY;
@@ -201,7 +200,6 @@ export async function report(args: string[], flags: ReportFlags) {
 						filePath,
 						sheetUrl: sheetUrl!,
 						credentialFilePath: resolveCredentialFilePath(flags.credentials),
-						configPath: configFilePath,
 						all,
 						sheets,
 						silent: flags.silent ?? false,

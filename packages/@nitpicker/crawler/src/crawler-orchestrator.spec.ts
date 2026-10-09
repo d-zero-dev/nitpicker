@@ -845,8 +845,7 @@ describe('CrawlerOrchestrator.append', () => {
 		expect(openArg.filePath).toBe('/tmp/test-cwd/existing.nitpicker');
 		expect(openArg.cwd).toBe('/tmp/test-cwd');
 		// `openPluginData: true` — otherwise a re-write would silently drop
-		// any non-`db.sqlite` tar entry (analyze output, a saved inventory
-		// list) from the archive (issue #99 regression guard).
+		// any non-`db.sqlite` tar entry (a saved inventory list) from the archive (issue #99 regression guard).
 		expect(openArg.openPluginData).toBe(true);
 	});
 
@@ -3039,47 +3038,6 @@ describe('CrawlerOrchestrator.recrawl', () => {
 		expect(meta.notes).toBe('Reset 1 existing page(s) for re-fetch');
 	});
 
-	it('emits a crawlSessionNotice recommending an analyze re-run when at least one page was reset', async () => {
-		const fakeArchive = buildFakeRecrawlArchive({
-			getExistingPageUrls: vi.fn(() => Promise.resolve(['https://example.com/a'])),
-			resetPagesByUrls: vi.fn(() =>
-				Promise.resolve({
-					resetUrls: ['https://example.com/a'],
-					excludedRedirects: [],
-					excludedSkipped: [],
-					excludedExternal: [],
-				}),
-			),
-		});
-		const archiveModule = await import('./archive/archive.js');
-		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
-
-		fakeCrawlerDriver = (crawler) => {
-			crawler.handlers.get('crawlEnd')?.(undefined as never);
-		};
-
-		const notices: string[] = [];
-		const testCwd = await makeFixtureCwd('recrawl-analyze-notice-test');
-		try {
-			await CrawlerOrchestrator.recrawl(
-				'fixture.nitpicker',
-				['https://example.com/a'],
-				{ cwd: testCwd },
-				(orchestrator) => {
-					orchestrator.on('crawlSessionNotice', (payload) => {
-						notices.push((payload as { message: string }).message);
-					});
-				},
-			);
-		} finally {
-			await fs.rm(testCwd, { recursive: true, force: true });
-		}
-
-		expect(notices).toEqual([
-			expect.stringMatching(/Reset 1 page\(s\).*run `analyze` before `report`/),
-		]);
-	});
-
 	it('does not emit a crawlSessionNotice when nothing was reset', async () => {
 		const fakeArchive = buildFakeRecrawlArchive();
 		const archiveModule = await import('./archive/archive.js');
@@ -3113,7 +3071,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () => {
 	// `Archive.open`'s default extracts only `db.sqlite`; `write()` re-tars
 	// the whole tmpDir, so any writer path that skips `openPluginData: true`
-	// would silently drop non-`db.sqlite` tar entries (analyze output, a
+	// would silently drop non-`db.sqlite` tar entries (a
 	// saved inventory list) on the next re-crawl. `append`'s equivalent
 	// assertions live in its own describe block above; these two round out
 	// the other writer paths that call `write()`.

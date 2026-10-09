@@ -12,7 +12,7 @@ import { MigrationVerificationError } from './types.js';
  * Seeds a matching pair of `pages` + `content_items` rows so the reader
  * parity check has non-zero totals to compare on both sides (zero-vs-zero
  * legitimately skips per {@link checkReaderParity}). The row shapes are
- * intentionally minimal — anything the 8 parity checks do not filter on
+ * intentionally minimal — anything the 7 parity checks do not filter on
  * is omitted so the fixture matches the archive-populated invariant
  * (`content_items.id === pages.id`, `url_refs.url === pages.url`).
  * @param db - Knex handle from {@link setupMigrationDb}.
@@ -20,11 +20,11 @@ import { MigrationVerificationError } from './types.js';
 async function seedMatchingRows(db: ReturnType<typeof knex>): Promise<void> {
 	// Two pages + one broken-link destination + one duplicate title +
 	// one canonical mismatch + one image + one resource + one
-	// resource-referrer + one analysis_violation. Together this exercises
-	// EVERY one of the 8 parity checks with non-zero totals on both
+	// resource-referrer. Together this exercises
+	// EVERY one of the 7 parity checks with non-zero totals on both
 	// sides — the zero-vs-zero skip branch in `checkReaderParity` would
-	// otherwise silently swallow 5 of the 8 checks (image / resource /
-	// broken-link / duplicate-title / canonical-mismatch / violations)
+	// otherwise silently swallow 5 of the 7 checks (image / resource /
+	// broken-link / duplicate-title / canonical-mismatch)
 	// and leave the JOIN chains untested.
 	await db('pages').insert([
 		{
@@ -159,11 +159,6 @@ async function seedMatchingRows(db: ReturnType<typeof knex>): Promise<void> {
 			source: 'crawled',
 			content_type_id: 1,
 		},
-	]);
-	// analysis_violations → getViolations JOIN chain (analysis_violations →
-	// pages / content_items → url_refs). Both sides must return 1.
-	await db('analysis_violations').insert([
-		{ id: 1, page_id: 1, rule: 'test-rule', severity: 'error' },
 	]);
 }
 

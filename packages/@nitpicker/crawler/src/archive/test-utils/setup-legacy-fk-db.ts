@@ -7,7 +7,8 @@ import type { Knex } from 'knex';
  * their old form whose FK columns still point at `pages(id)`
  * (`page_html_ref` / `page_tags` / `page_jsonld` / `page_errors` /
  * `analysis_violations`, with their companion tables `page_html_blobs` /
- * `analysis_text_refs`).
+ * `analysis_text_refs`). The two `analysis_*` tables are the input of the
+ * 0.13 migration's drop path (no current-schema counterpart).
  *
  * `initSchema` no longer creates any of these shapes — fresh archives get
  * neither the legacy write-model tables nor `pages(id)`-referencing

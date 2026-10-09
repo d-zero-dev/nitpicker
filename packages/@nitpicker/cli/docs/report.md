@@ -61,7 +61,7 @@ npx @nitpicker/cli report ./site.nitpicker --html --urls ./urls.txt
 npx @nitpicker/cli report ./site.nitpicker --sheet <Google Sheets URL> --all --urls ./urls.txt
 ```
 
-Google Sheetsでは、1行=1ページの4シート（Page List / Links / Violations / Images）のみが生成対象になります。他のシート（Discrepancies・Resources系・Referrers/Resources Relational Table・Summary）はURLリストで絞り込む意味が定義できないため対象外です。
+Google Sheetsでは、1行=1ページの3シート（Page List / Links / Images）のみが生成対象になります。他のシート（Resources系・Referrers/Resources Relational Table・Summary）はURLリストで絞り込む意味が定義できないため対象外です。
 
 リスト内のURLがレポートに1件も現れなかった場合（アーカイブ未収録・redirect化・対象外カテゴリ）は件数のみ警告表示されます。理由の内訳は `npx @nitpicker/cli query <file> match-urls --urls <urls.txt>` で確認してください。
 
@@ -83,16 +83,16 @@ NODE_OPTIONS=--max-old-space-size=8192 npx @nitpicker/cli report ./site.nitpicke
 
 ## オプション一覧
 
-| オプション            | 型      | 説明                                                                                                    |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| `--sheet`, `-S`       | string  | 出力先Google Sheets URL、またはDriveフォルダURL                                                         |
-| `--html`, `-H`        | boolean | 自己完結した静的HTMLを生成                                                                              |
-| `--output`, `-o`      | string  | HTML出力先                                                                                              |
-| `--html-dirs`         | string  | HTMLの対象ディレクトリ接頭辞（カンマ区切り）                                                            |
-| `--urls`              | string  | 1行1URLのリストファイル（`--html-dirs` とAND併用可）                                                    |
-| `--credentials`, `-C` | string  | 認証情報ファイル。未指定時は `GOOGLE_AUTH_CREDENTIALS` → `./credentials.json`（存在時）→ ADC の順に解決 |
-| `--config`, `-c`      | string  | 設定ファイルパス                                                                                        |
-| `--all`               | boolean | 対話選択なしですべてのシートを生成                                                                      |
-| `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約                                                                |
-| `--verbose`           | boolean | 詳細ログを出力                                                                                          |
-| `--silent`            | boolean | 標準出力ログを抑制                                                                                      |
+| オプション            | 型      | 説明                                                                                                                                                                                               |
+| --------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--sheet`, `-S`       | string  | 出力先Google Sheets URL、またはDriveフォルダURL                                                                                                                                                    |
+| `--html`, `-H`        | boolean | 自己完結した静的HTMLを生成                                                                                                                                                                         |
+| `--output`, `-o`      | string  | HTML出力先                                                                                                                                                                                         |
+| `--html-dirs`         | string  | HTMLの対象ディレクトリ接頭辞（カンマ区切り）                                                                                                                                                       |
+| `--urls`              | string  | 1行1URLのリストファイル（`--html-dirs` とAND併用可）                                                                                                                                               |
+| `--credentials`, `-C` | string  | 認証情報ファイル。未指定時は `GOOGLE_AUTH_CREDENTIALS` → `./credentials.json`（存在時）→ ADC の順に解決                                                                                            |
+| `--all`               | boolean | 対話選択なしですべてのシートを生成                                                                                                                                                                 |
+| `--sheets`            | string  | 対話選択なしで生成するシート名（カンマ区切り。別名: pages/page-list, links, resources, images, referrers-rel-table, resources-rel-table, summary）。`--all` と対話選択より優先。Google Sheets のみ |
+| `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約                                                                                                                                                           |
+| `--verbose`           | boolean | 詳細ログを出力                                                                                                                                                                                     |
+| `--silent`            | boolean | 標準出力ログを抑制                                                                                                                                                                                 |

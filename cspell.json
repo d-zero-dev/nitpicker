@@ -56,8 +56,6 @@
 		"gaxios",
 		"enquirer",
 		"jsdom",
-		"cosmiconfig",
-		"nitpickerrc",
 		"textlint",
 		"markuplint",
 		"turndown",
@@ -98,7 +96,6 @@
 		"tari",
 
 		// libraries / authors
-		"webdriverjs", // axe-webdriverjs (Selenium WebDriver.js binding for axe-core)
 
 		// @d-zero/page-cluster (Jaccard similarity coefficient)
 		"Jaccard",

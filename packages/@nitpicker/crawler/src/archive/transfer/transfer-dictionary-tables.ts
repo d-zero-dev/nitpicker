@@ -19,5 +19,4 @@ export const TRANSFER_DICTIONARY_TABLES: readonly string[] = [
 	'header_value_refs',
 	'header_sets',
 	'console_log_items',
-	'analysis_text_refs',
 ];

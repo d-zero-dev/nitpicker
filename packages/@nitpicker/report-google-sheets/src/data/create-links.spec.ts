@@ -50,13 +50,13 @@ describe('createLinks', () => {
 	});
 
 	it('returns sheet config with name "Links" and requiresReadModel', () => {
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		expect(setting.name).toBe('Links');
 		expect(setting.requiresReadModel).toBe(true);
 	});
 
 	it('returns correct headers', () => {
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		expect(setting.createHeaders()).toEqual([
 			'URL',
 			'Page Title',
@@ -100,7 +100,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -132,7 +132,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -185,7 +185,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -236,7 +236,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -281,7 +281,7 @@ describe('createLinks', () => {
 			]),
 		);
 
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -313,7 +313,7 @@ describe('createLinks', () => {
 				})),
 			),
 		);
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		await setting.run({
 			sheet: mock.sheet,
@@ -329,7 +329,7 @@ describe('createLinks', () => {
 		const accessor = makeAccessor(3);
 		vi.mocked(streamAllContentItems).mockReturnValueOnce(oneChunk([]));
 		const urls = ['https://example.com/a'];
-		const setting = createLinks({ urls })([], accessor);
+		const setting = createLinks({ urls })(accessor);
 
 		await expect(setting.estimateRowCount()).resolves.toBe(3);
 		expect(applyEqualityOrInFilter).toHaveBeenCalledWith(
@@ -365,7 +365,7 @@ describe('createLinks', () => {
 				},
 			]),
 		);
-		const setting = createLinks()([], NO_ACCESSOR);
+		const setting = createLinks()(NO_ACCESSOR);
 		const mock = createMockSheet();
 		const onProgress = vi.fn();
 		await setting.run({

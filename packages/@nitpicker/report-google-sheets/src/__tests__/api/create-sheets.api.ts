@@ -1,6 +1,5 @@
 import type { CreateSheet } from '../../sheets/types.js';
 import type { Auth } from '@d-zero/google-auth';
-import type { Report } from '@nitpicker/types';
 
 import { Sheets } from '@d-zero/google-sheets';
 import { google } from 'googleapis';
@@ -10,7 +9,6 @@ import { createImageList } from '../../data/create-image-list.js';
 import { createLinks } from '../../data/create-links.js';
 import { createPageList } from '../../data/create-page-list.js';
 import { createResources } from '../../data/create-resources.js';
-import { createViolations } from '../../data/create-violations.js';
 import { createSheets } from '../../sheets/create-sheets.js';
 
 import {
@@ -39,7 +37,6 @@ describe('createSheets pipeline', () => {
 	let auth: Auth;
 	let crawlResult: CrawlResult;
 	const createdSheetIds: number[] = [];
-	const emptyReports: Report[] = [];
 
 	beforeAll(async () => {
 		auth = await getAuth();
@@ -67,58 +64,18 @@ describe('createSheets pipeline', () => {
 		}
 	});
 
-	it('Violations シートを正しく生成できる', async () => {
-		const sheetName = testSheetName('violations');
-		const sheets = new Sheets(SPREADSHEET_URL, auth);
-
-		const createTestViolations: CreateSheet = (reports, accessor) => {
-			const setting = createViolations()(reports, accessor);
-			return { ...setting, name: sheetName };
-		};
-
-		await createSheets({
-			sheets,
-			accessor: crawlResult.archive,
-			reports: emptyReports,
-			createSheetList: [createTestViolations],
-		});
-
-		const sheet = await sheets.create(sheetName);
-		createdSheetIds.push(sheet.id);
-
-		// Verify headers
-		const values = await readSheetValues(auth, SPREADSHEET_ID, `'${sheetName}'!A1:F1`);
-		expect(values[0]).toEqual([
-			'Validator',
-			'Severity',
-			'Rule',
-			'Code',
-			'Message',
-			'URL',
-		]);
-
-		// No data rows since reports are empty
-		const allValues = await readSheetValues(
-			auth,
-			SPREADSHEET_ID,
-			`'${sheetName}'!A1:F100`,
-		);
-		expect(allValues.length).toBe(1); // header only
-	});
-
 	it('Page List シートを正しく生成できる', async () => {
 		const sheetName = testSheetName('pagelist');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestPageList: CreateSheet = (reports, accessor) => {
-			const setting = createPageList()(reports, accessor);
+		const createTestPageList: CreateSheet = (accessor) => {
+			const setting = createPageList()(accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
 			accessor: crawlResult.archive,
-			reports: emptyReports,
 			createSheetList: [createTestPageList],
 		});
 
@@ -165,15 +122,14 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('links');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestLinks: CreateSheet = (reports, accessor) => {
-			const setting = createLinks()(reports, accessor);
+		const createTestLinks: CreateSheet = (accessor) => {
+			const setting = createLinks()(accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
 			accessor: crawlResult.archive,
-			reports: emptyReports,
 			createSheetList: [createTestLinks],
 		});
 
@@ -211,15 +167,14 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('resources');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestResources: CreateSheet = (reports, accessor) => {
-			const setting = createResources()(reports, accessor);
+		const createTestResources: CreateSheet = (accessor) => {
+			const setting = createResources()(accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
 			accessor: crawlResult.archive,
-			reports: emptyReports,
 			createSheetList: [createTestResources],
 		});
 
@@ -246,15 +201,14 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('images');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestImageList: CreateSheet = (reports, accessor) => {
-			const setting = createImageList()(reports, accessor);
+		const createTestImageList: CreateSheet = (accessor) => {
+			const setting = createImageList()(accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
 			accessor: crawlResult.archive,
-			reports: emptyReports,
 			createSheetList: [createTestImageList],
 		});
 
@@ -295,15 +249,14 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('resources-dedupe');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestResources: CreateSheet = (reports, accessor) => {
-			const setting = createResources({ dedupe: true })(reports, accessor);
+		const createTestResources: CreateSheet = (accessor) => {
+			const setting = createResources({ dedupe: true })(accessor);
 			return { ...setting, name: sheetName };
 		};
 
 		await createSheets({
 			sheets,
 			accessor: crawlResult.archive,
-			reports: emptyReports,
 			createSheetList: [createTestResources],
 		});
 

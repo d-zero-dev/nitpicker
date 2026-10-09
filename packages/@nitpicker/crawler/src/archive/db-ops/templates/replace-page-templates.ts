@@ -13,8 +13,7 @@ import { assignTemplateLabels } from './assign-template-labels.js';
  * Every classified page is a full-archive, all-or-nothing recomputation
  * (see `classifyPageTemplates`), so this always deletes
  * every existing row before inserting the new set — there is no per-page
- * incremental update path, matching `replaceAnalysisViolations`'s
- * whole-table replace shape. Unlike violations, a page whose URL can't be
+ * incremental update path. A page whose URL can't be
  * resolved back to a `content_items` row is silently skipped rather than
  * treated as a hard failure: losing one page's template classification
  * (e.g. a URL-normalization mismatch between the in-memory `Page.url.href`

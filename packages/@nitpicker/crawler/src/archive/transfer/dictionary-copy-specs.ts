@@ -17,8 +17,8 @@ export interface DictionaryCopySpec {
  * dependency order (independent dictionaries first; `header_sets` before
  * its `header_set_entries`/`header_flags` children — handled separately in
  * `copy-header-set-children.ts` since they have no own id to map;
- * `console_log_items` and `analysis_text_refs` have no cross-dictionary
- * FKs of their own, so ordering relative to the others does not matter).
+ * `console_log_items` has no cross-dictionary FKs of
+ * its own, so ordering relative to the others does not matter).
  *
  * `header_sets`' natural key is `raw_hash` alone, not
  * `(raw_json_hash, raw_hash)` — `raw_json_hash` is BLAKE3 of the raw
@@ -39,5 +39,4 @@ export const DICTIONARY_COPY_SPECS: readonly DictionaryCopySpec[] = [
 	{ table: 'header_name_refs', naturalKey: ['name'] },
 	{ table: 'header_value_refs', naturalKey: ['hash', 'value'] },
 	{ table: 'header_sets', naturalKey: ['raw_hash'] },
-	{ table: 'analysis_text_refs', naturalKey: ['sha256', 'text'] },
 ];

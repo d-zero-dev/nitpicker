@@ -7,14 +7,14 @@ import {
 	streamAllContentItems,
 } from '@nitpicker/query';
 
-import { pLog } from '../debug.js';
+import { sheetLog } from '../debug.js';
 import { createCellData } from '../sheets/create-cell-data.js';
 import { defaultCellFormat } from '../sheets/default-cell-format.js';
 import { booleanFormatError } from '../sheets/format.js';
 import { joinUrlsForNote } from '../utils/join-urls-for-note.js';
 import { truncateNoteText } from '../utils/truncate-note-text.js';
 
-const log = pLog.extend('Links');
+const log = sheetLog.extend('Links');
 
 /**
  * Formats one referrer's cell-note line, restoring the pre-rewrite report's
@@ -68,7 +68,7 @@ function formatReferrerNoteLine(detail: InboundReferrerDetail): string {
 export function createLinks(options?: { urls?: readonly string[] }): CreateSheet {
 	const urls = options?.urls;
 
-	return (_reports, accessor) => {
+	return (accessor) => {
 		return {
 			name: 'Links',
 			requiresReadModel: true,
@@ -96,7 +96,7 @@ export function createLinks(options?: { urls?: readonly string[] }): CreateSheet
 			async run({ sheet, maxRows, estimatedTotal, onProgress }) {
 				let sent = 0;
 				// No cheap running total from `streamAllContentItems` itself (unlike
-				// `getViolations`'s `page.total` or `listViewerPages`'s `page.total`)
+				// `listViewerPages`'s `page.total`)
 				// — `estimatedTotal` (from `estimateRowCount()`, captured once in
 				// Phase 1.5) is the progress denominator instead.
 				const total = estimatedTotal;

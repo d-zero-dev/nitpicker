@@ -45,7 +45,6 @@ import { emitError } from '../utils/error/emit-error.js';
 
 import { createWriteRefCaches } from './db-ops/_shared/create-write-ref-caches.js';
 import { retrySetting } from './db-ops/_shared/retry-setting.js';
-import { replaceAnalysisViolations as replaceAnalysisViolationsOp } from './db-ops/analysis/replace-analysis-violations.js';
 import { getAnchorsOnPage as getAnchorsOnPageOp } from './db-ops/anchors/get-anchors-on-page.js';
 import { getBaseUrl as getBaseUrlOp } from './db-ops/config/get-base-url.js';
 import { getConfig as getConfigOp } from './db-ops/config/get-config.js';
@@ -152,9 +151,7 @@ export class Database extends EventEmitter<DatabaseEvent> {
 		// 1. `Database.#init` skipping schema init + migrations when
 		//    `readOnly` is set (so no `initSchema` / `migrate*` ever
 		//    writes to the shared cache directory).
-		// 2. `ArchiveAccessor.setData` rejecting writes when the
-		//    `readOnly` flag is set on the accessor.
-		// 3. Code review on any future internal use of
+		// 2. Code review on any future internal use of
 		//    `accessor.getKnex()` — there is no driver-level guard.
 		this.#instance = knex({
 			client: LibsqlDialect,
@@ -951,30 +948,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 			'Database.recordRedirect',
 			async () =>
 				await recordRedirectOp(this.#instance, this.#writeRefCaches, page, source),
-			retrySetting,
-		);
-	}
-	/**
-	 * Replaces the stored analysis violations with a freshly generated set.
-	 * Delegates to {@link replaceAnalysisViolationsOp}.
-	 * @param violations - Flat violation list from the analyze phase.
-	 */
-	async replaceAnalysisViolations(
-		violations: readonly {
-			validator: string;
-			severity: string;
-			rule: string;
-			code?: string | null;
-			message: string;
-			url: string;
-			line?: number | null;
-			col?: number | null;
-		}[],
-	): Promise<void> {
-		return emitErrorAndRetry(
-			this,
-			'Database.replaceAnalysisViolations',
-			async () => await replaceAnalysisViolationsOp(this.#instance, violations),
 			retrySetting,
 		);
 	}

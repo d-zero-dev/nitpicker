@@ -2778,28 +2778,6 @@ export interface CursorPaginatedImageList extends PaginatedImageList {
 }
 
 /**
- * Options for querying analysis violations.
- */
-export interface GetViolationsOptions {
-	/** Filter by validator name (e.g., "axe", "markuplint"). */
-	validator?: string;
-	/** Filter by severity level, or any of several (OR). */
-	severity?: string | string[];
-	/** Filter by rule ID. */
-	rule?: string;
-	/** URL pattern to filter page URLs. */
-	urlPattern?: string;
-	/** Field to sort results by. */
-	sortBy?: 'url' | 'validator' | 'severity' | 'rule' | 'message' | 'code';
-	/** Sort direction. */
-	sortOrder?: SortOrder;
-	/** Maximum number of results. */
-	limit?: number;
-	/** Number of results to skip. */
-	offset?: number;
-}
-
-/**
  * A page with duplicate title or description.
  */
 export interface DuplicateEntry {
@@ -3550,9 +3528,7 @@ export interface ViewerReadModelBuildProgress {
  * stretch in any step is indistinguishable from a hang. Almost every phase
  * also reports sub-progress via `onProgress` (see
  * {@link ViewerReadModelBuildProgress} for the per-phase unit); the
- * exceptions are `backfillingAnalysisViolations` (a single all-or-nothing
- * replace with no countable unit, and a fast no-op on any archive already
- * backfilled once) and `committing`/`checkpointing` (a single transaction
+ * exceptions are `committing`/`checkpointing` (a single transaction
  * COMMIT and a single `wal_checkpoint` PRAGMA — one synchronous statement
  * each, no countable unit, but long enough on a large archive to need their
  * own labels; the libsql binding does not expose SQLite's progress-handler
@@ -3564,7 +3540,6 @@ export interface ViewerReadModelBuildProgress {
  * before its id-scan numbers start.
  */
 export type ViewerReadModelBuildPhase =
-	| 'backfillingAnalysisViolations'
 	| 'backfillingBodyHash'
 	| 'backfillingAliasOfId'
 	| 'backfillingDedupeCapEventId'
@@ -3852,8 +3827,8 @@ export interface TemplateClusterSummary {
 	 * this field alone: a pre-cluster-reason archive (no
 	 * `page_template_clusters` table), a read-only connection that skips
 	 * schema self-heal, or a cluster `@d-zero/page-cluster` classified but
-	 * did not emit a reason for (see `PageTemplateClassification`'s own
-	 * JSDoc in `@nitpicker/core`).
+	 * did not emit a reason for (the classification
+	 * carries no reason in that case).
 	 */
 	reason: TemplateClusterReasonSummary | null;
 }

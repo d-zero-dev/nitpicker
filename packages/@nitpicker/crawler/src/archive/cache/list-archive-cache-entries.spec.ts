@@ -36,11 +36,11 @@ describe('listArchiveCacheEntries', () => {
 		await expect(listArchiveCacheEntries(cacheRoot)).rejects.toThrow();
 	});
 
-	it('classifies a directory named "table" as kind "table"', async () => {
+	it('classifies a leftover directory named "table" as kind "orphan"', async () => {
 		await fs.mkdir(path.join(cacheRoot, 'table'), { recursive: true });
 		const entries = await listArchiveCacheEntries(cacheRoot);
 		expect(entries).toHaveLength(1);
-		expect(entries[0]).toMatchObject({ kind: 'table', name: 'table' });
+		expect(entries[0]).toMatchObject({ kind: 'orphan', name: 'table' });
 	});
 
 	it('classifies a cache-key-shaped directory as kind "tar-cache"', async () => {
@@ -167,13 +167,13 @@ describe('listArchiveCacheEntries', () => {
 		expect(entries[0]?.sizeBytes).toBe(10);
 	});
 
-	it('returns all entries when tar-cache, table, and orphan kinds are mixed', async () => {
+	it('returns all entries when tar-cache and orphan kinds are mixed', async () => {
 		await fs.mkdir(path.join(cacheRoot, '11111-abcd-one'), { recursive: true });
 		await fs.mkdir(path.join(cacheRoot, '22222-abcd-two.staging'), { recursive: true });
 		await fs.mkdir(path.join(cacheRoot, 'table'), { recursive: true });
 
 		const entries = await listArchiveCacheEntries(cacheRoot);
 		const kinds = entries.map((entry) => entry.kind).toSorted();
-		expect(kinds).toEqual(['orphan', 'table', 'tar-cache']);
+		expect(kinds).toEqual(['orphan', 'orphan', 'tar-cache']);
 	});
 });

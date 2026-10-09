@@ -18,17 +18,11 @@ Lerna **fixed モード**のため、全パッケージが同一バージョン�
 
 | npm パッケージ名                  |
 | --------------------------------- |
-| `@nitpicker/analyze-axe`          |
-| `@nitpicker/analyze-markuplint`   |
-| `@nitpicker/analyze-search`       |
-| `@nitpicker/analyze-textlint`     |
 | `@nitpicker/cli`                  |
-| `@nitpicker/core`                 |
 | `@nitpicker/crawler`              |
 | `@nitpicker/mcp-server`           |
 | `@nitpicker/query`                |
 | `@nitpicker/report-google-sheets` |
-| `@nitpicker/types`                |
 | `@nitpicker/viewer`               |
 
 `packages/test-server` は `private: true` なので publish されない。バージョンは上がるが npm には出ない。
@@ -159,8 +153,8 @@ gh run watch --exit-status
 workflow が success でも publish が意図通りとは限らない。**全パッケージについて**実際の npm 上の状態を確認する。
 
 ```bash
-npm view @nitpicker/core version
-npm view @nitpicker/core dist-tags
+npm view @nitpicker/cli version
+npm view @nitpicker/cli dist-tags
 ```
 
 確認項目:

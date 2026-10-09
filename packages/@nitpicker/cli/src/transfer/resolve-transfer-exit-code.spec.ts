@@ -12,7 +12,6 @@ const BASE: TransferOutcome = {
 	appendHintRoot: 'https://example.com/',
 	externalInScopeCount: 0,
 	pendingCount: 0,
-	pluginDataEntries: [],
 	readModelError: null,
 	templateClassificationError: null,
 };

@@ -1,6 +1,6 @@
 # pipeline
 
-`crawl`、`analyze`、`report` を1コマンドで直列実行します。
+`crawl`、`report` を1コマンドで直列実行します。
 
 ## 基本形
 
@@ -15,7 +15,7 @@ npx @nitpicker/cli pipeline https://example.com --all
 npx @nitpicker/cli pipeline https://example.com --sheet <Google Sheets URL> --all
 ```
 
-`--sheet` を指定した場合だけ `report` ステップを実行します。指定しない場合は `crawl` と `analyze` までを実行します。
+`--sheet` を指定した場合だけ `report` ステップを実行します。指定しない場合は `crawl` までを実行します。
 
 crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の前提条件](./crawl.md#前提条件-puppeteer用chrome) を参照してください。
 
@@ -51,23 +51,13 @@ crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の�
 | `--output`, `-o`                           | string             | 出力 `.nitpicker` ファイルパス                                                         |
 | `--strict`                                 | boolean            | 外部リンクエラーを致命的エラーとして扱う                                               |
 
-### analyze系
-
-| オプション          | 型                 | 説明                                                           |
-| ------------------- | ------------------ | -------------------------------------------------------------- |
-| `--all`             | boolean            | すべての分析プラグインを実行し、reportでもすべてのシートを生成 |
-| `--plugin`          | string, repeatable | 実行するプラグイン名を指定                                     |
-| `--search-keywords` | string, repeatable | `analyze-search` の検索キーワードを設定ファイルより優先        |
-| `--search-scope`    | string             | `analyze-search` の検索範囲CSSセレクタを設定ファイルより優先   |
-| `--axe-lang`        | string             | `analyze-axe` のBCP 47言語タグを設定ファイルより優先           |
-
 ### report系
 
 | オプション            | 型      | 説明                                                                                                    |
 | --------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
 | `--sheet`, `-S`       | string  | Google Sheets URLまたはDriveフォルダURL。指定時だけreportステップを実行                                 |
 | `--credentials`, `-C` | string  | 認証情報ファイル。未指定時は `GOOGLE_AUTH_CREDENTIALS` → `./credentials.json`（存在時）→ ADC の順に解決 |
-| `--config`, `-c`      | string  | 設定ファイルパス                                                                                        |
+| `--all`               | boolean | 対話選択なしですべてのシートを生成                                                                      |
 | `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約                                                                |
 
 ### 共通

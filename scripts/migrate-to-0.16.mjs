@@ -34,7 +34,7 @@
  * the input doubles as the rollback artefact with no separate `.bak` step.
  *
  * Opens with `openPluginData: true` so any saved `--inventory` source list
- * or analyze namespace output already in the archive survives the
+ * already in the archive survives the
  * open-mutate-`write()` round trip intact (see ARCHITECTURE.md's
  * `openPluginData` invariant) — `write()` re-tars whatever this process
  * extracted, so extracting only `db.sqlite` would silently drop everything

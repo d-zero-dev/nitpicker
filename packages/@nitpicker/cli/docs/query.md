@@ -38,7 +38,6 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `links`                      | broken/externalリンク一覧                                              |
 | `resources`                  | ネットワークリソース一覧                                               |
 | `images`                     | 画像一覧と画像品質フィルタ                                             |
-| `violations`                 | 分析プラグインの違反結果                                               |
 | `duplicates`                 | title/descriptionの重複                                                |
 | `duplicate-clusters`         | 同一body_hashクラスタの集約（trap兆候でソート）                        |
 | `dedupe-cap-events`          | `--dedupe-cap` の同一クラスタ soft cap 発火履歴                        |
@@ -234,7 +233,7 @@ npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*
 | `--limit`, `-l`    | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                               |
 | `--offset`, `-o`   | number           | スキップ件数                                                                      |
 
-保存済みのHTMLスナップショット（`html` サブコマンドが返すもの）の生マークアップを検索します。analyzeプラグインの実行は不要で、アーカイブへの書き込みもありません。`<script>` `<style>` やインラインstyle・全属性も対象です（DOMのテキストノードだけを見る `analyze-search` とは別物）。
+保存済みのHTMLスナップショット（`html` サブコマンドが返すもの）の生マークアップを検索します。アーカイブへの書き込みはありません。`<script>` `<style>` やインラインstyle・全属性も対象です（DOMのテキストノードだけでなく生マークアップ全体を見ます）。
 
 結果は `{ items: [{ url, matchCount, snippet }], total, offset, limit, scannedSnapshots, candidatePages }` です。全ユニークHTMLを展開する線形スキャンなので、大きなアーカイブでは時間がかかります（stderrに進捗が出ます）。まず `--limit 0` で `total` を確認するのが安全です。`candidatePages` が0、またはページ数より極端に少ない場合はHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。CSS/JSファイルの本文は保存されていないため検索できません。
 
@@ -254,7 +253,7 @@ npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'table:not([
 | `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                               |
 | `--offset`, `-o` | number           | スキップ件数                                                                      |
 
-保存済みのHTMLスナップショットに、セレクタに一致する要素を1つ以上持つページを返します。ページ単位の存在判定で、一致要素の位置や個数は返しません。analyzeプラグインの実行は不要で、アーカイブへの書き込みもありません（`analyze-search` はjsdomで全ページのDOMを構築しますが、本コマンドはDOMを作りません）。
+保存済みのHTMLスナップショットに、セレクタに一致する要素を1つ以上持つページを返します。ページ単位の存在判定で、一致要素の位置や個数は返しません。アーカイブへの書き込みはありません（本コマンドはDOMを構築しません）。
 
 **対応するセレクタ**: 複合セレクタ（`*` / タグ / `.class` / `#id` / `[attr]` `[attr=v]` `[attr~=v]` `[attr|=v]` `[attr^=v]` `[attr$=v]` `[attr*=v]`、`i` / `s` フラグ付き）、子孫結合子（`a b`）、子結合子（`a > b`）、`:first-child` `:nth-child(An+B)` `:first-of-type` `:nth-of-type(An+B)`、`:not(複合セレクタ)`、カンマ区切りリスト。
 
@@ -288,20 +287,6 @@ npx @nitpicker/cli query ./site.nitpicker images --missing-alt --pretty
 | `--url-pattern`         | string  | SQL LIKEパターンでURL絞り込み |
 | `--limit`, `-l`         | number  | 最大取得件数                  |
 | `--offset`, `-o`        | number  | スキップ件数                  |
-
-### `violations`
-
-```sh
-npx @nitpicker/cli query ./site.nitpicker violations --validator axe --severity serious --pretty
-```
-
-| オプション       | 型     | 説明                  |
-| ---------------- | ------ | --------------------- |
-| `--validator`    | string | validator名で絞り込み |
-| `--severity`     | string | severityで絞り込み    |
-| `--rule`         | string | rule IDで絞り込み     |
-| `--limit`, `-l`  | number | 最大取得件数          |
-| `--offset`, `-o` | number | スキップ件数          |
 
 ### `duplicates`
 
@@ -554,9 +539,6 @@ npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
 | `--missing-alt`              | boolean | `images`                                                                                                                                             |
 | `--missing-dimensions`       | boolean | `images`                                                                                                                                             |
 | `--oversized-threshold`      | number  | `images`                                                                                                                                             |
-| `--validator`                | string  | `violations`                                                                                                                                         |
-| `--severity`                 | string  | `violations`                                                                                                                                         |
-| `--rule`                     | string  | `violations`                                                                                                                                         |
 | `--field`                    | string  | `duplicates`                                                                                                                                         |
 | `--missing-only`             | boolean | `headers`                                                                                                                                            |
 | `--max-length`               | number  | `html`                                                                                                                                               |

@@ -10,8 +10,7 @@ import { planSelectorMatch } from './plan-selector-match.js';
 
 /**
  * Lists the pages whose stored HTML snapshot contains an element matching
- * a CSS selector, without running any analyze plugin and without writing
- * to the archive.
+ * a CSS selector, without writing to the archive.
  *
  * Design: the selector is validated first (an unsupported one fails before
  * the archive is touched), then planned for three stages of increasing

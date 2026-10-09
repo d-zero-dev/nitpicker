@@ -31,8 +31,6 @@ import type { Knex } from 'knex';
  * - `dedupe_cap_events` — `--dedupe-cap` same-cluster soft-cap audit log (no
  *   FK; append-only except `rejected_count`, which is written once at
  *   `crawlEnd`)
- * - `analysis_text_refs` + `analysis_violations` — analyze-phase findings,
- *   FK → `content_items(id)`
  * - `page_html_blobs` + `page_html_ref` — content-addressable HTML
  *   snapshots, FK → `content_items(id)`
  * - `console_log_items` — content-addressable dictionary of distinct
@@ -462,57 +460,6 @@ export async function createAdjunctTables(instance: Knex): Promise<void> {
 			// (readers display "unknown", not "0" or "unbounded").
 			t.integer('rejected_count').nullable();
 		});
-	}
-
-	if (!(await instance.schema.hasTable('analysis_text_refs'))) {
-		await instance.raw(`
-			CREATE TABLE analysis_text_refs (
-				id integer primary key,
-				text text not null,
-				sha256 text not null,
-				unique(sha256, text)
-			)
-		`);
-	}
-	if (!(await instance.schema.hasTable('analysis_violations'))) {
-		await instance.raw(`
-			CREATE TABLE analysis_violations (
-				id integer primary key,
-				page_id integer not null references content_items(id),
-				validator text not null,
-				severity text not null,
-				rule text not null,
-				message_text_id integer not null references analysis_text_refs(id),
-				code_text_id integer references analysis_text_refs(id),
-				page_url_sort_key text not null,
-				message_sort_key text not null,
-				code_sort_key text not null,
-				line integer,
-				col integer
-			)
-		`);
-		await instance.raw(
-			'CREATE INDEX av_url_order ON analysis_violations(page_url_sort_key, id)',
-		);
-		await instance.raw(
-			'CREATE INDEX av_filter_url ON analysis_violations(validator, severity, rule, page_url_sort_key, id)',
-		);
-		await instance.raw(
-			'CREATE INDEX av_validator_url ON analysis_violations(validator, page_url_sort_key, id)',
-		);
-		await instance.raw(
-			'CREATE INDEX av_severity_url ON analysis_violations(severity, page_url_sort_key, id)',
-		);
-		await instance.raw(
-			'CREATE INDEX av_rule_url ON analysis_violations(rule, page_url_sort_key, id)',
-		);
-		await instance.raw(
-			'CREATE INDEX av_message_order ON analysis_violations(message_sort_key, id)',
-		);
-		await instance.raw(
-			'CREATE INDEX av_code_order ON analysis_violations(code_sort_key, id)',
-		);
-		await instance.raw('CREATE INDEX av_page ON analysis_violations(page_id, id)');
 	}
 
 	// Content-addressable HTML blob storage. Knex's schema builder doesn't

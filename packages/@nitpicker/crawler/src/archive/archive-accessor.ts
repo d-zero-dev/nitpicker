@@ -9,14 +9,10 @@ import type {
 } from './types.js';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
 
-import path from 'node:path';
-
 import { raceWithTimeout } from '@d-zero/shared/race-with-timeout';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
 
 import { log } from './debug.js';
-import { outputJSON } from './filesystem/output-json.js';
-import { outputText } from './filesystem/output-text.js';
 import { readJSON } from './filesystem/read-json.js';
 import { readText } from './filesystem/read-text.js';
 import Page from './page.js';
@@ -51,8 +47,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	#closeOnce: Promise<void> | null = null;
 	/** The SQLite database instance for querying archived data. */
 	#db: Database;
-	/** Namespace prefix for custom data storage (e.g. `"analysis/plugin-name"`). `null` disables `setData`. */
-	#namespace: string | null = null;
 	/**
 	 * Whether this accessor was opened in read-only mode. With HTML stored
 	 * as a SQLite BLOB, this no longer toggles any code path — the SELECT
@@ -83,23 +77,15 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	 * Creates a new ArchiveAccessor instance.
 	 * @param tmpDir - The path to the temporary directory containing the archive data.
 	 * @param db - The Database instance for querying the SQLite database.
-	 * @param namespace - An optional namespace for scoping custom data storage.
-	 *                    When null, `setData` is not available.
 	 * @param options - Construction options.
 	 * @param options.readOnly - When `true`, helpers must not mutate the
 	 *   filesystem under `tmpDir` (used for live-crawl / stub-mode opens
 	 *   where any write would race the crawler).
 	 */
-	constructor(
-		tmpDir: string,
-		db: Database,
-		namespace: string | null = null,
-		options: { readOnly?: boolean } = {},
-	) {
+	constructor(tmpDir: string, db: Database, options: { readOnly?: boolean } = {}) {
 		super();
 		this.#tmpDir = tmpDir;
 		this.#db = db;
-		this.#namespace = namespace;
 		this.#readOnly = options.readOnly ?? false;
 
 		this.#db.on('error', (e) => {
@@ -213,7 +199,7 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	}
 
 	/**
-	 * Reads custom data stored in the archive by name.
+	 * Reads a data file stored at the archive root (for example an inventory source list) by name.
 	 * @param name - The base name of the data file (without extension).
 	 * @param format - The file format: `'json'` (default), `'txt'`, or `'html'`.
 	 * @returns The parsed JSON object for `'json'` format, or a string for `'txt'`/`'html'` format.
@@ -227,8 +213,7 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	 */
 	async getData(name: string, format?: 'txt' | 'html'): Promise<string>;
 	async getData<T>(name: string, format: 'json' | 'txt' | 'html' = 'json') {
-		const namespace = this.#namespace || '';
-		const filePath = safePath(this.#tmpDir, namespace, `${name}.${format}`);
+		const filePath = safePath(this.#tmpDir, `${name}.${format}`);
 		if (format === 'json') {
 			return await readJSON<T>(filePath);
 		}
@@ -450,27 +435,6 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 		return this.#db.getVideosOfPage(pageId);
 	}
 
-	/**
-	 * Stores custom data in the archive under the configured namespace.
-	 * Requires a namespace to be set on this accessor; throws if namespace is null.
-	 * @param name - The base name of the data file (without extension).
-	 * @param data - The data to store. For JSON format, this will be serialized. For text/HTML, it will be stringified.
-	 * @param format - The file format: `'json'` (default), `'txt'`, or `'html'`.
-	 * @returns The relative file path (from the tmp directory) of the stored data file.
-	 * @throws {Error} If no namespace is set on this accessor.
-	 */
-	async setData(name: string, data: unknown, format: 'json' | 'txt' | 'html' = 'json') {
-		if (this.#namespace == null) {
-			throw new Error('"setData" method of the ArchiveAccessor API must set namespace');
-		}
-		const filePath = safePath(this.#tmpDir, this.#namespace, `${name}.${format}`);
-		if (format === 'json') {
-			await outputJSON(filePath, data);
-		} else {
-			await outputText(filePath, `${data}`);
-		}
-		return path.relative(this.#tmpDir, filePath);
-	}
 	/**
 	 * Returns the total number of internal pages in the archive.
 	 */

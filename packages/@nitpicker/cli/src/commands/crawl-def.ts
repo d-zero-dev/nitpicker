@@ -54,7 +54,7 @@ export const commandDef = {
 			type: 'string',
 			valueName: 'file',
 			group: 'Crawl modes',
-			desc: 'Recrawl: take a URL list file and re-fetch URLs that already exist as pages in the positional archive (reset to pending, then re-crawled — redirect sources, intentionally-skipped pages, and external pages are matched but not reset). URLs the archive does not yet track are imported the same way --inventory does, including its --exclude / --exclude-url handling. Re-run `analyze` afterward — reset pages have their prior findings cleared, but other analyze outputs are not selectively invalidated.',
+			desc: 'Recrawl: take a URL list file and re-fetch URLs that already exist as pages in the positional archive (reset to pending, then re-crawled — redirect sources, intentionally-skipped pages, and external pages are matched but not reset). URLs the archive does not yet track are imported the same way --inventory does, including its --exclude / --exclude-url handling.',
 		},
 		single: {
 			type: 'boolean',

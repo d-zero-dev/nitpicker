@@ -19,7 +19,6 @@ import type { ViewerReadModelBuildPhase } from '@nitpicker/query';
  * each phase renders on its own line.
  */
 export const VIEWER_READ_MODEL_PHASE_LABELS: Record<ViewerReadModelBuildPhase, string> = {
-	backfillingAnalysisViolations: 'Backfilling analysis violations',
 	backfillingBodyHash: 'Backfilling page content hashes',
 	backfillingAliasOfId: 'Backfilling duplicate page links',
 	backfillingDedupeCapEventId: 'Backfilling dedupe-cap markers',

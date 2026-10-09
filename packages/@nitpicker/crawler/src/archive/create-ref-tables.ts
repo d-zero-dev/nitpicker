@@ -68,10 +68,7 @@ export async function createRefTables(instance: Knex): Promise<void> {
 
 	// Short-text dictionary. Covers anchor textContent, image alt, page
 	// meta strings, and dom_path. The `(hash, text)` composite UNIQUE
-	// mirrors `analysis_text_refs` so lookups prefix-seek on `hash`. The
-	// two dictionaries stay separate because merging would require
-	// re-keying every existing `analysis_violations` row (out of scope
-	// for the 0.13 migration; revisit in a later cleanup pass).
+	// keeps lookups prefix-seeking on `hash`.
 	await instance.raw(`
 		CREATE TABLE text_refs (
 			id   INTEGER PRIMARY KEY,

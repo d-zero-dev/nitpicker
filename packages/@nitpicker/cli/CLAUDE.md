@@ -2,7 +2,7 @@
 
 ## Output display design principle（出力表示の設計原則）
 
-長時間処理を持つコマンド（crawl / viewer-build / analyze 等）の進捗表示は、以下を必ず守る。
+長時間処理を持つコマンド（crawl / viewer-build 等）の進捗表示は、以下を必ず守る。
 
 ### 無音区間ゼロ
 

@@ -453,7 +453,7 @@ export class ArchiveManager {
 			// intentionally left in place so the next reader of the same
 			// (unchanged) archive skips the untar. OS-level temp cleanup
 			// reclaims stale entries — we do not own eviction here.
-			const accessor = await Archive.openCached(realPath, null, this.#onExtractProgress);
+			const accessor = await Archive.openCached(realPath, this.#onExtractProgress);
 			// A read-only open never builds or writes anything — an on-open
 			// opportunistic read-model build would mutate an archive the
 			// viewer must treat as read-only (issue #177). Archives with a

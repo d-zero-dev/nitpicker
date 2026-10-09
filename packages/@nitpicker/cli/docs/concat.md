@@ -30,15 +30,13 @@ npx @nitpicker/cli concat a.nitpicker b.nitpicker c.nitpicker -o merged --verbos
 
 ## 引き継がれるもの・引き継がれないもの
 
-- 引き継ぐ: ページに紐づく分析結果（`analysis_violations`）、クロールエラー・ネットワーク断・dedupe-cap 等の履歴、`--inventory`/`--recrawl` の投入済み URL リスト、テンプレートの名前（`events テンプレート A` 等。再分類時の名前の継承元になる）
-- 引き継がない: `analyze` プラグインが書き込む名前空間データ（例: `analysis/report`）。完了後にメッセージで再実行を案内します
+- 引き継ぐ: クロールエラー・ネットワーク断・dedupe-cap 等の履歴、`--inventory`/`--recrawl` の投入済み URL リスト、テンプレートの名前（`events テンプレート A` 等。再分類時の名前の継承元になる）
 - ページのテンプレート分類は結合後のアーカイブ全体で再実行されます（ソースごとのテンプレートキーは別々の分類結果由来で衝突しうるため、コピーではなく再導出します）。`--skip-templates` でスキップできます
 - viewer read model は常に無条件で再構築されます
 
 ## 後続の作業
 
 - 未取得の外部ページを取得したい: `npx @nitpicker/cli crawl <out> --append <root>`
-- analyze の結果が必要: `npx @nitpicker/cli analyze <out>`
 - テンプレート分類または read model の再構築に失敗した場合: `npx @nitpicker/cli viewer-build <out>`
 
 ## オプション一覧

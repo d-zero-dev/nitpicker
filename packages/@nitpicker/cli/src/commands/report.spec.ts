@@ -101,7 +101,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: true,
 			verbose: undefined,
 			silent: undefined,
@@ -121,7 +120,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: undefined,
 			verbose: undefined,
 			silent: undefined,
@@ -141,7 +139,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: undefined,
 			verbose: undefined,
 			silent: undefined,
@@ -161,7 +158,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: undefined,
 			verbose: undefined,
 			silent: true,
@@ -181,7 +177,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: true,
 			verbose: undefined,
 			silent: undefined,
@@ -200,7 +195,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: true,
 			verbose: undefined,
 			silent: true,
@@ -224,7 +218,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: true,
 			verbose: undefined,
 			silent: undefined,
@@ -249,7 +242,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: true,
 			verbose: undefined,
 			silent: undefined,
@@ -273,7 +265,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: true,
 			verbose: undefined,
 			silent: undefined,
@@ -294,7 +285,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: true,
 			verbose: undefined,
 			silent: undefined,
@@ -322,7 +312,6 @@ describe('report command', () => {
 			report(['test.nitpicker'], {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: true,
 				verbose: undefined,
 				silent: undefined,
@@ -343,7 +332,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: true,
 			verbose: true,
 			silent: undefined,
@@ -364,7 +352,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: undefined,
 			verbose: true,
 			silent: undefined,
@@ -380,7 +367,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './credentials.json',
-			config: undefined,
 			all: undefined,
 			verbose: true,
 			silent: true,
@@ -395,7 +381,6 @@ describe('report command', () => {
 			report([], {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -415,7 +400,6 @@ describe('report command', () => {
 			report(['test.nitpicker'], {
 				sheet: undefined as unknown as string,
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -438,7 +422,6 @@ describe('report command', () => {
 			htmlDirs: '/docs',
 			sheet: undefined,
 			credentials: './credentials.json',
-			config: undefined,
 			all: undefined,
 			verbose: undefined,
 			silent: undefined,
@@ -462,7 +445,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: './sa.json',
-			config: undefined,
 			all: undefined,
 			verbose: undefined,
 			silent: undefined,
@@ -481,7 +463,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: undefined,
-			config: undefined,
 			all: undefined,
 			verbose: undefined,
 			silent: undefined,
@@ -500,7 +481,6 @@ describe('report command', () => {
 		await report(['test.nitpicker'], {
 			sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 			credentials: undefined,
-			config: undefined,
 			all: undefined,
 			verbose: undefined,
 			silent: undefined,
@@ -517,7 +497,6 @@ describe('report command', () => {
 				html: true,
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -542,7 +521,6 @@ describe('report command', () => {
 				html: true,
 				sheet: undefined,
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -562,7 +540,6 @@ describe('report command', () => {
 			report(['test.nitpicker'], {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -582,7 +559,6 @@ describe('report command', () => {
 			report(['test.nitpicker'], {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: true,
 				silent: undefined,
@@ -602,7 +578,6 @@ describe('report command', () => {
 			report(['test.nitpicker'], {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -622,7 +597,6 @@ describe('report command', () => {
 			report(['test.nitpicker'], {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: true,
 				silent: true,
@@ -650,7 +624,6 @@ describe('report command', () => {
 				urls: 'urls.txt',
 				sheet: undefined,
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -676,7 +649,6 @@ describe('report command', () => {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				urls: 'urls.txt',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -695,7 +667,6 @@ describe('report command', () => {
 			await report(['test.nitpicker'], {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -722,7 +693,6 @@ describe('report command', () => {
 				urls: 'urls.txt',
 				sheet: undefined,
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -757,7 +727,6 @@ describe('report command', () => {
 					urls: 'urls.txt',
 					sheet: undefined,
 					credentials: './credentials.json',
-					config: undefined,
 					all: undefined,
 					verbose: undefined,
 					silent: undefined,
@@ -789,7 +758,6 @@ describe('report command', () => {
 					urls: 'urls.txt',
 					sheet: undefined,
 					credentials: './credentials.json',
-					config: undefined,
 					all: undefined,
 					verbose: undefined,
 					silent: undefined,
@@ -818,7 +786,6 @@ describe('report command', () => {
 				urls: 'urls.txt',
 				sheet: undefined,
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -839,7 +806,6 @@ describe('report command', () => {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				sheets: 'pages,links,resources,referrers-rel-table',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -857,7 +823,6 @@ describe('report command', () => {
 			await report(['test.nitpicker'], {
 				sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 				credentials: './credentials.json',
-				config: undefined,
 				all: undefined,
 				verbose: undefined,
 				silent: undefined,
@@ -874,7 +839,6 @@ describe('report command', () => {
 					sheet: 'https://docs.google.com/spreadsheets/d/xxx',
 					sheets: 'pages,not-a-sheet',
 					credentials: './credentials.json',
-					config: undefined,
 					all: undefined,
 					verbose: undefined,
 					silent: undefined,

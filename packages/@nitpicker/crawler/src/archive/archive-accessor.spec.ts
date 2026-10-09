@@ -1,6 +1,7 @@
 import type { Database } from './database.js';
 
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -14,8 +15,8 @@ const __dirname = path.dirname(__filename);
 const workingDir = path.resolve(__dirname, '__test_fixtures_archive_accessor__');
 
 /**
- * `getHtmlOfPage` is the single read path used by all consumers (analyze,
- * report, viewer, MCP). After #75 it is a straight join over
+ * `getHtmlOfPage` is the single read path used by all consumers (report,
+ * viewer, MCP). After #75 it is a straight join over
  * `page_html_ref` → `page_html_blobs` with inline zstd decompression: there
  * is no longer a filesystem fallback chain. These tests pin that contract.
  */
@@ -208,5 +209,41 @@ describe('ArchiveAccessor.close timeout safety', () => {
 		await expect(accessor.close()).rejects.toThrow('boom');
 		// Latched: a follow-up close awaits the same rejected promise.
 		await expect(accessor.close()).rejects.toThrow('boom');
+	});
+});
+
+/**
+ * `getData` reads `<tmpDir>/<name>.<format>` and routes the name through
+ * `safePath`, so a name escaping the extraction directory is rejected.
+ */
+describe('ArchiveAccessor.getData', () => {
+	let tmpDir: string;
+	let accessor: ArchiveAccessor;
+
+	beforeAll(() => {
+		tmpDir = mkdtempSync(path.join(os.tmpdir(), 'nitpicker-get-data-'));
+		mkdirSync(path.join(tmpDir, 'inventory'), { recursive: true });
+		writeFileSync(path.join(tmpDir, 'x.json'), JSON.stringify({ a: 1 }));
+		writeFileSync(path.join(tmpDir, 'inventory', 'x.txt'), 'inventory text');
+		const fakeDb = { on: () => {}, destroy: async () => {} } as unknown as Database;
+		accessor = new ArchiveAccessor(tmpDir, fakeDb);
+	});
+
+	afterAll(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it('reads <tmpDir>/<name>.json for a plain name (json by default)', async () => {
+		expect(await accessor.getData<{ a: number }>('x', 'json')).toEqual({ a: 1 });
+	});
+
+	it('reads <tmpDir>/<dir>/<name>.txt for a nested name', async () => {
+		expect(await accessor.getData('inventory/x', 'txt')).toBe('inventory text');
+	});
+
+	it('rejects a name that escapes the extraction directory', async () => {
+		await expect(accessor.getData('../x', 'json')).rejects.toThrow(
+			'Path traversal detected',
+		);
 	});
 });

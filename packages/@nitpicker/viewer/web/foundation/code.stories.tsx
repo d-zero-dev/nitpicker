@@ -27,7 +27,7 @@ export const Inline: Story = {
 export const Block: Story = {
 	render: () => (
 		<pre>
-			<code>{`npx @nitpicker/cli analyze <archive> --templates\nnpx @nitpicker/cli viewer <archive>`}</code>
+			<code>{`npx @nitpicker/cli viewer-build <archive> --force\nnpx @nitpicker/cli viewer <archive>`}</code>
 		</pre>
 	),
 };

@@ -29,7 +29,6 @@ import { formatCliError } from '../format-cli-error.js';
 import { appendBridgedPhaseRows } from '../transfer/append-bridged-phase-rows.js';
 import { cleanupFailedTransfer } from '../transfer/cleanup-failed-transfer.js';
 import { formatTransferNotices } from '../transfer/format-transfer-notices.js';
-import { listPluginDataEntries } from '../transfer/list-plugin-data-entries.js';
 import { resolveTransferExitCode } from '../transfer/resolve-transfer-exit-code.js';
 import { validateSplitScopeUrls } from '../transfer/validate-split-scope-urls.js';
 import { validateTransferInputPaths } from '../transfer/validate-transfer-input-paths.js';
@@ -106,14 +105,12 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 		sourceAccessor: ArchiveAccessor | null;
 		destination: ArchiveType | null;
 		writeStarted: boolean;
-		pluginDataEntries: Set<string>;
 		readModelError: string | null;
 		templateClassificationError: string | null;
 	} = {
 		sourceAccessor: null,
 		destination: null,
 		writeStarted: false,
-		pluginDataEntries: new Set(),
 		readModelError: null,
 		templateClassificationError: null,
 	};
@@ -125,14 +122,10 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 				const reportProgress = dedupeProgressMessage((message) => ctx.progress(message));
 				const accessor = await Archive.openCached(
 					inputPath,
-					null,
 					(bytes, totalBytes) => reportProgress(formatByteProgress(bytes, totalBytes)),
 					reportProgress,
 				);
 				state.sourceAccessor = accessor;
-				for (const entry of await listPluginDataEntries(accessor.tmpDir)) {
-					state.pluginDataEntries.add(entry);
-				}
 			},
 		);
 
@@ -226,7 +219,6 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 			appendHintRoot: result.config.roots[0]!,
 			externalInScopeCount: result.externalInScopeCount,
 			pendingCount: pendingState.pending.length,
-			pluginDataEntries: [...state.pluginDataEntries],
 			readModelError: state.readModelError,
 			templateClassificationError: state.templateClassificationError,
 		};

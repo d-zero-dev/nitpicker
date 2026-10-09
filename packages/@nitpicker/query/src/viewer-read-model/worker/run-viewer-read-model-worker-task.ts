@@ -8,8 +8,7 @@ import { Worker } from 'node:worker_threads';
 
 /**
  * Absolute path to the compiled worker entry. Resolved relative to this
- * module so it points at the sibling `lib/` file at runtime (same technique
- * as `@nitpicker/core`'s worker path resolution) — the entry is an internal
+ * module so it points at the sibling `lib/` file at runtime — the entry is an internal
  * implementation detail and is deliberately absent from the package
  * `exports`.
  */

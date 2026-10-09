@@ -16,7 +16,6 @@ const NAV_ITEMS: NavItem[] = [
 	{ path: '/broken-links', labelKey: 'nav.brokenLinks' },
 	{ path: '/external-links', labelKey: 'nav.externalLinks' },
 	{ path: '/graph', labelKey: 'nav.graph' },
-	{ path: '/violations', labelKey: 'nav.violations' },
 	{ path: '/duplicates', labelKey: 'nav.duplicates' },
 	{ path: '/crawl-suppression', labelKey: 'nav.crawlSuppression' },
 	{ path: '/mismatches', labelKey: 'nav.mismatches' },
