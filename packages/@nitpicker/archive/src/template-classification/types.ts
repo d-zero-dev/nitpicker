@@ -3,11 +3,13 @@ import type { TemplateClusterReason } from '../db-ops/templates/types.js';
 import type Page from '../page.js';
 
 /**
- * Progress of the clustering step itself. nitpicker's own copy of
- * `@d-zero/page-cluster`'s `ProgressEvent` (which is structurally assignable
- * to this type), kept independent of that package so `@nitpicker/cli` can
- * format progress without depending on `@d-zero/page-cluster` — the same
- * reason {@link TemplateClusterReason} mirrors `ClusterReason`.
+ * Progress of the clustering step itself. A copy of the page-cluster
+ * engine's `ProgressEvent` (`./page-cluster/resolve-page-cluster-keys.ts`,
+ * structurally assignable to this type), kept independent of it so
+ * `@nitpicker/cli` formats progress against a type archive exports rather
+ * than against the engine's internals, which are not part of archive's
+ * `exports` — the same reason {@link TemplateClusterReason} mirrors
+ * `ClusterReason`.
  */
 export type TemplateClusteringProgress =
 	| { readonly phase: 'pass0-signals'; readonly pagesSeen: number }
@@ -56,10 +58,10 @@ export interface ClassifyPageTemplatesOptions {
 	 */
 	pages: readonly Page[];
 	/**
-	 * Progress callback forwarded to `@d-zero/page-cluster`'s
+	 * Progress callback forwarded to the page-cluster engine's
 	 * `resolvePageClusterKeys`, so long-running classification on large
 	 * archives isn't silently unresponsive. Independent of cluster-reason
-	 * capture — `@d-zero/page-cluster` 0.5.3+ composes `onProgress` and
+	 * capture — `resolvePageClusterKeys` composes `onProgress` and
 	 * `onClusterReason` without either one demoting the corpus off its
 	 * progress-emitting path (see `classifyPageTemplates`'s own JSDoc).
 	 */
@@ -76,9 +78,9 @@ export interface PageTemplateClassification {
 	 */
 	readonly templateKeysByUrl: ReadonlyMap<string, string>;
 	/**
-	 * Template key → `@d-zero/page-cluster`'s cluster-selection evidence for
+	 * Template key → page-cluster's cluster-selection evidence for
 	 * that key. **Not guaranteed to cover every key in `templateKeysByUrl`**:
-	 * `@d-zero/page-cluster` only emits a reason for a final cluster it still
+	 * page-cluster only emits a reason for a final cluster it still
 	 * holds full grouping state for at the moment `onClusterReason` fires,
 	 * which is a best-effort side channel rather than a per-page guarantee
 	 * (unlike `templateKeysByUrl`, which is verified 1:1 against the yielded

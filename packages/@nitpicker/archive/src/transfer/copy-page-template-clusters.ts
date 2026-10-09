@@ -16,7 +16,7 @@ const SRC = TRANSFER_SOURCE_ALIAS;
  *
  * A `template_key` collision between two DIFFERENT sources' clustering
  * runs (concat) is a known, accepted simplification: `template_key` is a
- * blocking-key string from `@d-zero/page-cluster`'s own corpus
+ * blocking-key string from page-cluster's own corpus
  * classification, computed independently per archive, so the same string
  * appearing in two sources does not necessarily mean the same semantic
  * template — `ON CONFLICT(template_key) DO NOTHING` below means the

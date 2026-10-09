@@ -4,14 +4,13 @@ import type {
 } from './types.js';
 import type { TemplateClusterReason } from '../db-ops/templates/types.js';
 
-import { resolvePageClusterKeys } from '@d-zero/page-cluster/resolve-page-cluster-keys';
-
 import { collectPageStylesheetUrls } from './collect-page-stylesheet-urls.js';
 import { createPageClusterFactory } from './create-page-cluster-factory.js';
+import { resolvePageClusterKeys } from './page-cluster/resolve-page-cluster-keys.js';
 
 /**
  * Classifies every internal HTML page in the archive into a template group
- * by DOM-structure similarity, using `@d-zero/page-cluster`.
+ * by DOM-structure similarity, using the page-cluster engine (`./page-cluster/`).
  *
  * The result is deliberately **not cached**. A cache keyed on the archive
  * file's identity (path + size + mtime + page count) cannot be correct at the
@@ -31,9 +30,9 @@ import { createPageClusterFactory } from './create-page-cluster-factory.js';
  * grouping from DOM-structure similarity).
  *
  * `onClusterReason` is always passed to `resolvePageClusterKeys` (not made
- * conditional the way `onProgress` is) — as of `@d-zero/page-cluster` 0.5.3,
- * requesting cluster reasons no longer forces small corpora off the
- * progress-emitting path (see that option's own JSDoc), so there is no
+ * conditional the way `onProgress` is) — requesting cluster reasons does not
+ * force small corpora off the progress-emitting path (see that option's own
+ * JSDoc in `./page-cluster/resolve-page-cluster-keys.ts`), so there is no
  * responsiveness cost to always capturing them.
  * @param options - See {@link ClassifyPageTemplatesOptions}.
  * @returns See {@link PageTemplateClassification}.

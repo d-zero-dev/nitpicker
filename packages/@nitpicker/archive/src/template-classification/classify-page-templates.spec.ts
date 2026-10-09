@@ -8,11 +8,9 @@ import { decodeJsonRef } from '../db-ops/_shared/decode-json-ref.js';
 
 import { classifyPageTemplates } from './classify-page-templates.js';
 
-vi.mock('@d-zero/page-cluster/resolve-page-cluster-keys', async (importOriginal) => {
+vi.mock('./page-cluster/resolve-page-cluster-keys.js', async (importOriginal) => {
 	const actual =
-		await importOriginal<
-			typeof import('@d-zero/page-cluster/resolve-page-cluster-keys')
-		>();
+		await importOriginal<typeof import('./page-cluster/resolve-page-cluster-keys.js')>();
 	return {
 		...actual,
 		resolvePageClusterKeys: vi.fn(actual.resolvePageClusterKeys),
@@ -20,7 +18,7 @@ vi.mock('@d-zero/page-cluster/resolve-page-cluster-keys', async (importOriginal)
 });
 
 const { resolvePageClusterKeys } =
-	await import('@d-zero/page-cluster/resolve-page-cluster-keys');
+	await import('./page-cluster/resolve-page-cluster-keys.js');
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -139,7 +137,7 @@ describe('classifyPageTemplates', () => {
 	});
 
 	it('実際のclusterReasonsByTemplateKeyがreplacePageTemplates経由でpage_template_clustersに書き込まれ、JSONとして読み戻せる', async () => {
-		// Exercises the real `@d-zero/page-cluster` output (not a hand-authored
+		// Exercises the real page-cluster output (not a hand-authored
 		// `TemplateClusterReason` fixture) through the real `replacePageTemplates`
 		// write path — closes the gap where every other test either mocks
 		// clustering (nitpicker.spec.ts) or hand-constructs the reason object

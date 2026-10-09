@@ -1121,16 +1121,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/cli-core@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@d-zero/cli-core@npm:1.4.0"
-  dependencies:
-    "@d-zero/shared": "npm:0.23.0"
-    minimist: "npm:1.2.8"
-  checksum: 10c0/ad3f7ad8b4f90b5eee07d15503495016d2a28df1e5364e3b5bce26683fd2374dcdc70223d288a35cd36da0f2f2736262d3118ec30761af5ebde6576d7e3eaa67
-  languageName: node
-  linkType: hard
-
 "@d-zero/cspell-config@npm:5.1.0":
   version: 5.1.0
   resolution: "@d-zero/cspell-config@npm:5.1.0"
@@ -1228,20 +1218,6 @@ __metadata:
     "@markuplint/pug-parser": "npm:4.6.23"
     markuplint: "npm:4.14.0"
   checksum: 10c0/579f0f4dee7f21383aee04adf2f7141250542a2a60fe555df849985283e0439fb97f6de187ceea9b38765731a5cbb58436751e91fb8dfe25af8c050625cfb5ef
-  languageName: node
-  linkType: hard
-
-"@d-zero/page-cluster@npm:0.8.0":
-  version: 0.8.0
-  resolution: "@d-zero/page-cluster@npm:0.8.0"
-  dependencies:
-    "@d-zero/cli-core": "npm:1.4.0"
-    "@d-zero/dealer": "npm:1.14.0"
-    "@d-zero/shared": "npm:0.23.0"
-    htmlparser2: "npm:12.0.0"
-  bin:
-    page-cluster: dist/cli.js
-  checksum: 10c0/b28fbf36f5c2070b46519346634177d38f3fbcb1d23ac59737671a9e06914d08be53989cee9740a846ecbef93e419a174a455e88da103ac56d8a2dbfffc3bec6
   languageName: node
   linkType: hard
 
@@ -2862,7 +2838,6 @@ __metadata:
   resolution: "@nitpicker/archive@workspace:packages/@nitpicker/archive"
   dependencies:
     "@d-zero/fs": "npm:0.2.7"
-    "@d-zero/page-cluster": "npm:0.8.0"
     "@d-zero/shared": "npm:0.23.0"
     "@types/debug": "npm:4.1.13"
     "@types/fs-extra": "npm:11.0.4"
@@ -2870,6 +2845,7 @@ __metadata:
     "@types/unzipper": "npm:0.10.11"
     debug: "npm:4.4.3"
     fs-extra: "npm:11.4.1"
+    htmlparser2: "npm:12.0.0"
     knex: "npm:3.3.0"
     libsql: "npm:0.5.29"
     tar: "npm:7.5.22"
@@ -12899,7 +12875,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimist@npm:1.2.8, minimist@npm:^1.2.5, minimist@npm:^1.2.6":
+"minimist@npm:^1.2.5, minimist@npm:^1.2.6":
   version: 1.2.8
   resolution: "minimist@npm:1.2.8"
   checksum: 10c0/19d3fcdca050087b84c2029841a093691a91259a47def2f18222f41e7645a0b7c44ef4b40e88a1e58a40c84d2ef0ee6047c55594d298146d0eb3f6b737c20ce6

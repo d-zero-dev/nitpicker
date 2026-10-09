@@ -2,12 +2,12 @@ import type Page from '../page.js';
 import type {
 	PageClusterSignals,
 	PageFactory,
-} from '@d-zero/page-cluster/resolve-page-cluster-keys';
+} from './page-cluster/resolve-page-cluster-keys.js';
 
 import { createContentRootHint } from './create-content-root-hint.js';
 
 /**
- * Builds the `PageFactory` that `@d-zero/page-cluster`'s
+ * Builds the `PageFactory` that page-cluster's
  * `resolvePageClusterKeys` reads the corpus through, plus a way to read back
  * the URL list it actually yielded (see below for why that can't be known
  * synchronously up front).
@@ -32,7 +32,7 @@ import { createContentRootHint } from './create-content-root-hint.js';
  * Each yielded signal carries the page's `paths`, `stylesheetHrefs`, `html`,
  * `host`, and — when the crawler detected a main-content element for it —
  * a `contentRoot` hint (see {@link createContentRootHint}) that
- * `@d-zero/page-cluster` anchors its content-depth cap on.
+ * page-cluster anchors its content-depth cap on.
  *
  * `getYieldedUrls()` reflects the URLs yielded by the **most recently
  * completed** full iteration of the factory's generator, deliberately not a
@@ -79,7 +79,7 @@ export function createPageClusterFactory(
  * The actual per-call iterator body for {@link createPageClusterFactory}'s
  * `PageFactory`. HTML is fetched lazily, one page at a time, so the archive
  * never holds more than one page's decompressed HTML in memory regardless
- * of corpus size — matching `@d-zero/page-cluster`'s own memory-bounding
+ * of corpus size — matching page-cluster's own memory-bounding
  * design for its multi-pass reads.
  * @param candidates - Pre-filtered internal HTML pages, in fixed order.
  * @param stylesheetsByUrl - See {@link createPageClusterFactory}.

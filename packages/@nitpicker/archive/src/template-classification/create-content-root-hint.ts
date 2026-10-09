@@ -1,8 +1,8 @@
 import type Page from '../page.js';
-import type { PageClusterSignals } from '@d-zero/page-cluster/resolve-page-cluster-keys';
+import type { PageClusterSignals } from './page-cluster/resolve-page-cluster-keys.js';
 
 /**
- * Builds the `contentRoot` hint `@d-zero/page-cluster` anchors its
+ * Builds the `contentRoot` hint page-cluster anchors its
  * content-depth cap on, from the main-content element the crawler recorded
  * for a page (`page_meta.main_content_*`, detected at crawl time by
  * `@d-zero/beholder` or forced with `--main-content-selector`).

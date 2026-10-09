@@ -1,5 +1,5 @@
 /**
- * The six landmark types `@d-zero/page-cluster`'s `extractLandmarks` and
+ * The six landmark types page-cluster's `extractLandmarks` and
  * `ClusterReason.landmarks` recognize.
  */
 export type TemplateClusterLandmarkType =
@@ -12,7 +12,7 @@ export type TemplateClusterLandmarkType =
 
 /**
  * Why a Pass-0 block (one of possibly several that merged into a final
- * cluster) was formed — mirrors `@d-zero/page-cluster`'s `BlockingReason`
+ * cluster) was formed — mirrors page-cluster's `BlockingReason`
  * discriminated union.
  */
 export type TemplateClusterBlockingReason =
@@ -35,13 +35,19 @@ export interface TemplateClusterLandmarkProfile {
 }
 
 /**
- * nitpicker's own copy of `@d-zero/page-cluster`'s `ClusterReason` shape.
- * Kept independent of the `@d-zero/page-cluster` package (rather than
- * importing its type directly) so `@nitpicker/query` — which does not
- * depend on `@d-zero/page-cluster` and is consumed by the browser-side
- * viewer build — never has to add that dependency just to type a value
- * read back out of the archive. `@d-zero/page-cluster`'s `ClusterReason`
- * is structurally assignable to this type.
+ * A copy of the page-cluster engine's `ClusterReason` shape
+ * (`template-classification/page-cluster/build-cluster-reason.ts`). Kept
+ * independent of the engine (rather than importing its type directly)
+ * because this is the persisted contract of `page_template_clusters.reason`
+ * that `@nitpicker/query` and the browser-side viewer build type values
+ * against: the engine is not part of archive's `exports`, and removing or
+ * retyping a field in the engine's shape surfaces as a compile error at the
+ * assignment in `classifyPageTemplates` instead of silently changing what
+ * older archives are read as. A field the engine *adds* is not caught there
+ * (structural assignability) and is persisted as-is in the JSON blob; mirror
+ * it here and in `@nitpicker/query`'s `isTemplateClusterReason` when it
+ * should be read back. The engine's `ClusterReason` is structurally
+ * assignable to this type.
  */
 export interface TemplateClusterReason {
 	readonly memberCount: number;
@@ -101,7 +107,7 @@ export interface ReplacePageTemplatesParams {
 	/** Page URL → template key, as produced by `classifyPageTemplates`. */
 	readonly templateKeysByUrl: ReadonlyMap<string, string>;
 	/**
-	 * Template key → `@d-zero/page-cluster`'s cluster-selection evidence for
+	 * Template key → page-cluster's cluster-selection evidence for
 	 * that key, as produced by `classifyPageTemplates`. Omitted entirely (not
 	 * just empty) when the caller didn't request reasons.
 	 */
