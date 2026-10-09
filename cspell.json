@@ -7,7 +7,12 @@
 		"inventory-*.md",
 		"*-inventory-*.csv",
 		"*-inventory-*.md",
-		"bench-output/**"
+		"bench-output/**",
+		// Synthetic HTML fixtures for page-cluster's production-scale tests:
+		// deliberately varied fictional brand names, product names, and
+		// multi-language (JA/AR/HE/ZH/KO) content, none of which is
+		// meaningful to spell-check.
+		"packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/production-scale/**"
 	],
 	"words": [
 		// Misra-Gries algorithm (DedupeCapTracker, issue #208)
@@ -97,8 +102,21 @@
 
 		// libraries / authors
 
-		// @d-zero/page-cluster (Jaccard similarity coefficient)
+		// page-cluster engine (archive/src/template-classification/page-cluster/):
+		// clustering/distance terminology and algorithm authors
 		"Jaccard",
+		"medoid",
+		"medoids",
+		"Murtagh",
+		"retags",
+		"Vitter",
+		// htmlparser2 Parser callback
+		"oncomment",
+		// WordPress theme whose generated class names page-cluster treats as noise
+		"Divi",
+		// page-cluster synthetic fixture CSS class abbreviations (global nav / footer nav)
+		"gnav",
+		"fnav",
 
 		// technical terms
 		"Upserts",

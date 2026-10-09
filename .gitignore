@@ -89,6 +89,7 @@ test/fixture/.__*
 __*
 !__tests__/
 !__mock__/
+!packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/
 
 # Credentials
 credentials.json
