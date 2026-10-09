@@ -4,7 +4,7 @@ import type {
 	ListImagesOptions,
 	ListViewerImagesOptions,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { isImagesFastPathSortBy } from './is-images-fast-path-sort-by.js';
 import { listImages } from './list-images.js';

@@ -21,7 +21,7 @@ import { useI18n } from '../i18n/use-i18n.js';
 /**
  * Every {@link ErrorKind} value, used to populate the list's kind filter.
  * Declared as a `Record` (rather than a plain array) so adding a member to
- * the `ErrorKind` union owned by `@nitpicker/crawler` without updating this
+ * the `ErrorKind` union owned by `@nitpicker/archive` without updating this
  * map is a compile error, not a silently-incomplete filter.
  */
 const ERROR_KIND_KEYS: Record<ErrorKind, true> = {

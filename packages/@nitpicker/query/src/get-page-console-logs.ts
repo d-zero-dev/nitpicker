@@ -1,7 +1,7 @@
 import type { PageConsoleLogEntry } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { decodeJsonRef } from '@nitpicker/crawler';
+import { decodeJsonRef } from '@nitpicker/archive/db-ops/_shared/decode-json-ref';
 
 import { hasConsoleLogsTables } from './has-console-logs-tables.js';
 

@@ -27,8 +27,8 @@ import process from 'node:process';
 
 import knex from 'knex';
 
-import { initSchema } from '../packages/@nitpicker/crawler/lib/archive/init-schema.js';
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { initSchema } from '../packages/@nitpicker/archive/lib/init-schema.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 import { listPages } from '../packages/@nitpicker/query/lib/list-pages.js';
 import { createApp } from '../packages/@nitpicker/viewer/lib/create-app.js';
 

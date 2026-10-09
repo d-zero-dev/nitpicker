@@ -4,10 +4,10 @@ import type { ImageScanOutcome } from './types.js';
  * Ordered list of every {@link ImageScanOutcome}, for iterating in stable
  * display order (e.g. building a checklist filter) or producing typed
  * lookups. Independently defined from `@d-zero/beholder`'s `IMAGE_SCAN_CODE`
- * — not re-exported through `@nitpicker/crawler` — because this module is
+ * — not re-exported through `@nitpicker/archive` — because this module is
  * imported by the viewer's browser bundle via the `@nitpicker/query/categories`
  * sub-export, which must have zero runtime dependencies on the Node-only
- * crawler package (see `categories.ts`). Parity between the two numeric
+ * archive package (see `categories.ts`). Parity between the two numeric
  * mappings is verified in this file's spec, not enforced by a shared import.
  */
 export const IMAGE_SCAN_OUTCOMES: readonly ImageScanOutcome[] = [

@@ -177,6 +177,23 @@
 		"Wikipedia",
 		"msapplication",
 
+		// beholder Meta field names mirrored in @nitpicker/archive's meta/types.ts
+		"fediverse",
+		"dcterms",
+		"rdfa",
+		"noodp",
+		"noydir",
+		"indexifembedded",
+		"ahrefs",
+		"detectify",
+		"seznam",
+		"nositelinkssearchbox",
+		"nopagereadaloud",
+		"adsense",
+		"nopin",
+		"gbfs",
+		"lrdd",
+
 		// Test fixtures (people)
 		"Yusuke",
 		"Hirao",

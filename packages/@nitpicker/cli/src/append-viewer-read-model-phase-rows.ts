@@ -1,5 +1,5 @@
 import type { StepContext, TaskListPipeline } from '@d-zero/dealer';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type {
 	BuildViewerReadModelOptions,
 	ViewerReadModelBuildPhase,

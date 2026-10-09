@@ -1,5 +1,5 @@
 import type { ListReconcileRunEntry, ListReconcileRunsOptions } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * List list-reconcile run audit rows from the archive, newest first.
@@ -8,10 +8,10 @@ import type { ArchiveAccessor } from '@nitpicker/crawler';
  * `--inventory <list>` or `--recrawl <list>` invocation so the CLI / MCP /
  * viewer can answer "when did we apply which list" without touching
  * external bookkeeping. Both invocation kinds write through the same
- * {@link import('@nitpicker/crawler').ListReconcileRunMeta} path and are
+ * {@link import('@nitpicker/archive/types').ListReconcileRunMeta} path and are
  * distinguished only by their `list_label` prefix (`inventory-`/`recrawl-`).
  * The table is append-only — see
- * {@link import('@nitpicker/crawler').ListReconcileRunMeta} for the write-side
+ * {@link import('@nitpicker/archive/types').ListReconcileRunMeta} for the write-side
  * contract and the rationale behind the NULL-tolerant column shape.
  *
  * Tolerates a missing `list_reconcile_runs` table: archives that predate the

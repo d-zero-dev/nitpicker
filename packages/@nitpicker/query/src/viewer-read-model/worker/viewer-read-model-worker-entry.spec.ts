@@ -30,8 +30,8 @@ const mockClose = vi.fn();
 const mockKnexRaw = vi.fn();
 const mockConnect = vi.fn();
 
-vi.mock('@nitpicker/crawler', () => ({
-	Archive: {
+vi.mock('@nitpicker/archive/archive', () => ({
+	default: {
 		get connect() {
 			return mockConnect;
 		},

@@ -11,9 +11,10 @@
  * relying on today's specific combination of build and call sites to stay
  * that way.
  *
- * Not shared with `@nitpicker/crawler`'s identical constant in
- * `Database.getExistingPageUrls`: `core → query` is not a dependency edge
- * either package can take, so that copy stays independent. Within
+ * Not shared with `@nitpicker/archive`'s identical constant in
+ * `Database.getExistingPageUrls`: that one is an internal of the archive's
+ * write path, not part of its exported surface, so this copy stays
+ * independent. Within
  * `@nitpicker/query` itself, this is the one shared definition — every
  * `whereIn`-chunking call site in this package imports it from here.
  */

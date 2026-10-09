@@ -1,5 +1,5 @@
 import type { ImageEntry, ListImagesOptions, PaginatedImageList } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyListOrder } from './apply-list-order.js';
 import { paginateQuery } from './paginate-query.js';

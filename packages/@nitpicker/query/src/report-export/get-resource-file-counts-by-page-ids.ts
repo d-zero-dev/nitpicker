@@ -1,7 +1,7 @@
 import type { ResourceFileCounts } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { eachSplitted } from '@nitpicker/crawler';
+import { eachSplitted } from '@nitpicker/archive/utils/array/each-splitted';
 
 import { SQLITE_IN_CHUNK } from '../sqlite-in-chunk.js';
 

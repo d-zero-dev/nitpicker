@@ -25,7 +25,7 @@ import process from 'node:process';
 import knex from 'knex';
 import * as tar from 'tar';
 
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 import { listPages } from '../packages/@nitpicker/query/lib/list-pages.js';
 
 const archivePath = process.argv[2];

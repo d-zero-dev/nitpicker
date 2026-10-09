@@ -1,5 +1,5 @@
 import type { AnchorFactEdgeStreamRow } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /** `viewer_anchor_facts` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 2000;

@@ -46,7 +46,7 @@ import { copyFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { buildViewerReadModel } from '@nitpicker/query';
 
 /**

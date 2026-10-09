@@ -1,5 +1,5 @@
 import type { PageTechnologyEntry } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Retrieves the full technology star-chart for the page at the given URL:

@@ -1,4 +1,5 @@
-import type { ArchiveAccessor, Archive } from '@nitpicker/crawler';
+import type Archive from '@nitpicker/archive/archive';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import fs from 'node:fs/promises';
 import path from 'node:path';

@@ -18,14 +18,18 @@ Lerna **fixed モード**のため、全パッケージが同一バージョン�
 
 | npm パッケージ名                  |
 | --------------------------------- |
+| `@nitpicker/archive`              |
 | `@nitpicker/cli`                  |
 | `@nitpicker/crawler`              |
 | `@nitpicker/mcp-server`           |
 | `@nitpicker/query`                |
 | `@nitpicker/report-google-sheets` |
+| `@nitpicker/report-html`          |
 | `@nitpicker/viewer`               |
 
 `packages/test-server` は `private: true` なので publish されない。バージョンは上がるが npm には出ない。
+
+**npm に未公開の新規パッケージ（`@nitpicker/archive` 等）を含むリリースでは、tag push より前に npm 側の Trusted Publisher 登録が済んでいることをユーザーに確認する。** 未登録だとそのパッケージの OIDC publish だけが失敗し、それに exact pin で依存する `@nitpicker/cli` などがインストールできなくなる。
 
 # 手順
 

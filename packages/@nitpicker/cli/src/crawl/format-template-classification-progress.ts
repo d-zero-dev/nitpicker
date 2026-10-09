@@ -1,4 +1,4 @@
-import type { TemplateClassificationProgress } from '@nitpicker/crawler';
+import type { TemplateClassificationProgress } from '@nitpicker/archive/template-classification/types';
 
 import { formatProgressCount } from '../format-progress-count.js';
 

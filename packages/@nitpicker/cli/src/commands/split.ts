@@ -2,21 +2,17 @@ import type { commandDef } from './split-def.js';
 import type { TransferOutcome } from '../transfer/types.js';
 import type { StepContext } from '@d-zero/dealer';
 import type { InferFlags } from '@d-zero/roar';
-import type {
-	ArchiveAccessor,
-	Archive as ArchiveType,
-	SplitArchiveResult,
-} from '@nitpicker/crawler';
+import type ArchiveType from '@nitpicker/archive/archive';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
+import type { SplitArchiveResult } from '@nitpicker/archive/transfer/types';
 
 import path from 'node:path';
 
 import { TaskList } from '@d-zero/dealer';
-import {
-	Archive,
-	SPLIT_SOURCE_TRANSFER_PHASES,
-	splitArchive,
-	TRANSFER_POST_PHASES,
-} from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
+import { splitArchive } from '@nitpicker/archive/transfer/split-archive';
+import { SPLIT_SOURCE_TRANSFER_PHASES } from '@nitpicker/archive/transfer/split-source-transfer-phases';
+import { TRANSFER_POST_PHASES } from '@nitpicker/archive/transfer/transfer-post-phases';
 import { buildViewerReadModelInWorker } from '@nitpicker/query';
 
 import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';

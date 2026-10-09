@@ -39,7 +39,7 @@
 import path from 'node:path';
 import process from 'node:process';
 
-import { decodeStoredBlob } from '@nitpicker/crawler';
+import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
 import { ArchiveManager, matchSelector } from '@nitpicker/query';
 
 // The stage comparison forces selectors onto the open-element stack, which the

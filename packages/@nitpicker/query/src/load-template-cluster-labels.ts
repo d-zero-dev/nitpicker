@@ -1,7 +1,7 @@
-import type { TemplateLabel } from '@nitpicker/crawler';
+import type { TemplateLabel } from '@nitpicker/archive/db-ops/templates/types';
 import type { Knex } from 'knex';
 
-import { eachSplitted } from '@nitpicker/crawler';
+import { eachSplitted } from '@nitpicker/archive/utils/array/each-splitted';
 
 import { hasPageTemplateLabelsTable } from './has-page-template-labels-table.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';

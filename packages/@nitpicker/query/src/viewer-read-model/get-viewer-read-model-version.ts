@@ -1,5 +1,5 @@
 import type { ViewerReadModelMetaRow } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Returns the persisted schema/build version of the viewer read model, or

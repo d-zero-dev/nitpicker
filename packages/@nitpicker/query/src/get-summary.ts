@@ -7,10 +7,13 @@ import type {
 	SummaryResult,
 	TechnologyCount,
 } from './types.js';
-import type { ArchiveAccessor, ErrorKind, PageSource } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
+import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
+import type { PageSource } from '@nitpicker/archive/types';
 import type { Knex } from 'knex';
 
-import { classifyErrorKind, isWithinOutageWindow } from '@nitpicker/crawler';
+import { classifyErrorKind } from '@nitpicker/archive/error-kind/classify-error-kind';
+import { isWithinOutageWindow } from '@nitpicker/archive/is-within-outage-window';
 
 import { applyPageListUniverse } from './apply-page-list-universe.js';
 import { classifyContentType } from './classify-content-type.js';

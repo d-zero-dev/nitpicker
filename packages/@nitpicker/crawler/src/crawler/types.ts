@@ -1,11 +1,12 @@
 import type { DedupeCapObservation } from './dedupe/types.js';
 import type { NetworkProbe } from './probe-network.js';
-import type { PageSource } from '../archive/types.js';
-import type { ErrorKind } from '../types.js';
-import type { PageData, CrawlerError, Resource } from '../utils/types/types.js';
+import type { PageData, Resource } from '../utils/types/types.js';
 import type { ChangePhaseEvent, ConsoleLogEntry, ScrapeResult } from '@d-zero/beholder';
 import type { Lanes } from '@d-zero/dealer';
 import type { ParseURLOptions } from '@d-zero/shared/parse-url';
+import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
+import type { PageSource } from '@nitpicker/archive/types';
+import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
 
 /**
  * Result of resolving a URL that redirects to a destination already rendered
@@ -641,22 +642,6 @@ export interface CrawlerEventTypes {
 		effectiveThreshold: number;
 		observedCount: number;
 	};
-}
-
-/**
- * One Web Component (custom element) found inside a page's main-content
- * region by {@link ./collect-custom-elements.ts}. Unlike beholder's eight
- * `MainContentsData` categories (headings/images/tables/buttons/iframes/
- * videos/audios/canvases), this is captured independently by nitpicker
- * itself — see {@link ./capture-custom-elements.ts} for why.
- */
-export interface MainContentCustomElementCandidate {
-	/** The element's `nodeName` (always upper-cased in an HTML document, e.g. `MY-WIDGET`). */
-	nodeName: string;
-	/** The element's `id` attribute, or `null` when absent. */
-	elementId: string | null;
-	/** The element's class list, in DOM order. */
-	classList: string[];
 }
 
 /**

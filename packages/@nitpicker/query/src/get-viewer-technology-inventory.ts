@@ -1,5 +1,5 @@
 import type { TechnologyInventoryEntry } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Reads the site-wide technology inventory from the precomputed

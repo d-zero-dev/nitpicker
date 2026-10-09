@@ -3,7 +3,7 @@ import type {
 	FindMismatchesFastPathOptions,
 	MismatchType,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { findMismatches } from './find-mismatches.js';
 import { listViewerMismatches } from './list-viewer-mismatches.js';

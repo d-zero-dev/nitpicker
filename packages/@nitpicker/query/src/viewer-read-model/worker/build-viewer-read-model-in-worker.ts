@@ -1,5 +1,5 @@
 import type { BuildViewerReadModelOptions } from '../../types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { runViewerReadModelWorkerTask } from './run-viewer-read-model-worker-task.js';
 

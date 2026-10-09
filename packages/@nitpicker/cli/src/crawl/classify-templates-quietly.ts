@@ -1,6 +1,6 @@
-import type { Archive } from '@nitpicker/crawler';
+import type Archive from '@nitpicker/archive/archive';
 
-import { classifyArchivePageTemplates } from '@nitpicker/crawler';
+import { classifyArchivePageTemplates } from '@nitpicker/archive/template-classification/classify-archive-page-templates';
 
 import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 

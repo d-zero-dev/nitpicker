@@ -1,8 +1,8 @@
-import type { CrawlerError } from '@nitpicker/crawler';
+import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
 
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { ArchiveManager, buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 

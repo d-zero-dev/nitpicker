@@ -1,4 +1,4 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /** Default maximum number of characters to return from an HTML snapshot. */
 const DEFAULT_MAX_LENGTH = 100_000;

@@ -1,5 +1,5 @@
 import type { IsolatedPageEntry, ListViewerIsolatedPagesOptions } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { listIsolatedPages } from './list-isolated-pages.js';
 import { listViewerIsolatedPages } from './list-viewer-isolated-pages.js';

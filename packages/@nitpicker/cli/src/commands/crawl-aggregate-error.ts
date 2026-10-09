@@ -1,4 +1,4 @@
-import type { CrawlerError } from '@nitpicker/crawler';
+import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
 
 /**
  * Type guard that checks whether a collected error is a {@link CrawlerError}

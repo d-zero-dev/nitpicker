@@ -1,0 +1,246 @@
+import type { Knex } from 'knex';
+
+import { dbLog } from '../../../debug.js';
+import { classifyErrorKind } from '../../../error-kind/classify-error-kind.js';
+import { PERMANENT_ERROR_KINDS } from '../../../error-kind/permanent-error-kinds.js';
+import { getFailedPageMessages } from '../../../get-failed-page-messages.js';
+import { isWithinOutageWindow } from '../../../is-within-outage-window.js';
+import { computeShapeKey } from '../../../url-pattern/compute-shape-key.js';
+import { listDedupeCapShapeKeys } from '../../dedupe-cap/list-dedupe-cap-shape-keys.js';
+import { listNetworkOutages } from '../../outages/list-network-outages.js';
+
+import { clearPageDerivedRows } from './clear-page-derived-rows.js';
+import { RETRYABLE_IMAGE_SCAN_CODES } from './retryable-image-scan-codes.js';
+
+/**
+ * Reset previously-attempted pages that ended in a recoverable failure so a
+ * follow-up crawl can re-fetch them from scratch.
+ *
+ * A page qualifies as a recoverable failure when it was already scraped
+ * (`scraped = 1`), is not a redirect source (`redirect_dest_id IS NULL`), was
+ * not intentionally skipped (`is_skipped` is not `1`), and one of the
+ * following holds:
+ *
+ * - `status = -1` — the sentinel a hard scrape failure (network error,
+ *   timeout, browser crash) is recorded with (see `handle-scrape-error.ts`);
+ * - `status IS NULL` — no status was ever stored for the row;
+ * - the row has no `content_type_refs` link — the content type could not be
+ *   determined;
+ * - `status` is in the `5xx` range — a (frequently transient) server error;
+ * - `page_meta.image_scan_desktop` or `image_scan_mobile` is one of
+ *   {@link RETRYABLE_IMAGE_SCAN_CODES} — `@d-zero/beholder` abandoned that
+ *   viewport's `<img>` scan for a transient reason (navigation never
+ *   settled, or the frame/session was lost mid-scan), independent of the
+ *   page's own HTTP `status` (a page can score `status = 200` and still
+ *   have failed its mobile image scan).
+ *
+ * Definitive `4xx` responses are intentionally excluded: re-fetching a 404
+ * almost always yields the same answer.
+ *
+ * A second exclusion runs in JS after the SQL candidate scan: any page whose
+ * latest recorded `page_errors` / `crawl_errors` message classifies into a
+ * permanent {@link PERMANENT_ERROR_KINDS} kind (dns / tls / client-blocked /
+ * parse-error / connection-refused) is left as-is rather than reset to
+ * pending. Without this filter, `--retry-failed` never converges: NXDOMAIN
+ * hosts, expired-cert hosts, and `ERR_BLOCKED_BY_CLIENT` ad pixels would be
+ * reset every iteration, re-attempted, fail identically, and rejoin the
+ * candidate pool for the next iteration. The exclusion keeps the retry
+ * target shrinking across `--retry-failed` passes by leaving deterministic
+ * dead-ends alone.
+ *
+ * **Outage override**: before applying the permanent-kind exclusion, the
+ * message's `createdAt` is checked against every recorded
+ * `network_outages` window (see `is-within-outage-window.ts`). A `dns` (or
+ * any other permanent-kind) failure whose timestamp falls inside a window
+ * is treated as retryable regardless — `dns` is only a permanent,
+ * site-specific verdict when nothing else explains it; inside a confirmed
+ * operator-network outage, the same `getaddrinfo ENOTFOUND` message is
+ * evidence about the CRAWLER's connectivity, not the target site, and
+ * excluding it from retry would strand a perfectly reachable host as a
+ * false permanent failure for the rest of the archive's life. An archive
+ * with no recorded outages (`listNetworkOutages` returns `[]`) behaves
+ * exactly as before this override existed.
+ *
+ * **Confirmed same-cluster trap exclusion**: a third pass drops any
+ * remaining candidate whose URL shape (`computeShapeKey`) matches a
+ * `dedupe_cap_events.shape_key` already recorded in this archive (see
+ * `DedupeCapTracker`). A trap page frequently fails outright (timeout / 5xx)
+ * rather than rendering a comparable body, so it never reaches
+ * `DedupeCapTracker#observe` during the crawl that hit it — without this
+ * exclusion, `--retry-failed` would keep re-queueing the very pages the cap
+ * already exists to suppress, re-inflating the pending count on every pass
+ * for a shape this archive has already confirmed is not worth the cost of
+ * re-discovering. Left as a failed row rather than rewritten to a skip —
+ * post-hoc marking (`content_items.dedupe_cap_event_id`, computed at
+ * `viewer-build`) is what surfaces these pages as capped, not this reset
+ * path. An archive with no recorded cap events (`listDedupeCapShapeKeys`
+ * returns `[]`) behaves exactly as before this exclusion existed.
+ *
+ * Matching rows — internal and external alike — are demoted back to pending
+ * (`scraped = 0`) and have their stale scrape metadata cleared (the
+ * `page_meta` row is deleted outright rather than nulled column-by-column).
+ * The page row itself is kept (id preserved) so existing
+ * `anchor_edges.href_page_id` referrers stay valid, and `is_external` is
+ * left untouched so the next pass re-classifies each page from the crawl
+ * scope. Related `anchor_edges`, `image_items`, `resource_ref_edges`,
+ * `page_errors`, and the `page_main_content_*` child tables are deleted so
+ * the re-scrape can re-insert fresh data without duplicates — kept in sync
+ * with the `page_meta` row deletion above so a reset page's `main_content_*`
+ * counts and its child-table detail never disagree.
+ *
+ * SELECT and UPDATE/DELETE statements are chunked to stay below SQLite's
+ * `SQLITE_LIMIT_VARIABLE_NUMBER`.
+ * @param knex - Knex query builder connected to the archive DB.
+ * @param onProgress - Called after each chunk's DELETE/UPDATE statements
+ *   complete, with the pages processed so far and the total to reset (issue
+ *   #294: a large `--retry-failed` can reset thousands of pages across 13
+ *   tables, running for seconds to minutes with no other signal it hasn't
+ *   hung). Omit for no reporting (the default; e.g. tests).
+ * @returns The URLs of the pages that were reset to pending.
+ */
+export async function resetFailedPages(
+	knex: Knex,
+	onProgress?: (processed: number, total: number) => void,
+): Promise<string[]> {
+	const candidates = await knex('content_items')
+		.join('url_refs', 'content_items.url_id', 'url_refs.id')
+		.leftJoin('page_meta', 'content_items.id', 'page_meta.page_id')
+		.select(
+			'content_items.id as id',
+			'url_refs.url as url',
+			'content_items.status as status',
+			'content_items.content_type_id as contentTypeId',
+		)
+		.where('content_items.scraped', 1)
+		.whereNull('content_items.redirect_dest_id')
+		.where((qb) => {
+			qb.where('content_items.is_skipped', 0).orWhereNull('content_items.is_skipped');
+		})
+		.where((qb) => {
+			qb.whereNull('content_items.status')
+				.orWhere('content_items.status', -1)
+				.orWhereNull('content_items.content_type_id')
+				.orWhereBetween('content_items.status', [500, 599])
+				.orWhereIn('page_meta.image_scan_desktop', RETRYABLE_IMAGE_SCAN_CODES)
+				.orWhereIn('page_meta.image_scan_mobile', RETRYABLE_IMAGE_SCAN_CODES);
+		});
+
+	if (candidates.length === 0) {
+		return [];
+	}
+
+	// Diagnostic only: how many candidates matched solely because of an
+	// image-scan outcome, not the pre-existing status-based conditions —
+	// i.e. a page whose HTTP status looks fine but whose mobile/desktop
+	// `<img>` scan was abandoned for a transient reason.
+	const imageScanOnlyCount = candidates.filter((row) => {
+		const statusQualifies =
+			row.status === null ||
+			row.status === -1 ||
+			row.contentTypeId === null ||
+			(row.status >= 500 && row.status <= 599);
+		return !statusQualifies;
+	}).length;
+	if (imageScanOnlyCount > 0) {
+		dbLog(
+			'%d of %d retry candidate(s) matched via image-scan degradation only',
+			imageScanOnlyCount,
+			candidates.length,
+		);
+	}
+
+	const candidateIds = candidates.map((row) => row.id);
+	const candidateUrls = candidates.map((row) => row.url);
+	// Three unrelated reads (page_errors/crawl_errors, network_outages,
+	// dedupe_cap_events) with no data dependency between them — run
+	// concurrently instead of paying three sequential round-trips on every
+	// `--retry-failed` pass.
+	const [messages, outageWindows, cappedShapeKeys] = await Promise.all([
+		getFailedPageMessages(knex, candidateIds, candidateUrls),
+		listNetworkOutages(knex),
+		listDedupeCapShapeKeys(knex).then((shapeKeys) => new Set(shapeKeys)),
+	]);
+	// Drop candidates whose latest recorded message classifies as permanent —
+	// UNLESS that message's timestamp falls inside a recorded network outage,
+	// in which case the permanent-kind verdict is overridden (see the
+	// "Outage override" section of this function's docstring). An
+	// empty/absent message stays in the retry pool regardless — we keep
+	// retrying when we don't know it's permanent, erring on the side of
+	// investigation.
+	const retryable = candidates.filter((row) => {
+		const resolved = messages.get(row.id);
+		if (resolved === undefined || resolved.message === '') {
+			return true;
+		}
+		if (!PERMANENT_ERROR_KINDS.has(classifyErrorKind(resolved.message))) {
+			return true;
+		}
+		return isWithinOutageWindow(resolved.createdAt, outageWindows);
+	});
+	const excludedCount = candidates.length - retryable.length;
+	if (excludedCount > 0) {
+		dbLog(
+			'Excluded %d page(s) from retry — permanent failure kinds (dns/tls/client-blocked/parse-error/connection-refused)',
+			excludedCount,
+		);
+	}
+
+	// Drop candidates whose URL shape already has a confirmed same-cluster
+	// trap recorded (see the "Confirmed same-cluster trap exclusion" section
+	// of this function's docstring). A row whose shape cannot be computed
+	// (`computeShapeKey` returns `null`) stays in the retry pool — no signal
+	// either way, so err on the side of retrying it.
+	const notCapped =
+		cappedShapeKeys.size === 0
+			? retryable
+			: retryable.filter((row) => {
+					const shapeKey = computeShapeKey(row.url);
+					return shapeKey === null || !cappedShapeKeys.has(shapeKey);
+				});
+	const excludedCappedCount = retryable.length - notCapped.length;
+	if (excludedCappedCount > 0) {
+		dbLog(
+			'Excluded %d page(s) from retry — confirmed same-cluster trap shape',
+			excludedCappedCount,
+		);
+	}
+	if (notCapped.length === 0) {
+		return [];
+	}
+
+	const ids = notCapped.map((row) => row.id);
+	const urls = notCapped.map((row) => row.url);
+
+	const chunkSize = 500;
+	for (let i = 0; i < ids.length; i += chunkSize) {
+		const chunk = ids.slice(i, i + chunkSize);
+		await knex('content_items').whereIn('id', chunk).update({
+			scraped: 0,
+			status: null,
+			status_text: null,
+			content_type_id: null,
+			content_length: null,
+			header_set_id: null,
+			// `first_crawled_at` / `last_crawled_at` are deliberately left
+			// untouched so the last-success timestamp records survive the
+			// demotion (the within-archive observation axis for #11/#17/#19).
+		});
+		// Clear the prior crawl's per-page data so the re-scrape starts clean,
+		// via the shared sweep (also used by `repromoteExternalPages` /
+		// `resetPagesByUrls`) plus `page_errors`, which that sweep
+		// deliberately excludes (see its JSDoc). `updatePage` only replaces
+		// anchor_edges/image_items/tags/jsonld when the new scrape is
+		// non-empty, so this pre-clear is load-bearing for pages that reset
+		// but then fail again (or are never reached), and it is the only
+		// place `resource_ref_edges` and `page_errors` are cleared for this
+		// operation. Deleting the `page_meta` row (rather than nulling every
+		// column) clears title / description / og:* / twitter:* /
+		// meta_extras in one statement; a re-scrape re-inserts it via
+		// `ON CONFLICT(page_id) DO UPDATE`.
+		await knex('page_errors').whereIn('pageId', chunk).delete();
+		await clearPageDerivedRows(knex, chunk);
+		onProgress?.(Math.min(i + chunkSize, ids.length), ids.length);
+	}
+	dbLog('Reset %d failed pages back to pending', urls.length);
+	return urls;
+}

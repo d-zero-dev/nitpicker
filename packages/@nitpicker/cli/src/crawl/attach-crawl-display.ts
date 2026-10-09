@@ -1,5 +1,6 @@
 import type { StepContext } from '@d-zero/dealer';
-import type { CrawlerError, CrawlerOrchestrator } from '@nitpicker/crawler';
+import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
+import type { CrawlerOrchestrator } from '@nitpicker/crawler';
 
 import { TaskList } from '@d-zero/dealer';
 import c from 'ansi-colors';

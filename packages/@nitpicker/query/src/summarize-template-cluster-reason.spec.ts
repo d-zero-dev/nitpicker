@@ -1,4 +1,4 @@
-import type { TemplateClusterReason } from '@nitpicker/crawler';
+import type { TemplateClusterReason } from '@nitpicker/archive/db-ops/templates/types';
 
 import { describe, it, expect } from 'vitest';
 

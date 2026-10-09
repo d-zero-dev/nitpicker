@@ -1,4 +1,4 @@
-import type { Config } from '@nitpicker/crawler';
+import type { Config } from '@nitpicker/archive/types';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 

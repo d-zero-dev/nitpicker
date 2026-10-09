@@ -4,7 +4,7 @@ import type {
 	PaginatedUnusedResourceList,
 	UnusedResourceEntry,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { applyListOrder } from './apply-list-order.js';

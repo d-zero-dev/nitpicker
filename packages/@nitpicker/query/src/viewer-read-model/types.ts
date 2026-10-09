@@ -1,5 +1,5 @@
 import type { FailureAttribution, PageSource } from '../types.js';
-import type { ErrorKind } from '@nitpicker/crawler';
+import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
 
 /**
  * Row shape of the `viewer_read_model_meta` singleton table (always exactly

@@ -1,4 +1,4 @@
-import type { ErrorKind } from '../types.js';
+import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
 
 /**
  * Inputs to {@link shouldBurnHost}.

@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Archive, CrawlerOrchestrator, computeFileSha256 } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
+import { CrawlerOrchestrator, computeFileSha256 } from '@nitpicker/crawler';
 import { listReconcileRuns, listUnusedResources } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 

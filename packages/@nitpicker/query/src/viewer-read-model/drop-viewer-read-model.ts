@@ -1,4 +1,4 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
 

@@ -1,5 +1,5 @@
 import type { SearchHtmlOptions, SearchHtmlResult } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { strToRegex } from '@d-zero/shared/str-to-regex';
 

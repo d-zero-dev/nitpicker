@@ -1,5 +1,5 @@
 import type { PageListRowFilterOptions } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyPageListRowFilters } from './apply-page-list-row-filters.js';
 

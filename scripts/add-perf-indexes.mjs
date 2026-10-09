@@ -45,7 +45,7 @@ import process from 'node:process';
 import knex from 'knex';
 import * as tar from 'tar';
 
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 
 const inputArg = process.argv[2];
 const outputArg = process.argv[3];

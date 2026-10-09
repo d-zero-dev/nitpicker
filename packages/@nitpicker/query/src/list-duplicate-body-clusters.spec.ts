@@ -1,9 +1,9 @@
-import type { Meta } from '@d-zero/beholder';
+import type { Meta } from '@nitpicker/archive/meta/types';
 
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listDuplicateBodyClusters } from './list-duplicate-body-clusters.js';

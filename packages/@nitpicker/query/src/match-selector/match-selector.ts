@@ -1,5 +1,5 @@
 import type { MatchSelectorOptions, MatchSelectorResult } from '../types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { resolvePageUrls } from '../html-snapshot-scan/resolve-page-urls.js';
 import { scanHtmlSnapshots } from '../html-snapshot-scan/scan-html-snapshots.js';

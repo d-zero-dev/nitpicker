@@ -4,9 +4,9 @@
  * `getLinkGraph` / `listLinks` regression that the broader composite index
  * triggered, while keeping the `listPages` win?
  *
- * Runs just the four cases that matter — listPages (win), listLinks broken
- * (regression candidate), getLinkGraph (regression candidate), listPageLinks
- * (unchanged) — before and after the partial index, with and without
+ * Runs just the cases that matter — listPages (win), listLinks broken
+ * (regression candidate), getLinkGraph (regression candidate) — before and
+ * after the partial index, with and without
  * ANALYZE. Prints EXPLAIN QUERY PLAN for each shape so we see what the
  * planner actually picked.
  *
@@ -23,11 +23,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-import { getLinkGraph, listLinks, listPageLinks, listPages } from '@nitpicker/query';
+import { getLinkGraph, listLinks, listPages } from '@nitpicker/query';
 import knex from 'knex';
 import * as tar from 'tar';
 
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 
 const archivePath = process.argv[2];
 if (!archivePath) {
@@ -60,7 +60,6 @@ const CASES = [
 		() => listLinks(accessor, { type: 'broken', limit: 100, offset: 0 }),
 	],
 	['getLinkGraph', () => getLinkGraph(accessor)],
-	['listPageLinks', () => listPageLinks(accessor, { limit: 100, offset: 0 })],
 ];
 
 /**

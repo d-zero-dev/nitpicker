@@ -1,5 +1,5 @@
 import type { DedupeCapEventEntry, ListDedupeCapEventsOptions } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';
@@ -70,7 +70,7 @@ async function findArchivedSampleUrls(
  * Surfaces the `dedupe_cap_events` table (opt-in `--dedupe-cap`, issue
  * #208) so the CLI / MCP / viewer can answer "which URL shapes did this
  * crawl confirm as self-generating traps, and how many anchors did the cap
- * reject" — see `packages/@nitpicker/crawler/src/archive/create-adjunct-tables.ts`'s
+ * reject" — see `packages/@nitpicker/archive/src/create-adjunct-tables.ts`'s
  * DDL JSDoc for the write-side contract.
  *
  * Tolerates a missing `dedupe_cap_events` table: archives that predate the

@@ -1,5 +1,5 @@
 import type { TechnologyInventoryEntry } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { getTechnologyInventory } from './get-technology-inventory.js';
 import { getViewerTechnologyInventory } from './get-viewer-technology-inventory.js';

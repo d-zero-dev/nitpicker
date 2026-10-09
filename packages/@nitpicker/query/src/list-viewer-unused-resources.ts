@@ -6,7 +6,7 @@ import type {
 	ViewerUnusedResourcesKeysetRow,
 	ViewerUnusedResourcesSortSpec,
 } from './viewer-unused-resources-cursor/types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { applyViewerUnusedResourcesFilters } from './apply-viewer-unused-resources-filters.js';

@@ -1,4 +1,4 @@
-import { classifyErrorKind } from '../classify-error-kind.js';
+import { classifyErrorKind } from '@nitpicker/archive/error-kind/classify-error-kind';
 
 import NetTimeoutError from './net-timeout-error.js';
 

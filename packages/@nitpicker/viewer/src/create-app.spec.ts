@@ -4,7 +4,7 @@ import type { ArchiveManager } from '@nitpicker/query';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { buildViewerReadModel } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -195,7 +195,7 @@ describe('createApp', () => {
 		expect(body.internalContents).toBeGreaterThanOrEqual(body.internalPages);
 		expect(body.externalContents).toBeGreaterThanOrEqual(body.externalPages);
 		/* End-to-end coverage for issue #261: exclude settings written via
-		   `archive.setConfig()` (crawler package) must survive the full
+		   `archive.setConfig()` (archive package) must survive the full
 		   config → getSummaryFastPath (query package) → HTTP JSON
 		   (viewer package) pipeline, not just the query-layer unit tests. */
 		expect(body.excludes).toEqual(['/admin/*']);

@@ -1,4 +1,4 @@
-import type { MainContentCustomElementCandidate } from './types.js';
+import type { MainContentCustomElementCandidate } from '@nitpicker/archive/types';
 import type { Page as PuppeteerPage } from 'puppeteer';
 
 import { collectCustomElements } from './collect-custom-elements.js';
@@ -20,9 +20,9 @@ import { collectCustomElements } from './collect-custom-elements.js';
  * navigation raced the call) — custom-element capture is best-effort
  * enrichment and a capture failure must not fail the scrape. Callers
  * treat `undefined` as "unknown" (a distinct state from "zero elements
- * found"), matching
- * {@link ../archive/meta/compute-main-contents-denormalized.ts}'s
- * three-value handling of `main_content_custom_element_count`.
+ * found"), matching the three-value handling of
+ * `main_content_custom_element_count` in `@nitpicker/archive`'s
+ * `meta/compute-main-contents-denormalized.ts`.
  * @param page - The live puppeteer page, after the scrape completed and
  *   before the browser closes.
  * @param mainContentSelector - Optional selector override, forwarded

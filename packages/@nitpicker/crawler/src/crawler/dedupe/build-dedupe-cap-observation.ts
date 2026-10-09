@@ -1,8 +1,9 @@
 import type { DedupeCapObservation } from './types.js';
-import type { DedupeCapObservationRow } from '../../archive/types.js';
+import type { DedupeCapObservationRow } from '@nitpicker/archive/types';
+
+import { computeShapeKey } from '@nitpicker/archive/url-pattern/compute-shape-key';
 
 import { computeMetaSignature } from './compute-meta-signature.js';
-import { computeShapeKey } from './compute-shape-key.js';
 import { resolveOgUrlMismatch } from './resolve-og-url-mismatch.js';
 
 /**

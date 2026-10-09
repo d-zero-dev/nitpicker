@@ -23,7 +23,7 @@ import process from 'node:process';
 
 import knex from 'knex';
 
-import { LibsqlDialect } from '../packages/@nitpicker/crawler/lib/archive/libsql-dialect.js';
+import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 
 const SIZES = process.env.BENCH_SIZES
 	? process.env.BENCH_SIZES.split(',').map((s) => Number(s.trim()))

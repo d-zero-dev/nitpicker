@@ -1,5 +1,5 @@
 import type { Auth } from '@d-zero/google-auth';
-import type { Archive } from '@nitpicker/crawler';
+import type Archive from '@nitpicker/archive/archive';
 import type { sheets_v4 } from 'googleapis';
 
 import crypto from 'node:crypto';

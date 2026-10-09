@@ -1,0 +1,300 @@
+{
+	"name": "@nitpicker/archive",
+	"version": "0.24.0",
+	"description": "Read/write layer for .nitpicker archives (SQLite schema, migration, cache, concat/split, template classification)",
+	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"engines": {
+		"node": ">=24.11.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/d-zero-dev/nitpicker.git",
+		"directory": "packages/@nitpicker/archive"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"files": [
+		"lib"
+	],
+	"type": "module",
+	"exports": {
+		"./archive": {
+			"import": "./lib/archive.js",
+			"types": "./lib/archive.d.ts"
+		},
+		"./archive-accessor": {
+			"import": "./lib/archive-accessor.js",
+			"types": "./lib/archive-accessor.d.ts"
+		},
+		"./archive-lock": {
+			"import": "./lib/archive-lock.js",
+			"types": "./lib/archive-lock.d.ts"
+		},
+		"./body-hash/compute-body-hash": {
+			"import": "./lib/body-hash/compute-body-hash.js",
+			"types": "./lib/body-hash/compute-body-hash.d.ts"
+		},
+		"./cache/clear-archive-cache-entry": {
+			"import": "./lib/cache/clear-archive-cache-entry.js",
+			"types": "./lib/cache/clear-archive-cache-entry.d.ts"
+		},
+		"./cache/clear-archive-cache-root": {
+			"import": "./lib/cache/clear-archive-cache-root.js",
+			"types": "./lib/cache/clear-archive-cache-root.d.ts"
+		},
+		"./cache/compute-archive-cache-key": {
+			"import": "./lib/cache/compute-archive-cache-key.js",
+			"types": "./lib/cache/compute-archive-cache-key.d.ts"
+		},
+		"./cache/get-archive-cache-root": {
+			"import": "./lib/cache/get-archive-cache-root.js",
+			"types": "./lib/cache/get-archive-cache-root.d.ts"
+		},
+		"./cache/is-archive-cache-disabled": {
+			"import": "./lib/cache/is-archive-cache-disabled.js",
+			"types": "./lib/cache/is-archive-cache-disabled.d.ts"
+		},
+		"./cache/list-archive-cache-entries": {
+			"import": "./lib/cache/list-archive-cache-entries.js",
+			"types": "./lib/cache/list-archive-cache-entries.d.ts"
+		},
+		"./cache/resolve-archive-cache-dir": {
+			"import": "./lib/cache/resolve-archive-cache-dir.js",
+			"types": "./lib/cache/resolve-archive-cache-dir.d.ts"
+		},
+		"./cache/types": {
+			"import": "./lib/cache/types.js",
+			"types": "./lib/cache/types.d.ts"
+		},
+		"./content-type/is-html-content-type": {
+			"import": "./lib/content-type/is-html-content-type.js",
+			"types": "./lib/content-type/is-html-content-type.d.ts"
+		},
+		"./db-ops/_shared/decode-json-ref": {
+			"import": "./lib/db-ops/_shared/decode-json-ref.js",
+			"types": "./lib/db-ops/_shared/decode-json-ref.d.ts"
+		},
+		"./db-ops/_shared/load-response-headers-by-set-ids": {
+			"import": "./lib/db-ops/_shared/load-response-headers-by-set-ids.js",
+			"types": "./lib/db-ops/_shared/load-response-headers-by-set-ids.d.ts"
+		},
+		"./db-ops/outages/compute-outage-clamp-timestamp": {
+			"import": "./lib/db-ops/outages/compute-outage-clamp-timestamp.js",
+			"types": "./lib/db-ops/outages/compute-outage-clamp-timestamp.d.ts"
+		},
+		"./db-ops/templates/assign-template-labels": {
+			"import": "./lib/db-ops/templates/assign-template-labels.js",
+			"types": "./lib/db-ops/templates/assign-template-labels.d.ts"
+		},
+		"./db-ops/templates/types": {
+			"import": "./lib/db-ops/templates/types.js",
+			"types": "./lib/db-ops/templates/types.d.ts"
+		},
+		"./decode-html-blob": {
+			"import": "./lib/decode-html-blob.js",
+			"types": "./lib/decode-html-blob.d.ts"
+		},
+		"./error-kind/classify-error-kind": {
+			"import": "./lib/error-kind/classify-error-kind.js",
+			"types": "./lib/error-kind/classify-error-kind.d.ts"
+		},
+		"./error-kind/network-related-error-kinds": {
+			"import": "./lib/error-kind/network-related-error-kinds.js",
+			"types": "./lib/error-kind/network-related-error-kinds.d.ts"
+		},
+		"./error-kind/types": {
+			"import": "./lib/error-kind/types.js",
+			"types": "./lib/error-kind/types.d.ts"
+		},
+		"./filesystem/copy-file-with-progress": {
+			"import": "./lib/filesystem/copy-file-with-progress.js",
+			"types": "./lib/filesystem/copy-file-with-progress.d.ts"
+		},
+		"./is-within-outage-window": {
+			"import": "./lib/is-within-outage-window.js",
+			"types": "./lib/is-within-outage-window.d.ts"
+		},
+		"./meta/assert-compatible-version": {
+			"import": "./lib/meta/assert-compatible-version.js",
+			"types": "./lib/meta/assert-compatible-version.d.ts"
+		},
+		"./meta/technologies/combine-technology-confidence": {
+			"import": "./lib/meta/technologies/combine-technology-confidence.js",
+			"types": "./lib/meta/technologies/combine-technology-confidence.d.ts"
+		},
+		"./meta/technologies/technology-signal-definitions": {
+			"import": "./lib/meta/technologies/technology-signal-definitions.js",
+			"types": "./lib/meta/technologies/technology-signal-definitions.d.ts"
+		},
+		"./meta/technologies/types": {
+			"import": "./lib/meta/technologies/types.js",
+			"types": "./lib/meta/technologies/types.d.ts"
+		},
+		"./meta/types": {
+			"import": "./lib/meta/types.js",
+			"types": "./lib/meta/types.d.ts"
+		},
+		"./page": {
+			"import": "./lib/page.js",
+			"types": "./lib/page.d.ts"
+		},
+		"./peek-archive-lock": {
+			"import": "./lib/peek-archive-lock.js",
+			"types": "./lib/peek-archive-lock.d.ts"
+		},
+		"./populate-entity-tables/derive-dom-path": {
+			"import": "./lib/populate-entity-tables/derive-dom-path.js",
+			"types": "./lib/populate-entity-tables/derive-dom-path.d.ts"
+		},
+		"./populate-entity-tables/populate-entities": {
+			"import": "./lib/populate-entity-tables/populate-entities.js",
+			"types": "./lib/populate-entity-tables/populate-entities.d.ts"
+		},
+		"./populate-entity-tables/populate-image-items": {
+			"import": "./lib/populate-entity-tables/populate-image-items.js",
+			"types": "./lib/populate-entity-tables/populate-image-items.d.ts"
+		},
+		"./populate-entity-tables/types": {
+			"import": "./lib/populate-entity-tables/types.js",
+			"types": "./lib/populate-entity-tables/types.d.ts"
+		},
+		"./populate-ref-tables/populate-blob-refs": {
+			"import": "./lib/populate-ref-tables/populate-blob-refs.js",
+			"types": "./lib/populate-ref-tables/populate-blob-refs.d.ts"
+		},
+		"./populate-ref-tables/populate-content-type-refs": {
+			"import": "./lib/populate-ref-tables/populate-content-type-refs.js",
+			"types": "./lib/populate-ref-tables/populate-content-type-refs.d.ts"
+		},
+		"./populate-ref-tables/populate-header-tables": {
+			"import": "./lib/populate-ref-tables/populate-header-tables.js",
+			"types": "./lib/populate-ref-tables/populate-header-tables.d.ts"
+		},
+		"./populate-ref-tables/populate-json-refs": {
+			"import": "./lib/populate-ref-tables/populate-json-refs.js",
+			"types": "./lib/populate-ref-tables/populate-json-refs.d.ts"
+		},
+		"./populate-ref-tables/populate-refs": {
+			"import": "./lib/populate-ref-tables/populate-refs.js",
+			"types": "./lib/populate-ref-tables/populate-refs.d.ts"
+		},
+		"./populate-ref-tables/populate-text-refs": {
+			"import": "./lib/populate-ref-tables/populate-text-refs.js",
+			"types": "./lib/populate-ref-tables/populate-text-refs.d.ts"
+		},
+		"./populate-ref-tables/populate-url-refs": {
+			"import": "./lib/populate-ref-tables/populate-url-refs.js",
+			"types": "./lib/populate-ref-tables/populate-url-refs.d.ts"
+		},
+		"./resource": {
+			"import": "./lib/resource.js",
+			"types": "./lib/resource.d.ts"
+		},
+		"./scope/build-scope-map": {
+			"import": "./lib/scope/build-scope-map.js",
+			"types": "./lib/scope/build-scope-map.d.ts"
+		},
+		"./scope/find-scope-entry": {
+			"import": "./lib/scope/find-scope-entry.js",
+			"types": "./lib/scope/find-scope-entry.d.ts"
+		},
+		"./template-classification/classify-archive-page-templates": {
+			"import": "./lib/template-classification/classify-archive-page-templates.js",
+			"types": "./lib/template-classification/classify-archive-page-templates.d.ts"
+		},
+		"./template-classification/types": {
+			"import": "./lib/template-classification/types.js",
+			"types": "./lib/template-classification/types.d.ts"
+		},
+		"./transfer/concat-archives": {
+			"import": "./lib/transfer/concat-archives.js",
+			"types": "./lib/transfer/concat-archives.d.ts"
+		},
+		"./transfer/concat-source-transfer-phases": {
+			"import": "./lib/transfer/concat-source-transfer-phases.js",
+			"types": "./lib/transfer/concat-source-transfer-phases.d.ts"
+		},
+		"./transfer/split-archive": {
+			"import": "./lib/transfer/split-archive.js",
+			"types": "./lib/transfer/split-archive.d.ts"
+		},
+		"./transfer/split-source-transfer-phases": {
+			"import": "./lib/transfer/split-source-transfer-phases.js",
+			"types": "./lib/transfer/split-source-transfer-phases.d.ts"
+		},
+		"./transfer/transfer-post-phases": {
+			"import": "./lib/transfer/transfer-post-phases.js",
+			"types": "./lib/transfer/transfer-post-phases.d.ts"
+		},
+		"./transfer/types": {
+			"import": "./lib/transfer/types.js",
+			"types": "./lib/transfer/types.d.ts"
+		},
+		"./types": {
+			"import": "./lib/types.js",
+			"types": "./lib/types.d.ts"
+		},
+		"./url-alias/compute-tier-a-alias-key": {
+			"import": "./lib/url-alias/compute-tier-a-alias-key.js",
+			"types": "./lib/url-alias/compute-tier-a-alias-key.d.ts"
+		},
+		"./url-alias/compute-tier-b-alias-key": {
+			"import": "./lib/url-alias/compute-tier-b-alias-key.js",
+			"types": "./lib/url-alias/compute-tier-b-alias-key.d.ts"
+		},
+		"./url-pattern/compute-shape-key": {
+			"import": "./lib/url-pattern/compute-shape-key.js",
+			"types": "./lib/url-pattern/compute-shape-key.d.ts"
+		},
+		"./url-pattern/decompose-url": {
+			"import": "./lib/url-pattern/decompose-url.js",
+			"types": "./lib/url-pattern/decompose-url.d.ts"
+		},
+		"./url-pattern/reconstruct-url": {
+			"import": "./lib/url-pattern/reconstruct-url.js",
+			"types": "./lib/url-pattern/reconstruct-url.d.ts"
+		},
+		"./utils/array/each-splitted": {
+			"import": "./lib/utils/array/each-splitted.js",
+			"types": "./lib/utils/array/each-splitted.d.ts"
+		},
+		"./utils/object/parse-response-headers": {
+			"import": "./lib/utils/object/parse-response-headers.js",
+			"types": "./lib/utils/object/parse-response-headers.d.ts"
+		},
+		"./utils/object/redact-request-headers": {
+			"import": "./lib/utils/object/redact-request-headers.js",
+			"types": "./lib/utils/object/redact-request-headers.d.ts"
+		},
+		"./utils/types/types": {
+			"import": "./lib/utils/types/types.js",
+			"types": "./lib/utils/types/types.d.ts"
+		},
+		"./write-queue": {
+			"import": "./lib/write-queue.js",
+			"types": "./lib/write-queue.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"clean": "tsc --build --clean"
+	},
+	"dependencies": {
+		"@d-zero/fs": "0.2.7",
+		"@d-zero/page-cluster": "0.8.0",
+		"@d-zero/shared": "0.23.0",
+		"debug": "4.4.3",
+		"fs-extra": "11.4.1",
+		"knex": "3.3.0",
+		"libsql": "0.5.29",
+		"tar": "7.5.22"
+	},
+	"devDependencies": {
+		"@types/debug": "4.1.13",
+		"@types/fs-extra": "11.0.4",
+		"@types/tar": "7.0.87",
+		"@types/unzipper": "0.10.11"
+	}
+}

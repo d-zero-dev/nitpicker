@@ -7,7 +7,7 @@ import type {
 	ViewerPagesKeysetRow,
 	ViewerPagesSortSpec,
 } from './viewer-pages-cursor/types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { applyViewerPagesFilters } from './apply-viewer-pages-filters.js';

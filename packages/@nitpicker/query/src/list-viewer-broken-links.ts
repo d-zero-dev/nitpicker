@@ -7,7 +7,7 @@ import type {
 	AnchorFactsKeysetRow,
 	AnchorFactsSortSpec,
 } from './viewer-anchor-facts-cursor/types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';

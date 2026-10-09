@@ -1,7 +1,7 @@
-import type { DB_Resource } from './archive/types.js';
 import type { ResourceLookupResult } from './crawler/types.js';
+import type { DB_Resource } from '@nitpicker/archive/types';
 
-import { parseResponseHeaders } from './utils/object/parse-response-headers.js';
+import { parseResponseHeaders } from '@nitpicker/archive/utils/object/parse-response-headers';
 
 /**
  * Convert a raw `resources` table row into the minimal lookup result the

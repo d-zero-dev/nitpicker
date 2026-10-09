@@ -4,7 +4,7 @@ name: Viewer E2E
 # Heavy (browser download + a resident server), so it does not block every PR:
 #   - nightly via cron (catch regressions on the default branch)
 #   - on demand via workflow_dispatch
-#   - on PRs that touch the viewer / query / CLI (path filter)
+#   - on PRs that touch the viewer / query / archive / CLI (path filter)
 on:
   schedule:
     - cron: '30 18 * * *' # 03:30 JST, nightly (offset from the main E2E)
@@ -13,6 +13,7 @@ on:
     paths:
       - 'packages/@nitpicker/viewer/**'
       - 'packages/@nitpicker/query/**'
+      - 'packages/@nitpicker/archive/**'
       - 'packages/@nitpicker/cli/**'
       - '.github/workflows/viewer-e2e.yml'
 

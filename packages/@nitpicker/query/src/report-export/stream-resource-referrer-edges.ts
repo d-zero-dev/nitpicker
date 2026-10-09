@@ -1,5 +1,5 @@
 import type { ResourceReferrerEdgeStreamRow } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /** `resource_ref_edges` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;

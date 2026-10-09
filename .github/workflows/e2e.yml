@@ -15,6 +15,7 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - 'packages/@nitpicker/archive/**'
       - 'packages/@nitpicker/cli/**'
       - 'packages/@nitpicker/crawler/**'
       - 'packages/@nitpicker/query/**'

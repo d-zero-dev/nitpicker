@@ -17,12 +17,22 @@ const mockClearArchiveCacheEntry = vi.fn().mockResolvedValue(true);
 const mockComputeArchiveCacheKey = vi.fn().mockResolvedValue('cache-key-123');
 const mockResolveArchiveCacheDir = vi.fn(() => '/mock-cache-root/cache-key-123-example');
 
-vi.mock('@nitpicker/crawler', () => ({
+vi.mock('@nitpicker/archive/cache/get-archive-cache-root', () => ({
 	getArchiveCacheRoot: mockGetArchiveCacheRoot,
+}));
+vi.mock('@nitpicker/archive/cache/list-archive-cache-entries', () => ({
 	listArchiveCacheEntries: mockListArchiveCacheEntries,
+}));
+vi.mock('@nitpicker/archive/cache/clear-archive-cache-root', () => ({
 	clearArchiveCacheRoot: mockClearArchiveCacheRoot,
+}));
+vi.mock('@nitpicker/archive/cache/clear-archive-cache-entry', () => ({
 	clearArchiveCacheEntry: mockClearArchiveCacheEntry,
+}));
+vi.mock('@nitpicker/archive/cache/compute-archive-cache-key', () => ({
 	computeArchiveCacheKey: mockComputeArchiveCacheKey,
+}));
+vi.mock('@nitpicker/archive/cache/resolve-archive-cache-dir', () => ({
 	resolveArchiveCacheDir: mockResolveArchiveCacheDir,
 }));
 

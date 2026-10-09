@@ -1,5 +1,5 @@
 import type { HtmlReportDirectoryPrefix } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { countPageListRows } from '@nitpicker/query';
 

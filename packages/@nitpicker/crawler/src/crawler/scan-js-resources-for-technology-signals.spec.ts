@@ -4,9 +4,8 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import Archive from '@nitpicker/archive/archive';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-
-import Archive from '../archive/archive.js';
 
 import { scanJsResourcesForTechnologySignals } from './scan-js-resources-for-technology-signals.js';
 

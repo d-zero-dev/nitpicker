@@ -14,7 +14,7 @@ Produced by a real crawl of this package's own `basic.ts` routes (`/` and
 built in, then repacked with `tar`'s `portable: true` option to strip
 OS-specific tar header metadata (owner/group name, `ctime`/`atime`) that the
 production archive writer
-(`packages/@nitpicker/crawler/src/archive/filesystem/tar.ts`) does not
+(`packages/@nitpicker/archive/src/filesystem/tar.ts`) does not
 strip by default.
 
 Baked-in URLs (used verbatim by both e2e tests' `--urls` lists):

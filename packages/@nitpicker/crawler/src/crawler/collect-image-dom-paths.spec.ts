@@ -1,7 +1,6 @@
+import { deriveDomPath } from '@nitpicker/archive/populate-entity-tables/derive-dom-path';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
-
-import { deriveDomPath } from '../archive/populate-entity-tables/derive-dom-path.js';
 
 import { collectImageDomPaths } from './collect-image-dom-paths.js';
 

@@ -16,7 +16,7 @@ export { buildRedirectFromUrlsByDestId } from './report-export/build-redirect-fr
 export { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 export { buildViewerReadModelInWorker } from './viewer-read-model/worker/build-viewer-read-model-in-worker.js';
 export { checkHeaders } from './check-headers.js';
-export { classifyErrorKind } from '@nitpicker/crawler';
+export { classifyErrorKind } from '@nitpicker/archive/error-kind/classify-error-kind';
 export { computeDirectoryDistribution } from './compute-directory-distribution.js';
 export { computeIsolatedClusters } from './compute-isolated-clusters.js';
 export { computeStylesheetFileNames } from './compute-stylesheet-file-names.js';

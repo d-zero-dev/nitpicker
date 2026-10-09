@@ -9,25 +9,27 @@
  */
 export type ArchiveMode = 'archive' | 'stub';
 
-// Re-export the canonical PageSource / ErrorKind owned by the crawler
+// Re-export the canonical PageSource / ErrorKind owned by the archive
 // package — keeps query consumers (CLI / MCP / viewer) from reaching across
-// packages for the same enums. crawler needs ErrorKind for its DNS-burned
-// host cache and cannot depend on query.
-export type { PageSource, ErrorKind } from '@nitpicker/crawler';
+// packages for the same enums. They live in archive (not here) because the
+// crawler also needs them (ErrorKind for its DNS-burned host cache) and
+// cannot depend on query.
+export type { PageSource } from '@nitpicker/archive/types';
+export type { ErrorKind } from '@nitpicker/archive/error-kind/types';
 import type { FindMismatchesOptions } from './find-mismatches.js';
 import type { HtmlSnapshotPageFilters } from './html-snapshot-scan/types.js';
 import type {
-	ErrorKind,
-	PageSource,
 	TemplateClusterBlockingEvidence,
 	TemplateClusterLandmarkType,
 	TemplateLabel,
-} from '@nitpicker/crawler';
+} from '@nitpicker/archive/db-ops/templates/types';
+import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
+import type { PageSource } from '@nitpicker/archive/types';
 
-// The stored label shape is owned by the crawler (it writes
+// The stored label shape is owned by the archive (it writes
 // `page_template_labels`); re-exported so viewer / MCP consumers of
 // `PageListItem.templateLabel` don't reach across packages for it.
-export type { TemplateLabel } from '@nitpicker/crawler';
+export type { TemplateLabel } from '@nitpicker/archive/db-ops/templates/types';
 
 /**
  * One row of {@link import('./list-isolated-pages.js').listIsolatedPages} output — a **完全孤立** (singleton)
@@ -368,7 +370,7 @@ export interface CursorPaginatedUnusedResourceList extends PaginatedUnusedResour
  * Schema-mirror of the `list_reconcile_runs` table. All NULL semantics, the
  * "ran_at is the only required field" backfill contract, and the
  * append-only invariant live on
- * {@link import('@nitpicker/crawler').ListReconcileRunMeta} in the crawler
+ * {@link import('@nitpicker/archive/types').ListReconcileRunMeta} in the archive
  * package — this interface is the read-side shape.
  */
 export interface ListReconcileRunEntry {
@@ -411,7 +413,7 @@ export interface ListReconcileRunsOptions {
  * output — one recorded operator-network outage.
  *
  * Schema-mirror of the `network_outages` table. Field semantics live on
- * {@link import('@nitpicker/crawler').NetworkOutageRow} in the crawler
+ * {@link import('@nitpicker/archive/types').NetworkOutageRow} in the archive
  * package — this interface is the read-side shape.
  */
 export interface NetworkOutageEntry {
@@ -425,7 +427,7 @@ export interface NetworkOutageEntry {
 	 * Epoch ms the outage ended. Never `null` on read: a row left open by a
 	 * crashed session is resolved on the fly to the archive's last observed
 	 * activity timestamp (see `is-within-outage-window.ts` and
-	 * `close-stale-open-network-outages.ts` in the crawler package) — this
+	 * `close-stale-open-network-outages.ts` in the archive package) — this
 	 * read-side shape has no unresolved-open state to represent.
 	 */
 	ended_at: number;
@@ -745,7 +747,7 @@ export interface StatusCount {
 	inventorySeed?: true;
 	/**
 	 * Per-cause breakdown of the `status === -1` bucket, classified by
-	 * {@link import('@nitpicker/crawler').classifyErrorKind} on the underlying message.
+	 * {@link import('@nitpicker/archive/error-kind/classify-error-kind').classifyErrorKind} on the underlying message.
 	 *
 	 * Present only on the `status === -1` row (the hard-failure sentinel). The
 	 * sum of `errorKindBreakdown[*].count` is always equal to the parent
@@ -1432,7 +1434,7 @@ export interface ListViewerPagesOptions {
 	 */
 	isRedirectSource?: boolean | boolean[];
 	/** Filter by provenance — see {@link PageSource}. */
-	source?: import('@nitpicker/crawler').PageSource;
+	source?: import('@nitpicker/archive/types').PageSource;
 	/**
 	 * Filter by exact DOM-structure template classification group key,
 	 * or any of several (OR). This IS supported by the fast path:
@@ -1782,9 +1784,9 @@ export interface PageDetail {
 }
 
 /**
- * DTO mirror of {@link import('@nitpicker/crawler').JsonLdSummary}.
+ * DTO mirror of {@link import('@nitpicker/archive/meta/types').JsonLdSummary}.
  *
- * Re-declared in query types so the public DTO does not leak crawler
+ * Re-declared in query types so the public DTO does not leak archive
  * internals; same shape so callers can pass it straight through.
  */
 export interface JsonLdSummaryDto {

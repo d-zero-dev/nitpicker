@@ -3,7 +3,7 @@ import type {
 	DirectoryPageListItem,
 	ListDirectoryPagesOptions,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { decodeDirectoryPagesCursor } from './directory-pages-cursor/decode-directory-pages-cursor.js';
 import { encodeDirectoryPagesCursor } from './directory-pages-cursor/encode-directory-pages-cursor.js';

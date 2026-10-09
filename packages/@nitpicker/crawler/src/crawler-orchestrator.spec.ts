@@ -1,5 +1,5 @@
-import type Archive from './archive/archive.js';
-import type { CrawlerError } from './utils/types/types.js';
+import type Archive from '@nitpicker/archive/archive';
+import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -226,7 +226,7 @@ describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗'
 			filePath: '/tmp/orchestrator-adderror-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		await expect(
@@ -270,7 +270,7 @@ describe('CrawlerOrchestrator.crawling: PreloadShortCircuitError', () => {
 			filePath: '/tmp/orchestrator-preload-skip-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const { PreloadShortCircuitError } =
@@ -314,7 +314,7 @@ describe('CrawlerOrchestrator.crawling: PreloadShortCircuitError', () => {
 			filePath: '/tmp/orchestrator-non-preload-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -359,7 +359,7 @@ describe('CrawlerOrchestrator.crawling: networkOutageConfirmed / networkOutageRe
 			filePath: '/tmp/orchestrator-outage-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -409,7 +409,7 @@ describe('CrawlerOrchestrator.crawling: networkOutageConfirmed / networkOutageRe
 			filePath: '/tmp/orchestrator-outage-orphan-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -444,7 +444,7 @@ describe('CrawlerOrchestrator.crawling: networkOutageConfirmed / networkOutageRe
 			filePath: '/tmp/orchestrator-outage-summary-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const { networkOutageSummaryCounter } =
@@ -493,7 +493,7 @@ describe('CrawlerOrchestrator.crawling: network-outage option forwarding (regres
 			filePath: '/tmp/orchestrator-network-outage-options-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const fakeProbe = vi.fn(() => Promise.resolve(true));
@@ -535,7 +535,7 @@ describe('CrawlerOrchestrator.crawling: network-outage option forwarding (regres
 			filePath: '/tmp/orchestrator-network-outage-defaults-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		await CrawlerOrchestrator.crawling(['https://example.com/'], {
@@ -582,7 +582,7 @@ describe('CrawlerOrchestrator.crawling: request headers', () => {
 
 	it('forwards requestHeaders from crawling() options to the underlying Crawler', async () => {
 		const { fakeArchive } = buildFakeArchive('request-headers-forward');
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		await CrawlerOrchestrator.crawling(['https://example.com/'], {
@@ -599,7 +599,7 @@ describe('CrawlerOrchestrator.crawling: request headers', () => {
 
 	it('passes undefined requestHeaders to the Crawler when none are configured', async () => {
 		const { fakeArchive } = buildFakeArchive('request-headers-none');
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		await CrawlerOrchestrator.crawling(['https://example.com/'], {
@@ -612,7 +612,7 @@ describe('CrawlerOrchestrator.crawling: request headers', () => {
 
 	it('records only the header NAMES in the archive config, never the values', async () => {
 		const { fakeArchive, setConfig } = buildFakeArchive('request-headers-names');
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		await CrawlerOrchestrator.crawling(['https://example.com/'], {
@@ -636,7 +636,7 @@ describe('CrawlerOrchestrator.crawling: request headers', () => {
 
 	it('records an empty name list when no headers are configured', async () => {
 		const { fakeArchive, setConfig } = buildFakeArchive('request-headers-names-empty');
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		await CrawlerOrchestrator.crawling(['https://example.com/'], {
@@ -670,7 +670,7 @@ describe('CrawlerOrchestrator.crawling: pageError ハンドラ', () => {
 			filePath: '/tmp/orchestrator-pageerror-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -713,7 +713,7 @@ describe('CrawlerOrchestrator.crawling: pageError ハンドラ', () => {
 			filePath: '/tmp/orchestrator-pageerror-reject-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -740,7 +740,7 @@ describe('CrawlerOrchestrator.append', () => {
 		// This guard sits before `Archive.open`, so it should reject without
 		// any side effect on the filesystem. Use a non-existent path to prove
 		// the early-throw never tries to open it.
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		const openSpy = vi.spyOn(archiveModule.default, 'open');
 
 		await expect(
@@ -765,7 +765,7 @@ describe('CrawlerOrchestrator.append', () => {
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		await expect(
@@ -795,7 +795,7 @@ describe('CrawlerOrchestrator.append', () => {
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		await expect(
@@ -825,7 +825,7 @@ describe('CrawlerOrchestrator.append', () => {
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		const openSpy = vi
 			.spyOn(archiveModule.default, 'open')
 			.mockResolvedValueOnce(fakeArchive);
@@ -862,7 +862,7 @@ describe('CrawlerOrchestrator.append', () => {
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		const openSpy = vi
 			.spyOn(archiveModule.default, 'open')
 			.mockResolvedValueOnce(fakeArchive);
@@ -922,10 +922,10 @@ describe('CrawlerOrchestrator.append', () => {
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 		const copyFileModule =
-			await import('./archive/filesystem/copy-file-with-progress.js');
+			await import('@nitpicker/archive/filesystem/copy-file-with-progress');
 		const copySpy = vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
 
 		fakeCrawlerDriver = (crawler) => {
@@ -991,10 +991,10 @@ describe('CrawlerOrchestrator.append', () => {
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 		const copyFileModule =
-			await import('./archive/filesystem/copy-file-with-progress.js');
+			await import('@nitpicker/archive/filesystem/copy-file-with-progress');
 		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
 
 		fakeCrawlerDriver = (crawler) => {
@@ -1047,10 +1047,10 @@ describe('CrawlerOrchestrator.append', () => {
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 		const copyFileModule =
-			await import('./archive/filesystem/copy-file-with-progress.js');
+			await import('@nitpicker/archive/filesystem/copy-file-with-progress');
 		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
 
 		fakeCrawlerDriver = (crawler) => {
@@ -1109,10 +1109,10 @@ describe('CrawlerOrchestrator.append', () => {
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 		const copyFileModule =
-			await import('./archive/filesystem/copy-file-with-progress.js');
+			await import('@nitpicker/archive/filesystem/copy-file-with-progress');
 		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
 
 		fakeCrawlerDriver = (crawler) => {
@@ -1165,10 +1165,10 @@ describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 		const copyFileModule =
-			await import('./archive/filesystem/copy-file-with-progress.js');
+			await import('@nitpicker/archive/filesystem/copy-file-with-progress');
 		const copySpy = vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
 
 		fakeCrawlerDriver = (crawler) => {
@@ -1227,10 +1227,10 @@ describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 		const copyFileModule =
-			await import('./archive/filesystem/copy-file-with-progress.js');
+			await import('@nitpicker/archive/filesystem/copy-file-with-progress');
 		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
 
 		fakeCrawlerDriver = (crawler) => {
@@ -1293,10 +1293,10 @@ describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 		const copyFileModule =
-			await import('./archive/filesystem/copy-file-with-progress.js');
+			await import('@nitpicker/archive/filesystem/copy-file-with-progress');
 		vi.spyOn(copyFileModule, 'copyFileWithProgress').mockResolvedValue();
 
 		fakeCrawlerDriver = (crawler) => {
@@ -1367,7 +1367,7 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -1434,7 +1434,7 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -1498,7 +1498,7 @@ describe('CrawlerOrchestrator.inventory: pending guard demote', () => {
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -1582,7 +1582,7 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const fetchDestMod = await import('./crawler/fetch-destination.js');
@@ -1708,7 +1708,7 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const testCwd = path.resolve('/tmp/inventory-audit-failure-test');
@@ -1799,7 +1799,7 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		// FakeCrawler.start() emits `crawlEnd` (no real network), so the
@@ -1902,7 +1902,7 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			excludeUrls: ['https://example.com/legacy'],
 		});
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		// The surviving HTML seed drives the HTML-seed branch; emit `crawlEnd`
@@ -1973,7 +1973,7 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			excludes: ['/private/*'],
 		});
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const testCwd = path.resolve('/tmp/inventory-exclude-precedence-test');
@@ -2018,7 +2018,7 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			'https://example.com/private/known.html',
 		]);
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const testCwd = path.resolve('/tmp/inventory-exclude-known-test');
@@ -2054,7 +2054,7 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 		// the same merge.
 		const fakeArchive = buildFakeArchive({});
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const testCwd = path.resolve('/tmp/inventory-exclude-override-test');
@@ -2115,7 +2115,7 @@ describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', 
 			filePath: '/tmp/orchestrator-dedupe-cap-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2176,7 +2176,7 @@ describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', 
 			filePath: '/tmp/orchestrator-dedupe-cap-preloaded-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2228,7 +2228,7 @@ describe('CrawlerOrchestrator.crawling: dedupeCap event handling (issue #208)', 
 			filePath: '/tmp/orchestrator-dedupe-cap-zero-rejections-test.nitpicker',
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2302,7 +2302,7 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2392,7 +2392,7 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 			recordListReconcileRun: vi.fn(() => Promise.resolve(1)),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2508,7 +2508,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 	}
 
 	it('throws synchronously when recrawlUrls is empty (no file I/O attempted)', async () => {
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		const openSpy = vi.spyOn(archiveModule.default, 'open');
 
 		await expect(
@@ -2536,7 +2536,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		await expect(
@@ -2561,7 +2561,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				}),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2590,7 +2590,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 
 	it('does not call saveInventorySourceList when no source was given', async () => {
 		const fakeArchive = buildFakeRecrawlArchive();
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2621,7 +2621,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				Promise.resolve(['https://example.com/known.js']),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const orchestrator = await CrawlerOrchestrator.recrawl(
@@ -2657,7 +2657,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				}),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2713,7 +2713,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				}),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2757,7 +2757,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				}),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2792,7 +2792,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				}),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2833,7 +2833,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			),
 			listDedupeCapObservations: vi.fn(() => Promise.resolve([observationRow])),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2871,7 +2871,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				Promise.resolve(['https://example.com/known.js']),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2920,7 +2920,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				}),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -2974,7 +2974,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				}),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -3015,7 +3015,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 				}),
 			),
 		});
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -3040,7 +3040,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 
 	it('does not emit a crawlSessionNotice when nothing was reset', async () => {
 		const fakeArchive = buildFakeRecrawlArchive();
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -3089,7 +3089,7 @@ describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () 
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		const openSpy = vi
 			.spyOn(archiveModule.default, 'open')
 			.mockResolvedValueOnce(fakeArchive);
@@ -3118,7 +3118,7 @@ describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () 
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		const openSpy = vi
 			.spyOn(archiveModule.default, 'open')
 			.mockResolvedValueOnce(fakeArchive);
@@ -3147,7 +3147,7 @@ describe('CrawlerOrchestrator: openPluginData regression guard (issue #99)', () 
 			close: closeSpy,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		const openSpy = vi
 			.spyOn(archiveModule.default, 'open')
 			.mockResolvedValueOnce(fakeArchive);
@@ -3222,7 +3222,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 		// `saveInventorySourceList` must run before that early return, not
 		// only on the ingestion happy path.
 		const { fakeArchive, saveInventorySourceList } = setupNoopFakeArchive();
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const bytes = Buffer.from('https://example.com/already-known\n');
@@ -3241,7 +3241,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 		// Programmatic callers that built `inventoryUrls` in-memory (no
 		// backing file) pass `source: null` — there is nothing to archive.
 		const { fakeArchive, saveInventorySourceList } = setupNoopFakeArchive();
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		await CrawlerOrchestrator.inventory(
@@ -3298,7 +3298,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 			saveInventorySourceList,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const testCwd = path.resolve('/tmp/inventory-source-sha-null-test');
@@ -3367,7 +3367,7 @@ describe('CrawlerOrchestrator.inventory: source list archiving (issue #99)', () 
 			saveInventorySourceList,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'open').mockResolvedValueOnce(fakeArchive);
 
 		const testCwd = path.resolve('/tmp/inventory-invalid-skipped-test');
@@ -3422,7 +3422,7 @@ describe('CrawlerOrchestrator.write', () => {
 			write: fakeWrite,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const stepEvents: string[] = [];
@@ -3484,7 +3484,7 @@ describe('CrawlerOrchestrator[Symbol.asyncDispose]: recovery-write progress (iss
 			close: fakeClose,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const recoveryEvents: number[] = [];
@@ -3535,7 +3535,7 @@ describe('CrawlerOrchestrator[Symbol.asyncDispose]: recovery-write progress (iss
 			close: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const recoveryEvents: number[] = [];
@@ -3581,7 +3581,7 @@ describe('CrawlerOrchestrator.crawling: setUrlOrder progress', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const progressEvents: [number, number][] = [];
@@ -3628,7 +3628,7 @@ describe('CrawlerOrchestrator.crawling: flushingPendingWrites (issue #294)', () 
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const flushEvents: number[] = [];
@@ -3665,7 +3665,7 @@ describe('CrawlerOrchestrator.crawling: flushingPendingWrites (issue #294)', () 
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		const flushEvents: number[] = [];
@@ -3724,7 +3724,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -3771,7 +3771,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -3826,7 +3826,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -3875,7 +3875,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -3936,7 +3936,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -3984,7 +3984,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4049,7 +4049,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4116,7 +4116,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4176,7 +4176,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4227,7 +4227,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4282,7 +4282,7 @@ describe('CrawlerOrchestrator: auto-retry (issue #350)', () => {
 			write,
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4345,7 +4345,7 @@ describe('CrawlerOrchestrator: createdCwd is always stamped as an absolute path 
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		await CrawlerOrchestrator.crawling(
@@ -4386,7 +4386,7 @@ describe('CrawlerOrchestrator.updateRuntimeOptions', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4447,7 +4447,7 @@ describe('CrawlerOrchestrator.updateRuntimeOptions', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4511,7 +4511,7 @@ describe('CrawlerOrchestrator.updateRuntimeOptions', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		let capturedOrchestrator: CrawlerOrchestrator | undefined;
@@ -4577,7 +4577,7 @@ describe('CrawlerOrchestrator.updateRuntimeOptions', () => {
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		let capturedSignal: AbortSignal | undefined;
@@ -4641,7 +4641,7 @@ describe('CrawlerOrchestrator: auto-retry lanes footer routing (issue #350 follo
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4697,7 +4697,7 @@ describe('CrawlerOrchestrator: auto-retry lanes footer routing (issue #350 follo
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4744,7 +4744,7 @@ describe('CrawlerOrchestrator: auto-retry lanes footer routing (issue #350 follo
 			write: vi.fn(() => Promise.resolve()),
 		} as unknown as Archive;
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'create').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4831,7 +4831,7 @@ describe('CrawlerOrchestrator.resume: dedupeCap preload wiring', () => {
 		const listDedupeCapObservations = vi.fn(() => Promise.resolve([]));
 		const fakeArchive = buildFakeArchive({ listDedupeCapObservations });
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'resume').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {
@@ -4859,7 +4859,7 @@ describe('CrawlerOrchestrator.resume: dedupeCap preload wiring', () => {
 		const listDedupeCapObservations = vi.fn(() => Promise.resolve([observationRow]));
 		const fakeArchive = buildFakeArchive({ listDedupeCapObservations });
 
-		const archiveModule = await import('./archive/archive.js');
+		const archiveModule = await import('@nitpicker/archive/archive');
 		vi.spyOn(archiveModule.default, 'resume').mockResolvedValueOnce(fakeArchive);
 
 		fakeCrawlerDriver = (crawler) => {

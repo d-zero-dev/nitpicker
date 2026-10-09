@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { listNetworkOutages } from './list-network-outages.js';

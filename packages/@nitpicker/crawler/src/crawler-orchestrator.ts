@@ -1,4 +1,3 @@
-import type { Config } from './archive/types.js';
 import type { DedupeCapObservation } from './crawler/dedupe/types.js';
 import type { NetworkProbe } from './crawler/probe-network.js';
 import type {
@@ -17,6 +16,7 @@ import type {
 } from './types.js';
 import type { Lanes } from '@d-zero/dealer';
 import type { ExURL } from '@d-zero/shared/parse-url';
+import type { Config } from '@nitpicker/archive/types';
 
 import { unlink as unlinkFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -24,22 +24,24 @@ import path from 'node:path';
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import { sortUrl } from '@d-zero/shared/sort-url';
 import { TypedAwaitEventEmitter as EventEmitter } from '@d-zero/shared/typed-await-event-emitter';
+import Archive from '@nitpicker/archive/archive';
+import { copyFileWithProgress } from '@nitpicker/archive/filesystem/copy-file-with-progress';
+import { REQUIRED_FORMAT_VERSION } from '@nitpicker/archive/meta/assert-compatible-version';
+import { buildScopeMap } from '@nitpicker/archive/scope/build-scope-map';
+import { findScopeEntry } from '@nitpicker/archive/scope/find-scope-entry';
+import { redactRequestHeaders } from '@nitpicker/archive/utils/object/redact-request-headers';
+import { WriteQueue } from '@nitpicker/archive/write-queue';
 
 import pkg from '../package.json' with { type: 'json' };
 
 import { APPEND_SETUP_PHASES } from './append-setup-phases.js';
-import Archive from './archive/archive.js';
-import { copyFileWithProgress } from './archive/filesystem/copy-file-with-progress.js';
-import { REQUIRED_FORMAT_VERSION } from './archive/meta/assert-compatible-version.js';
 import { computeAutoRetryBackoffDelayMs } from './compute-auto-retry-backoff-delay.js';
-import { buildScopeMap } from './crawler/build-scope-map.js';
 import { clearDestinationCache } from './crawler/clear-destination-cache.js';
 import { clearDnsBurnedHostCache } from './crawler/clear-dns-burned-host-cache.js';
 import Crawler from './crawler/crawler.js';
 import { buildDedupeCapObservation } from './crawler/dedupe/build-dedupe-cap-observation.js';
 import { dnsBurnedHostCache } from './crawler/dns-burned-host-cache.js';
 import { dnsBurnedHostShortCircuitCounter } from './crawler/dns-burned-host-short-circuit-counter.js';
-import { findScopeEntry } from './crawler/find-scope-entry.js';
 import { isLikelyHtmlUrl } from './crawler/is-likely-html-url.js';
 import { networkOutageSummaryCounter } from './crawler/network-outage-summary-counter.js';
 import { PreloadShortCircuitError } from './crawler/preload-short-circuit-error.js';
@@ -57,8 +59,6 @@ import { RESUME_SETUP_PHASES } from './resume-setup-phases.js';
 import { RETRY_FAILED_SETUP_PHASES } from './retry-failed-setup-phases.js';
 import { SETUP_RECOVERY_PHASE_LABELS } from './setup-recovery-phase-labels.js';
 import { cleanObject } from './utils/object/clean-object.js';
-import { redactRequestHeaders } from './utils/object/redact-request-headers.js';
-import { WriteQueue } from './write-queue.js';
 
 const [RECOVERY_RESTORE_FROM_BACKUP, RECOVERY_LEAVE_STATE_FOR_RESUME] =
 	SETUP_RECOVERY_PHASE_LABELS;

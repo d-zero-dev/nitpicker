@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 
 import { makeBeholderMeta } from './make-beholder-meta.js';
 

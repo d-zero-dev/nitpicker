@@ -2,7 +2,7 @@ import type {
 	IsolatedClusterSummary,
 	ListViewerIsolatedClustersOptions,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { listIsolatedClusters } from './list-isolated-clusters.js';
 import { listViewerIsolatedClusters } from './list-viewer-isolated-clusters.js';

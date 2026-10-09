@@ -1,4 +1,4 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Counts the total number of duplicate groups for one metadata field.

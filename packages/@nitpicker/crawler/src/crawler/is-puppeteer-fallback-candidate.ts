@@ -1,6 +1,6 @@
-import type { ErrorKind } from '../types.js';
+import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
 
-import { classifyErrorKind } from '../classify-error-kind.js';
+import { classifyErrorKind } from '@nitpicker/archive/error-kind/classify-error-kind';
 
 /**
  * Error kinds where a full puppeteer navigation has a realistic chance of

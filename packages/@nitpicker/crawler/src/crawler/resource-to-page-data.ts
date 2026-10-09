@@ -2,7 +2,7 @@ import type { ResourceLookupResult } from './types.js';
 import type { PageData } from '../utils/types/types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 
-import { isHtmlContentType } from './is-html-content-type.js';
+import { isHtmlContentType } from '@nitpicker/archive/content-type/is-html-content-type';
 
 /**
  * Parameters for {@link resourceToPageData}.

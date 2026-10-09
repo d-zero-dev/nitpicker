@@ -1270,7 +1270,8 @@ describe('Crawler', () => {
 		it('--dedupe-cap: 既にcapped済みのshapeを持つ新規anchorはenqueueされない', async () => {
 			const { push, unshift } = await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
-			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+			const { computeShapeKey } =
+				await import('@nitpicker/archive/url-pattern/compute-shape-key');
 
 			const htmlAnchor = parseUrl('https://example.com/about')!;
 			const assetAnchor = parseUrl('https://example.com/doc.pdf')!;
@@ -1315,7 +1316,8 @@ describe('Crawler', () => {
 			// metadataOnly exclusion).
 			const { unshift } = await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
-			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+			const { computeShapeKey } =
+				await import('@nitpicker/archive/url-pattern/compute-shape-key');
 
 			const htmlAnchor = parseUrl('https://example.com/about')!;
 			const cappedShapeKey = computeShapeKey(htmlAnchor.withoutHashAndAuth)!;
@@ -1384,7 +1386,8 @@ describe('Crawler', () => {
 		it('replay だけで閾値を超えたshapeは、preloadedStickyShapeKeysなしでもGate 1で遮断される', async () => {
 			const { push, unshift } = await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
-			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+			const { computeShapeKey } =
+				await import('@nitpicker/archive/url-pattern/compute-shape-key');
 
 			const htmlAnchor = parseUrl('https://example.com/about')!;
 			const assetAnchor = parseUrl('https://example.com/doc.pdf')!;
@@ -1438,7 +1441,8 @@ describe('Crawler', () => {
 		it('replayで発火したdedupeCapイベントは、start()呼び出し後にコンストラクタ後付けリスナーへ届く', async () => {
 			await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
-			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+			const { computeShapeKey } =
+				await import('@nitpicker/archive/url-pattern/compute-shape-key');
 
 			const rootUrl = parseUrl('https://example.com/asset.png')!;
 			const shapeKey = computeShapeKey(rootUrl.withoutHashAndAuth)!;
@@ -1500,7 +1504,8 @@ describe('Crawler', () => {
 			// `#runDeal`.
 			await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
-			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+			const { computeShapeKey } =
+				await import('@nitpicker/archive/url-pattern/compute-shape-key');
 
 			const firstUrl = parseUrl('https://example.com/asset-a.png')!;
 			const secondUrl = parseUrl('https://example.com/asset-b.png')!;
@@ -1588,7 +1593,7 @@ describe('Crawler', () => {
 			await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
 			const { computeBodyHash } =
-				await import('../archive/body-hash/compute-body-hash.js');
+				await import('@nitpicker/archive/body-hash/compute-body-hash');
 
 			const origin = parseUrl('https://example.com/')!;
 			const html = '<html><body>hello</body></html>';
@@ -1624,7 +1629,7 @@ describe('Crawler', () => {
 			await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
 			const computeBodyHashMod =
-				await import('../archive/body-hash/compute-body-hash.js');
+				await import('@nitpicker/archive/body-hash/compute-body-hash');
 			const computeBodyHashSpy = vi.spyOn(computeBodyHashMod, 'computeBodyHash');
 
 			const origin = parseUrl('https://example.com/')!;
@@ -1654,7 +1659,7 @@ describe('Crawler', () => {
 			await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
 			const computeBodyHashMod =
-				await import('../archive/body-hash/compute-body-hash.js');
+				await import('@nitpicker/archive/body-hash/compute-body-hash');
 			const computeBodyHashSpy = vi.spyOn(computeBodyHashMod, 'computeBodyHash');
 
 			// Outside `defaultOptions.roots` (`https://example.com/`), so
@@ -1787,7 +1792,8 @@ describe('Crawler', () => {
 		it('JS-redirectの着地先URLのshapeが既にcapped済みなら、addUrlクロージャ（gate 1）を経由せずにenqueueをブロックし拒否数を記録する', async () => {
 			await driveDeal();
 			const { default: Crawler } = await import('./crawler.js');
-			const { computeShapeKey } = await import('./dedupe/compute-shape-key.js');
+			const { computeShapeKey } =
+				await import('@nitpicker/archive/url-pattern/compute-shape-key');
 
 			const sourceUrl = parseUrl('https://example.com/redirector')!;
 			const destinationUrl = parseUrl('https://example.com/trap/99')!;

@@ -1,5 +1,5 @@
 import type { ListPagesByTechnologyOptions, PageCountResult } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Returns the number of distinct pages where the given technology was

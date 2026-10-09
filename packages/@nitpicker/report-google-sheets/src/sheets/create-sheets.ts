@@ -1,7 +1,7 @@
 import type { CreateSheet } from './types.js';
 import type { StepContext, TaskListPipeline } from '@d-zero/dealer';
 import type { ErrorHandlerMessage, Sheets } from '@d-zero/google-sheets';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { TaskList } from '@d-zero/dealer';
 import { requireViewerReadModel } from '@nitpicker/query';

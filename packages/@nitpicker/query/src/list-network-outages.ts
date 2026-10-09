@@ -1,14 +1,14 @@
 import type { NetworkOutageEntry, ListNetworkOutagesOptions } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { computeOutageClampTimestamp } from '@nitpicker/crawler';
+import { computeOutageClampTimestamp } from '@nitpicker/archive/db-ops/outages/compute-outage-clamp-timestamp';
 
 /**
  * List recorded network-outage audit rows from the archive, newest first.
  *
  * Surfaces the `network_outages` table so the CLI / MCP / viewer can answer
  * "when did the crawl operator's own network go down, and for how long" —
- * see {@link import('@nitpicker/crawler').NetworkOutageRow} for the
+ * see {@link import('@nitpicker/archive/types').NetworkOutageRow} for the
  * write-side contract.
  *
  * Tolerates a missing `network_outages` table: archives that predate the

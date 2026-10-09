@@ -1,6 +1,7 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { computeBodyHash, decodeStoredBlob } from '@nitpicker/crawler';
+import { computeBodyHash } from '@nitpicker/archive/body-hash/compute-body-hash';
+import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
 
 const CHUNK_SIZE = 500;
 

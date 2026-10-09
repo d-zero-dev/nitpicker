@@ -6,7 +6,7 @@ import type { Knex } from 'knex';
  * Archives created before DOM-structure template classification
  * existed don't have this table yet, and a viewer's
  * read-only connection to a live/interrupted crawl skips schema self-heal
- * entirely (see `@nitpicker/crawler`'s `db-ops/lifecycle/init.ts`). Every
+ * entirely (see `@nitpicker/archive`'s `db-ops/lifecycle/init.ts`). Every
  * page-list / page-detail query checks this once and conditionally joins
  * `page_templates` — a bare `LEFT JOIN page_templates` throws
  * `no such table: page_templates` on those connections regardless of

@@ -5,7 +5,7 @@ import type {
 	PageListRow,
 	PaginatedPageList,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyListOrder } from './apply-list-order.js';
 import { applyUrlDirectoryFilter } from './apply-url-directory-filter.js';

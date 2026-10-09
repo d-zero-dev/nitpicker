@@ -5,7 +5,7 @@ import type {
 	SummaryResult,
 	TechnologyCount,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Retrieves site-wide summary statistics from the precomputed

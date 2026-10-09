@@ -1,4 +1,4 @@
-import type { TransferPhase } from '@nitpicker/crawler';
+import type { TransferPhase } from '@nitpicker/archive/transfer/types';
 
 /**
  * Human-readable label for each {@link TransferPhase} — one `@d-zero/dealer`

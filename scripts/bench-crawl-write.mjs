@@ -24,7 +24,7 @@ import process from 'node:process';
 // eslint-disable-next-line import-x/no-extraneous-dependencies -- workspace dep, same import other scripts/*.mjs already use
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 
-import Archive from '../packages/@nitpicker/crawler/lib/archive/archive.js';
+import Archive from '../packages/@nitpicker/archive/lib/archive.js';
 
 const PAGE_COUNT = Number(process.argv[2]) || 10_000;
 const ANCHOR_FANOUT = 5;

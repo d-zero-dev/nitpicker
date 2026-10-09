@@ -1,7 +1,7 @@
-import type { OutageWindow } from '../is-within-outage-window.js';
-import type { ErrorKind } from '../types.js';
+import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
+import type { OutageWindow } from '@nitpicker/archive/is-within-outage-window';
 
-import { isWithinOutageWindow } from '../is-within-outage-window.js';
+import { isWithinOutageWindow } from '@nitpicker/archive/is-within-outage-window';
 
 /**
  * Undo `dnsBurnedHostCache` burns whose recorded timestamp (see

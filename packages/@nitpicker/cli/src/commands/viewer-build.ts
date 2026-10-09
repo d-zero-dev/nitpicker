@@ -1,14 +1,15 @@
 import type { commandDef } from './viewer-build-def.js';
 import type { StepContext } from '@d-zero/dealer';
 import type { InferFlags } from '@d-zero/roar';
-import type { Archive as ArchiveType } from '@nitpicker/crawler';
+import type ArchiveType from '@nitpicker/archive/archive';
 
 import { existsSync, statSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 import { TaskList, TaskListStepError } from '@d-zero/dealer';
-import { Archive, copyFileWithProgress } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
+import { copyFileWithProgress } from '@nitpicker/archive/filesystem/copy-file-with-progress';
 import {
 	buildViewerReadModelInWorker,
 	getViewerReadModelVersion,

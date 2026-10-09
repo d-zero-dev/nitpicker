@@ -1,5 +1,5 @@
 import type { DuplicateBodyEntry } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * ASCII Unit Separator — used as the GROUP_CONCAT delimiter so the URL

@@ -7,6 +7,7 @@
 		"resolveJsonModule": true
 	},
 	"references": [
+		{ "path": "../archive" },
 		{ "path": "../crawler" },
 		{ "path": "../query" },
 		{ "path": "../report-google-sheets" },

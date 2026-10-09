@@ -1,5 +1,6 @@
 import type { ArchiveMode } from './types.js';
-import type { ArchiveAccessor, ArchiveLockHolder } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
+import type { ArchiveLockHolder } from '@nitpicker/archive/peek-archive-lock';
 
 import {
 	accessSync,
@@ -11,11 +12,9 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 
-import {
-	Archive,
-	isArchiveCacheDisabled,
-	peekArchiveLockHolder,
-} from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
+import { isArchiveCacheDisabled } from '@nitpicker/archive/cache/is-archive-cache-disabled';
+import { peekArchiveLockHolder } from '@nitpicker/archive/peek-archive-lock';
 
 /** Maximum number of concurrently opened archives to prevent resource exhaustion. */
 const MAX_OPEN_ARCHIVES = 20;

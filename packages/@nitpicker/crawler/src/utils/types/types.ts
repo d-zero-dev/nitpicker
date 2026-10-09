@@ -46,23 +46,3 @@ export interface Link {
 		title?: string;
 	};
 }
-
-/**
- * An error event emitted during crawling or scraping.
- */
-export interface CrawlerError {
-	/** The process ID where the error occurred. */
-	pid: number;
-
-	/** Whether the error occurred in the main process (as opposed to a sub-process). */
-	isMainProcess: boolean;
-
-	/** The URL being processed when the error occurred, or `null` if not applicable. */
-	url: string | null;
-
-	/** Whether the error occurred while processing an external (out-of-scope) URL. */
-	isExternal: boolean;
-
-	/** The error object. */
-	error: Error;
-}

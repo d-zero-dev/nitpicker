@@ -1,5 +1,5 @@
 import type { ConsoleLogSummaryEntry, ListConsoleLogsOptions } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyEqualityOrInFilter } from './apply-equality-or-in-filter.js';
 import { hasConsoleLogsTables } from './has-console-logs-tables.js';

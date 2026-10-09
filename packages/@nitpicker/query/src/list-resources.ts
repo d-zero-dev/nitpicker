@@ -3,7 +3,7 @@ import type {
 	PaginatedResourceList,
 	ResourceEntry,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyListOrder } from './apply-list-order.js';
 import { applyCategoryFilter } from './content-type-rules.js';

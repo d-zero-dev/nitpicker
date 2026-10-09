@@ -1,5 +1,5 @@
 import type { CursorPaginatedHeaderCheckList } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

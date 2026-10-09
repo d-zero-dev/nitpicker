@@ -1,4 +1,4 @@
-import type { ErrorKind } from '../types.js';
+import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
 
 /**
  * In-memory set of hostnames known to be unreachable due to DNS errors

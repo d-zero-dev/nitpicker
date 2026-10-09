@@ -1,4 +1,5 @@
-import type { ArchiveAccessor, OutageWindow } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
+import type { OutageWindow } from '@nitpicker/archive/is-within-outage-window';
 
 import { listNetworkOutages } from './list-network-outages.js';
 

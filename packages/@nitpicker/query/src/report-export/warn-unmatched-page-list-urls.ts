@@ -1,4 +1,4 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { findUnmatchedPageListUrls } from './find-unmatched-page-list-urls.js';
 

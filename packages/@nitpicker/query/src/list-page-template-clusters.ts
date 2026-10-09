@@ -1,7 +1,8 @@
 import type { TemplateClusterListResult, TemplateClusterSummary } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { assignTemplateLabels, eachSplitted } from '@nitpicker/crawler';
+import { assignTemplateLabels } from '@nitpicker/archive/db-ops/templates/assign-template-labels';
+import { eachSplitted } from '@nitpicker/archive/utils/array/each-splitted';
 
 import { collectPageStylesheetUrlsByPageId } from './collect-page-stylesheet-urls-by-page-id.js';
 import { computeCssIntersection } from './compute-css-intersection.js';

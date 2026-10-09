@@ -1,5 +1,5 @@
 import type { ListPagesByTechnologyOptions, PageListItem, PageListRow } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';
 import { hasDedupeCapEventIdColumn } from './has-dedupe-cap-event-id-column.js';

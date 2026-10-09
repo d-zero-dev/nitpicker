@@ -1,7 +1,8 @@
-import type { TemplateClusterReason } from '@nitpicker/crawler';
+import type { TemplateClusterReason } from '@nitpicker/archive/db-ops/templates/types';
 import type { Knex } from 'knex';
 
-import { decodeJsonRef, eachSplitted } from '@nitpicker/crawler';
+import { decodeJsonRef } from '@nitpicker/archive/db-ops/_shared/decode-json-ref';
+import { eachSplitted } from '@nitpicker/archive/utils/array/each-splitted';
 
 import { hasPageTemplateClustersTable } from './has-page-template-clusters-table.js';
 import { isTemplateClusterReason } from './is-template-cluster-reason.js';

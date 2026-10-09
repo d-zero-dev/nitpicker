@@ -1,4 +1,4 @@
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 const mockGetPagesA = vi.fn();
@@ -6,8 +6,8 @@ const mockCloseA = vi.fn().mockResolvedValue();
 const mockGetPagesB = vi.fn();
 const mockCloseB = vi.fn().mockResolvedValue();
 
-vi.mock('@nitpicker/crawler', () => ({
-	Archive: {
+vi.mock('@nitpicker/archive/archive', () => ({
+	default: {
 		openCached: vi.fn(),
 	},
 }));

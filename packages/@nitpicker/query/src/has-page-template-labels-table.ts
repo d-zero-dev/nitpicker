@@ -6,7 +6,7 @@ import type { Knex } from 'knex';
  *
  * Archives last written before template labels shipped don't have this
  * table yet, and a viewer's read-only connection to a live/interrupted
- * crawl skips schema self-heal entirely (see `@nitpicker/crawler`'s
+ * crawl skips schema self-heal entirely (see `@nitpicker/archive`'s
  * `db-ops/lifecycle/init.ts`) — same rationale as
  * {@link import('./page-templates-join.js').hasPageTemplatesTable}.
  * @param knex - Knex query builder connected to the archive DB.

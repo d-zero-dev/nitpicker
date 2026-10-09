@@ -4,7 +4,7 @@ import type {
 	HeaderPresenceKey,
 	PaginatedHeaderCheckList,
 } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyListOrder } from './apply-list-order.js';
 import { buildHeaderPresenceSelects } from './build-header-presence-selects.js';

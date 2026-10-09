@@ -4,8 +4,8 @@ import type { ExURL, ParseURLOptions } from '@d-zero/shared/parse-url';
 import { isError } from '@d-zero/beholder';
 import { isLowerLayer } from '@d-zero/shared/is-lower-layer';
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import { isHtmlContentType } from '@nitpicker/archive/content-type/is-html-content-type';
 
-import { isHtmlContentType } from './is-html-content-type.js';
 import { protocolAgnosticKey } from './protocol-agnostic-key.js';
 
 /**

@@ -44,7 +44,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 
 import { applyViewerPagesFilters } from '../packages/@nitpicker/query/lib/apply-viewer-pages-filters.js';
 import { listViewerPages } from '../packages/@nitpicker/query/lib/list-viewer-pages.js';
@@ -145,7 +145,7 @@ const MATRIX = [
  * noindex / non-`crawled`-source / CSP-header population, matching
  * real-world skew (mostly-HTML, mostly-200, mostly-internal).
  * @param {number} n - The number of pages to seed.
- * @returns {Promise<{accessor: import('@nitpicker/crawler').ArchiveAccessor, dbFilePath: string, cleanupDir: string}>}
+ * @returns {Promise<{accessor: import('@nitpicker/archive/archive-accessor').ArchiveAccessor, dbFilePath: string, cleanupDir: string}>}
  *   The seeded, still-open archive (for `getKnex()`) and its backing dir (for size + cleanup).
  */
 async function makeDb(n) {
@@ -257,7 +257,7 @@ async function makeDb(n) {
 /**
  * Builds the viewer read model against the seeded archive, timing the
  * build and measuring the DB file's size delta.
- * @param {import('@nitpicker/crawler').ArchiveAccessor} accessor - The opened archive accessor (must be writable — pass the `Archive.open` result, not a read-only cached one).
+ * @param {import('@nitpicker/archive/archive-accessor').ArchiveAccessor} accessor - The opened archive accessor (must be writable — pass the `Archive.open` result, not a read-only cached one).
  * @param {string} dbFilePath - The DB's backing file path (for `statSync`).
  * @returns {Promise<{buildMs: number, sizeBeforeBytes: number, sizeAfterBytes: number}>}
  *   Build timing and size metrics.
@@ -324,7 +324,7 @@ async function timeWarmRequests(app, query, iterations) {
  * Runs the full matrix (EXPLAIN + cold/warm HTTP timing) against one
  * already-built read model, printing a results table and a copy-pasteable
  * Markdown summary block.
- * @param {import('@nitpicker/crawler').ArchiveAccessor} accessor - The archive accessor with a built read model.
+ * @param {import('@nitpicker/archive/archive-accessor').ArchiveAccessor} accessor - The archive accessor with a built read model.
  * @param {number} n - The row count this DB was seeded with (for the report header).
  */
 async function runMatrix(accessor, n) {

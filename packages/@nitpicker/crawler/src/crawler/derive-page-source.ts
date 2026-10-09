@@ -1,5 +1,5 @@
 import type { InventoryMode } from './types.js';
-import type { PageSource } from '../archive/types.js';
+import type { PageSource } from '@nitpicker/archive/types';
 
 /**
  * Decide which {@link PageSource} label a newly-scraped page row should carry.

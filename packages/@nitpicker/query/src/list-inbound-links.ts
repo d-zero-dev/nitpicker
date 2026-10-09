@@ -7,7 +7,7 @@ import type {
 	InboundLinksKeysetRow,
 	InboundLinksSortSpec,
 } from './viewer-inbound-links-cursor/types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
 
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';

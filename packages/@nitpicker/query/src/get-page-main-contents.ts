@@ -1,5 +1,5 @@
 import type { PageMainContents } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { imageScanCodeToOutcome } from './image-scan-outcome.js';
 

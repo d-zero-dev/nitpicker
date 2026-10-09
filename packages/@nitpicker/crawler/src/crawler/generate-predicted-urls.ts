@@ -1,7 +1,7 @@
 import type { PaginationPattern } from './types.js';
 
-import { decomposeUrl } from './decompose-url.js';
-import { reconstructUrl } from './reconstruct-url.js';
+import { decomposeUrl } from '@nitpicker/archive/url-pattern/decompose-url';
+import { reconstructUrl } from '@nitpicker/archive/url-pattern/reconstruct-url';
 
 const DIGITS_ONLY_PATTERN = /^\d+$/;
 

@@ -1,5 +1,5 @@
 import type { DirectoryTreeNode, ListDirectoryChildrenOptions } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { isViewerReadModelCurrent } from './viewer-read-model/is-viewer-read-model-current.js';
 

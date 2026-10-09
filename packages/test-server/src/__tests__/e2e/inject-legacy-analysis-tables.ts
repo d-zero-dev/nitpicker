@@ -1,4 +1,4 @@
-import { Archive } from '@nitpicker/crawler';
+import Archive from '@nitpicker/archive/archive';
 
 /**
  * Snapshot of the DDL earlier versions used for the analyze-output tables

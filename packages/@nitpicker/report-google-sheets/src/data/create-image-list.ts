@@ -1,5 +1,5 @@
 import type { CreateSheet } from '../sheets/types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { applyEqualityOrInFilter, streamAllImages } from '@nitpicker/query';
 

@@ -1,6 +1,7 @@
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
-import { computeTierAAliasKey, computeTierBAliasKey } from '@nitpicker/crawler';
+import { computeTierAAliasKey } from '@nitpicker/archive/url-alias/compute-tier-a-alias-key';
+import { computeTierBAliasKey } from '@nitpicker/archive/url-alias/compute-tier-b-alias-key';
 
 const CHUNK_SIZE = 500;
 

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import Archive from './archive/archive.js';
+import Archive from '@nitpicker/archive/archive';
 
 /**
  * Resolves and validates an output file path for the `.nitpicker` archive.

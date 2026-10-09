@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 
-import { eachSplitted } from '@nitpicker/crawler';
+import { eachSplitted } from '@nitpicker/archive/utils/array/each-splitted';
 
 import { normalizeArchiveUrl } from './normalize-archive-url.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';

@@ -1,5 +1,5 @@
 import type { PageJsonLdOverviewEntry } from './types.js';
-import type { ArchiveAccessor } from '@nitpicker/crawler';
+import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 /**
  * Returns lightweight overview entries for the JSON-LD on a page: per entry,

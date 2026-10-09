@@ -7,10 +7,10 @@ import { CONTENT_TYPE_RULES, matchesMime } from './content-type-rules.js';
  * Content-Type header and normalises the resulting media type to a canonical
  * (trimmed, lower-cased) form.
  *
- * Equivalent to running `normalizeContentType` from `@nitpicker/crawler`
+ * Equivalent to running `normalizeContentType` from `@nitpicker/archive`
  * over the part before the first `;` — duplicated here to keep
  * `@nitpicker/query` browser-import-safe (it can't depend on the
- * Node-only crawler runtime).
+ * Node-only archive runtime).
  * @param contentType - The raw header value, or `null`.
  * @returns The canonical MIME, or `null` when blank / null.
  */

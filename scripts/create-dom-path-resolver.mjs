@@ -2,15 +2,15 @@
 
 import { parse, serializeOuter } from 'parse5';
 
-import { deriveDomPath } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/derive-dom-path.js';
-import { matchImagesToDomPaths } from '../packages/@nitpicker/crawler/lib/archive/populate-entity-tables/match-images-to-dom-paths.js';
+import { deriveDomPath } from '../packages/@nitpicker/archive/lib/populate-entity-tables/derive-dom-path.js';
+import { matchImagesToDomPaths } from '../packages/@nitpicker/archive/lib/populate-entity-tables/match-images-to-dom-paths.js';
 
 import { findElementsByTagName } from './find-elements-by-tag-name.mjs';
 import { Parse5ElementAdapter } from './parse5-element-adapter.mjs';
 
 /**
  * Returns a `PageDomPathResolver` (see
- * `packages/@nitpicker/crawler/src/archive/populate-entity-tables/populate-image-items.ts`)
+ * `packages/@nitpicker/archive/src/populate-entity-tables/populate-image-items.ts`)
  * that parses HTML with parse5 and applies the 3-case match algorithm
  * from `match-images-to-dom-paths.ts`.
  *
