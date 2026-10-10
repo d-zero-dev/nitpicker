@@ -21,7 +21,7 @@ jobs:
       # rust-toolchain.toml). Published binaries are built separately by
       # build-core.yml against an older glibc.
       - run: yarn build
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: build-output
           path: |
@@ -44,11 +44,11 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.8.1
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: core-darwin-arm64
           path: packages/@nitpicker/core-darwin-arm64/
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: core-linux-x64-gnu
           path: packages/@nitpicker/core-linux-x64-gnu/
@@ -92,7 +92,7 @@ jobs:
           node-version: 26.8.1
           cache: yarn
       - run: yarn install --immutable
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: build-output
           path: packages/
@@ -113,7 +113,7 @@ jobs:
           node-version: 24.20.0
           cache: yarn
       - run: yarn install --immutable
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: build-output
           path: packages/
@@ -136,7 +136,7 @@ jobs:
       # resolve cross-package types from each package's built lib/*.d.ts. Without the
       # build artifact, `@nitpicker/*` types collapse to `any` and the rules misfire,
       # so the lint job must consume the build output just like the test job does.
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: build-output
           path: packages/
