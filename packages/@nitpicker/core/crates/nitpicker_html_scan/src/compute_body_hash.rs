@@ -10,8 +10,9 @@ use crate::normalize_url_like_strings::normalize_url_like_strings;
 ///
 /// Normalization runs before masking, in that order, because collapsing
 /// `/index.html` to `/` must happen before the mask sees the text. The four
-/// stages are kept as separate passes to mirror the JS implementation they
-/// replace one-for-one; fusing them into one pass is tracked in issue #430.
+/// stages are kept as separate passes, one per JS oracle function in
+/// `@nitpicker/archive`'s `src/body-hash/`, so a parity failure points at a
+/// single stage; fusing them into one pass is tracked in issue #430.
 #[must_use]
 pub fn compute_body_hash(html: &[u8]) -> [u8; 32] {
 	let body = extract_body(html);

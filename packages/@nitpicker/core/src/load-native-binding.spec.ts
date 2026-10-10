@@ -56,7 +56,7 @@ describe('loadNativeBinding', () => {
 		);
 	});
 
-	it('names the platform package when it is not installed', () => {
+	it('names the platform package and both fixes when it cannot be loaded', () => {
 		const notFound = Object.assign(
 			new Error("Cannot find module '@nitpicker/core-linux-x64-gnu'"),
 			{ code: 'MODULE_NOT_FOUND' },
@@ -70,8 +70,49 @@ describe('loadNativeBinding', () => {
 				}),
 			),
 		).toThrow(
-			'@nitpicker/core could not find its native addon: @nitpicker/core-linux-x64-gnu is not installed.',
+			'@nitpicker/core could not load its native addon from @nitpicker/core-linux-x64-gnu: the package is not installed, or is installed without core.linux-x64-gnu.node. In a source checkout, run `yarn build` (it builds the addon locally). Otherwise reinstall without --no-optional / --omit=optional, which skip the platform package.',
 		);
+	});
+
+	it('treats a platform package without its binary like a missing one', () => {
+		// What Node throws for a workspace-linked platform package before `yarn build`.
+		const missingMain = Object.assign(
+			new Error(
+				'Cannot find module \'/repo/node_modules/@nitpicker/core-linux-x64-gnu/core.linux-x64-gnu.node\'. Please verify that the package.json has a valid "main" entry',
+			),
+			{ code: 'MODULE_NOT_FOUND' },
+		);
+		expect(() =>
+			loadNativeBinding(
+				hostOptions({
+					requireModule: () => {
+						throw missingMain;
+					},
+				}),
+			),
+		).toThrow(
+			'@nitpicker/core could not load its native addon from @nitpicker/core-linux-x64-gnu',
+		);
+	});
+
+	it('rethrows a not-found error raised inside the platform package', () => {
+		// Node lists the requiring files after the first line, so the platform
+		// package's name appears in the message without being the missing module.
+		const transitive = Object.assign(
+			new Error(
+				"Cannot find module 'some-dependency'\nRequire stack:\n- /app/node_modules/@nitpicker/core-linux-x64-gnu/index.js",
+			),
+			{ code: 'MODULE_NOT_FOUND' },
+		);
+		expect(() =>
+			loadNativeBinding(
+				hostOptions({
+					requireModule: () => {
+						throw transitive;
+					},
+				}),
+			),
+		).toThrow(transitive);
 	});
 
 	it('rethrows load errors of an addon that exists', () => {
@@ -104,11 +145,24 @@ describe('loadNativeBinding', () => {
 		);
 	});
 
-	it('rejects glibc older than 2.28', () => {
-		expect(() => loadNativeBinding(hostOptions({ glibcVersion: '2.17' }))).toThrow(
-			'@nitpicker/core requires glibc >= 2.28, but this system has glibc 2.17.',
-		);
+	it('rejects Linux without glibc even when a local build exists', () => {
+		const requireModule = vi.fn(() => FAKE_BINDING);
+		expect(() =>
+			loadNativeBinding(
+				hostOptions({ glibcVersion: null, fileExists: () => true, requireModule }),
+			),
+		).toThrow('@nitpicker/core requires glibc on Linux');
+		expect(requireModule).not.toHaveBeenCalled();
 	});
+
+	it.each(['2.17', '2.27', '2.9'])(
+		'rejects glibc %s (older than 2.28)',
+		(glibcVersion) => {
+			expect(() => loadNativeBinding(hostOptions({ glibcVersion }))).toThrow(
+				`@nitpicker/core requires glibc >= 2.28, but this system has glibc ${glibcVersion}.`,
+			);
+		},
+	);
 
 	it.each(['2.28', '2.39', '3.0'])('accepts glibc %s', (glibcVersion) => {
 		expect(loadNativeBinding(hostOptions({ glibcVersion }))).toBe(FAKE_BINDING);

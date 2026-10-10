@@ -31,7 +31,7 @@ Rust ツールチェーンが必要です（バージョンはリポジトリル
 
 - Rust のコードは `crates/` 配下の Cargo workspace にあります。napi に依存するのは `nitpicker_napi`（公開関数だけの薄い層）だけで、計算本体の crate は `cargo test` だけでテストできます
 - `yarn test:rust` で Rust のテスト、`yarn lint` で rustfmt と clippy も実行します
-- body hash は旧 JavaScript 実装と byte 単位で一致させています。`crates/nitpicker_html_scan/tests/fixtures/body-hash-golden.json` は旧実装から生成した golden fixture です
+- body hash は既存アーカイブに保存済みの値と byte 単位で一致させています。`crates/nitpicker_html_scan/tests/fixtures/body-hash-golden.json` は `@nitpicker/archive` の `src/body-hash/` にある JavaScript 段階実装（parity テストの oracle）から生成した golden fixture です
 
 ## 関連リンク
 

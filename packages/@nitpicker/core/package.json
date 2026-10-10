@@ -27,7 +27,7 @@
 	},
 	"scripts": {
 		"build": "node scripts/build-native.mjs && tsc",
-		"clean": "tsc --build --clean"
+		"clean": "node scripts/build-native.mjs --clean && tsc --build --clean"
 	},
 	"optionalDependencies": {
 		"@nitpicker/core-darwin-arm64": "0.24.0",

@@ -20,7 +20,8 @@ export interface LoadNativeBindingOptions {
 	readonly arch: NodeJS.Architecture;
 	/**
 	 * glibc version of the running process (e.g. `"2.35"`), or `null` when the
-	 * C library is not glibc (musl) or the platform is not Linux.
+	 * C library is not glibc (musl). Consulted only when `platform` is
+	 * `linux`; when omitted there, it is read from Node's diagnostic report.
 	 */
 	readonly glibcVersion: string | null;
 	/** Absolute path of the `@nitpicker/core` package directory. */

@@ -60,8 +60,6 @@ export function loadNativeBinding(
 ): NativeBinding {
 	const platform = options?.platform ?? process.platform;
 	const arch = options?.arch ?? process.arch;
-	const glibcVersion =
-		options?.glibcVersion === undefined ? detectGlibcVersion() : options.glibcVersion;
 	const packageDir =
 		options?.packageDir ??
 		path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -79,6 +77,10 @@ export function loadNativeBinding(
 		);
 	}
 	if (platform === 'linux') {
+		// Detected only here: building the diagnostic report costs startup time
+		// that macOS (no libc choice) has no reason to pay.
+		const glibcVersion =
+			options?.glibcVersion === undefined ? detectGlibcVersion() : options.glibcVersion;
 		if (glibcVersion === null) {
 			throw new Error(
 				`@nitpicker/core requires glibc on Linux, but this system uses another C library (e.g. musl). ${SUPPORTED_PLATFORMS_MESSAGE}`,
@@ -98,10 +100,14 @@ export function loadNativeBinding(
 	try {
 		return requireModule(addon.packageName) as NativeBinding;
 	} catch (error) {
+		// The same error covers a package that is absent and one that is present
+		// without its binary (a source checkout before `yarn build`), so the
+		// message names both fixes instead of guessing.
 		if (isModuleNotFound(error, addon.packageName)) {
 			throw new Error(
-				`@nitpicker/core could not find its native addon: ${addon.packageName} is not installed. ` +
-					'It is an optional dependency; reinstall without --no-optional / --omit=optional.',
+				`@nitpicker/core could not load its native addon from ${addon.packageName}: the package is not installed, or is installed without ${addon.fileName}. ` +
+					'In a source checkout, run `yarn build` (it builds the addon locally). ' +
+					'Otherwise reinstall without --no-optional / --omit=optional, which skip the platform package.',
 				{ cause: error },
 			);
 		}
@@ -111,40 +117,66 @@ export function loadNativeBinding(
 
 /**
  * The glibc version the process runs against, read from Node's diagnostic
- * report header (absent under musl and on non-Linux platforms).
+ * report header (absent under musl).
+ *
+ * Network interfaces are excluded from the report for the call — they are
+ * the slow part of building it and irrelevant here — and the previous
+ * setting is restored so the process's own diagnostic reports are unchanged.
+ * @returns The glibc version string, or `null` when the C library is not glibc.
  */
 function detectGlibcVersion(): string | null {
-	const report = process.report.getReport() as {
-		header?: { glibcVersionRuntime?: string };
+	// `excludeNetwork` exists at runtime on every supported Node (>= 24) but is
+	// missing from the installed `@types/node`'s `ProcessReport`.
+	const processReport = process.report as NodeJS.ProcessReport & {
+		excludeNetwork: boolean;
 	};
-	return report.header?.glibcVersionRuntime ?? null;
+	const previous = processReport.excludeNetwork;
+	processReport.excludeNetwork = true;
+	try {
+		const report = processReport.getReport() as {
+			header?: { glibcVersionRuntime?: string };
+		};
+		return report.header?.glibcVersionRuntime ?? null;
+	} finally {
+		processReport.excludeNetwork = previous;
+	}
 }
 
 /**
- *
- * @param version
- * @param root0
- * @param root0."0"
- * @param root0."1"
+ * Compares a `major.minor` version numerically, so `2.9` is older than
+ * `2.28` (a string comparison would say the opposite).
+ * @param version - Version string such as `"2.35"`.
+ * @param minimum - Required `[major, minor]`.
+ * @returns Whether `version` is at least `minimum`.
  */
-function isAtLeast(
-	version: string,
-	[minMajor, minMinor]: readonly [number, number],
-): boolean {
+function isAtLeast(version: string, minimum: readonly [number, number]): boolean {
+	const [minMajor, minMinor] = minimum;
 	const [major = 0, minor = 0] = version.split('.').map(Number);
 	return major > minMajor || (major === minMajor && minor >= minMinor);
 }
 
 /**
+ * Whether `error` is Node's `MODULE_NOT_FOUND` for `specifier` itself, as
+ * opposed to a module that `specifier` failed to load in turn.
  *
- * @param error
- * @param specifier
+ * Only the first line is compared — the rest of the message is the require
+ * stack, which names the platform package's own files when something inside
+ * it is missing. That line names either the package itself (`Cannot find
+ * module '<specifier>'`, not installed) or a path inside it (`Cannot find
+ * module '…/<specifier>/core.….node'`, installed without its binary).
+ * @param error - The value thrown by `require`.
+ * @param specifier - The specifier that was required.
+ * @returns `true` only for a not-found error whose first line names the
+ *   package or its own `main` file.
  */
 function isModuleNotFound(error: unknown, specifier: string): boolean {
-	return (
-		error instanceof Error &&
-		'code' in error &&
-		error.code === 'MODULE_NOT_FOUND' &&
-		error.message.includes(specifier)
-	);
+	if (
+		!(error instanceof Error) ||
+		!('code' in error) ||
+		error.code !== 'MODULE_NOT_FOUND'
+	) {
+		return false;
+	}
+	const [firstLine = ''] = error.message.split('\n');
+	return firstLine.includes(`'${specifier}'`) || firstLine.includes(`/${specifier}/`);
 }

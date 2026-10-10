@@ -7,9 +7,10 @@ import { nativeBinding } from './native-binding.js';
  * hashes, session ids, CSS-module suffixes).
  *
  * Takes UTF-8 bytes rather than a string so the native side never builds a
- * UTF-16 copy. The result is byte-identical to the JavaScript implementation
- * it replaced (golden fixture in `crates/nitpicker_html_scan/tests/fixtures/`),
- * so hashes already stored in existing archives stay comparable.
+ * UTF-16 copy. The result is byte-identical to the hashes already stored in
+ * existing archives, which JavaScript computed (golden fixture in
+ * `crates/nitpicker_html_scan/tests/fixtures/`), so old and new crawls stay
+ * comparable.
  * @param html - The full HTML document (or a fragment) as UTF-8 bytes —
  *   `Buffer.from(html, 'utf8')`.
  * @returns The 32-byte hash, ready to insert into a `BLOB` column.

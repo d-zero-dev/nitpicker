@@ -21,7 +21,11 @@ sha2 = "0.11.0"
 all = { level = "deny", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
-[profile.release]
+# `yarn build` (local, CI tests, E2E) uses the default `release` profile.
+# Published binaries use `dist` (.github/workflows/build-core.yml): fat LTO
+# with one codegen unit is worth its compile time only for what ships.
+[profile.dist]
+inherits = "release"
 codegen-units = 1
 lto = true
 strip = "symbols"
