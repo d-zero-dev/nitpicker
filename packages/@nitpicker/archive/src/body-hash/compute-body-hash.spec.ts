@@ -37,6 +37,13 @@ describe('computeBodyHash', () => {
 		expect(hash.byteLength).toBe(32);
 	});
 
+	it('hashes UTF-8 bytes the same as the equivalent string', () => {
+		const html = '<body>日本語 a1b2c3d4 /index.html</body>';
+		expect(computeBodyHash(Buffer.from(html, 'utf8')).toString('hex')).toBe(
+			computeBodyHash(html).toString('hex'),
+		);
+	});
+
 	it('does not throw for an empty string and matches SHA-256("")', () => {
 		expect(computeBodyHash('').toString('hex')).toBe(
 			'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',

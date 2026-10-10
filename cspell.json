@@ -12,7 +12,13 @@
 		// deliberately varied fictional brand names, product names, and
 		// multi-language (JA/AR/HE/ZH/KO) content, none of which is
 		// meaningful to spell-check.
-		"packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/production-scale/**"
+		"packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/production-scale/**",
+		// Rust build output, lockfile (crate names/checksums) and native addons
+		"**/target/**",
+		"**/Cargo.lock",
+		"**/*.node",
+		// Golden fixtures are hex dumps
+		"**/tests/fixtures/*.json"
 	],
 	"words": [
 		// Misra-Gries algorithm (DedupeCapTracker, issue #208)
@@ -235,6 +241,16 @@
 
 		// archive concat/split transfer engine (temp table/alias naming: xfer_*, XFER_*)
 		"xfer",
-		"unioned"
+		"unioned",
+
+		// Rust toolchain / native addon (@nitpicker/core)
+		"napi",
+		"serde",
+		"clippy",
+		"rustfmt",
+		"rustup",
+		"cdylib",
+		"manylinux",
+		"efgh" // alphabet-run test token alongside "abcd" / "1234"
 	]
 }

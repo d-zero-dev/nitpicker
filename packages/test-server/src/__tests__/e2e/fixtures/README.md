@@ -2,8 +2,9 @@
 
 ## `report-query-fixture.nitpicker`
 
-A small, committed `.nitpicker` archive used by `report.e2e.ts` and
-`query.e2e.ts`. Unlike every other e2e test in this suite, those two never
+A small, committed `.nitpicker` archive used by `report.e2e.ts`,
+`query.e2e.ts` and `body-hash-stored-parity.e2e.ts`. Unlike every other e2e
+test in this suite, those never
 re-fetch anything from a live server — `report`/`query` only read a
 completed archive — so a static fixture avoids paying for a live crawl on
 every run and keeps the tested content independent of `basic.ts`'s routes
@@ -16,6 +17,19 @@ OS-specific tar header metadata (owner/group name, `ctime`/`atime`) that the
 production archive writer
 (`packages/@nitpicker/archive/src/filesystem/tar.ts`) does not
 strip by default.
+
+`body-hash-stored-parity.e2e.ts` also reads it: its `page_meta.body_hash`
+values were computed by the JavaScript body-hash stages
+(`packages/@nitpicker/archive/src/body-hash/`), not by the `@nitpicker/core`
+native addon, and the test checks that the addon recomputes them exactly.
+Keep those values JavaScript-computed when regenerating:
+
+- `viewer-build --force` leaves existing `body_hash` values untouched (the
+  backfill only fills `NULL`s), so the read-model-only path below is safe.
+- A fresh crawl writes addon-computed values, after which the test would only
+  compare the addon with itself. If a re-crawl is unavoidable, rewrite each
+  page's `body_hash` from its stored HTML with the JavaScript stages before
+  repacking.
 
 Baked-in URLs (used verbatim by both e2e tests' `--urls` lists):
 

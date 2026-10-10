@@ -2,3 +2,4 @@ CHANGELOG.md
 **/CHANGELOG.md
 .claude/**
 .agents/**
+**/target/**

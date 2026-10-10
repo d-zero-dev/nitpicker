@@ -15,13 +15,34 @@ permissions:
   id-token: write
 
 jobs:
+  core-prebuilt:
+    uses: ./.github/workflows/build-core.yml
+
   publish:
+    needs: core-prebuilt
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # @nitpicker/core has no JavaScript fallback: a platform package
+      # published without its binary breaks `npx @nitpicker/cli` on that
+      # platform, so both must be in place before anything is published.
+      - name: Download darwin-arm64 binary
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: core-darwin-arm64
+          path: packages/@nitpicker/core-darwin-arm64/
+      - name: Download linux-x64-gnu binary
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: core-linux-x64-gnu
+          path: packages/@nitpicker/core-linux-x64-gnu/
+      - name: Check platform binaries
+        run: |
+          test -s packages/@nitpicker/core-darwin-arm64/core.darwin-arm64.node
+          test -s packages/@nitpicker/core-linux-x64-gnu/core.linux-x64-gnu.node
       # Node 26 dropped the bundled corepack, so install it explicitly first.
       - name: Install Corepack
         run: npm install -g corepack

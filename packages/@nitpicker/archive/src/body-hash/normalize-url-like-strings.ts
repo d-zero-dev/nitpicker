@@ -6,6 +6,11 @@ const INDEX_SUFFIX_PATTERN = /\/index\.\w+/gi;
  * identical bodies that differ only in which equivalent URL form a template
  * happened to render (`/about/` vs `/about/index.html`) hash the same.
  *
+ * Not on any runtime path: `computeBodyHash` runs the Rust port
+ * (`@nitpicker/core`). This function is the parity oracle for
+ * `compute-body-hash.parity.spec.ts` only, excluded from the build
+ * (`tsconfig.json`). Folding the stages into one pass is #430.
+ *
  * Applied as a blanket string sweep over the whole body — not scoped to
  * `href`/`src` attribute values — because the same trailing-suffix variance
  * can appear anywhere a URL-shaped string is rendered as text (breadcrumbs,

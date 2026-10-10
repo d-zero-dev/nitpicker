@@ -1,7 +1,7 @@
 import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { computeBodyHash } from '@nitpicker/archive/body-hash/compute-body-hash';
-import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
+import { decodeStoredBlobBytes } from '@nitpicker/archive/decode-stored-blob-bytes';
 
 const CHUNK_SIZE = 500;
 
@@ -63,7 +63,9 @@ export async function backfillBodyHashFromHtmlBlobs(
 
 		await knex.transaction(async (trx) => {
 			for (const row of rows) {
-				const html = decodeStoredBlob(row.body, row.codec);
+				// Bytes, not a string: the hash is computed over UTF-8 anyway, so
+				// decoding to a JS string would only be re-encoded right back.
+				const html = decodeStoredBlobBytes(row.body, row.codec);
 				await trx('page_meta')
 					.where('page_id', row.pageId)
 					.update({ body_hash: computeBodyHash(html) });
