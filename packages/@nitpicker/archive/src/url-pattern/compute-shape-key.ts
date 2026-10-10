@@ -71,8 +71,9 @@ function flattenQueryKeys(keys: string[]): string[] {
  * `../populate-ref-tables/decompose-url.ts`, an unrelated same-named
  * module with a different `DecomposedUrl` shape used for ref-table population.
  *
- * The masking rule here is the deliberate inverse of
- * `../body-hash/mask-dynamic-ids.ts`: that module leaves
+ * The masking rule here is the deliberate inverse of the body-hash mask
+ * (`@nitpicker/core`'s `crates/nitpicker_html_scan/src/mask_dynamic_ids.rs`,
+ * which `../body-hash/compute-body-hash.ts` runs): that mask leaves
  * pure-digit tokens untouched (they are more likely stable content than a
  * dynamic id) and only masks mixed alphanumeric runs. A shape key needs the
  * opposite: ANY digit inside a path segment marks it as "probably a

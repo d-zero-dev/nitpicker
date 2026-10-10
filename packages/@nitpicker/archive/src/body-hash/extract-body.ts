@@ -11,6 +11,11 @@ const BODY_PATTERN = /<body(?:"[^"]*"|'[^']*'|[^"'>])*>([\s\S]*)<\/body>/i;
  * Extracts the inner HTML of the first `<body>` element from a full HTML
  * document string.
  *
+ * Not on any runtime path: `computeBodyHash` runs the Rust port
+ * (`@nitpicker/core`). This function is the parity oracle for
+ * `compute-body-hash.parity.spec.ts` only, excluded from the build
+ * (`tsconfig.json`). Folding the stages into one pass is #430.
+ *
  * Uses a greedy match (`[\s\S]*`, not `[\s\S]*?`) so a literal `<body>`
  * substring appearing inside the real body (e.g. an inline code sample) does
  * not truncate the extracted content at that inner occurrence — the match

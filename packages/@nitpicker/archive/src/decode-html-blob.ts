@@ -1,4 +1,4 @@
-import { zstdDecompressSync } from 'node:zlib';
+import { decodeStoredBlobBytes } from './decode-stored-blob-bytes.js';
 
 /**
  * Decodes a stored HTML body BLOB according to its codec marker. The codec
@@ -18,15 +18,5 @@ import { zstdDecompressSync } from 'node:zlib';
  * @throws {Error} If the codec is not recognised.
  */
 export function decodeStoredBlob(body: Uint8Array, codec: string): string {
-	// `Buffer.from(buffer)` accepts Uint8Array, Buffer, and array-like
-	// shapes uniformly; libsql may hand back any of these for a BLOB
-	// column depending on the row encoding.
-	const buffer = Buffer.from(body);
-	if (codec === 'zstd') {
-		return zstdDecompressSync(buffer).toString('utf8');
-	}
-	if (codec === 'none') {
-		return buffer.toString('utf8');
-	}
-	throw new Error(`Unknown page_html_blobs.codec: ${codec}`);
+	return decodeStoredBlobBytes(body, codec).toString('utf8');
 }

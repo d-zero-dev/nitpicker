@@ -14,11 +14,14 @@ import { computeBodyHash as computeBodyHashNative } from '@nitpicker/core/comput
  *
  * The computation runs in the native addon (`@nitpicker/core`). The
  * JavaScript stages next to this file (`extract-body.ts`,
- * `normalize-url-like-strings.ts`, `mask-dynamic-ids.ts`) are no longer on
- * this path; they stay only as the oracle for
- * `compute-body-hash.parity.spec.ts`, which pins the addon to their output.
- * @param html - A full HTML document string (or fragment). Lone surrogates
- *   are encoded as U+FFFD, as `Buffer.from(html, 'utf8')` does.
+ * `normalize-url-like-strings.ts`, `mask-dynamic-ids.ts`) are not called
+ * from here and are excluded from the build: they exist only as the oracle
+ * for `compute-body-hash.parity.spec.ts`, which pins the addon to their
+ * output and so to the values existing archives already hold.
+ * @param html - A full HTML document (or fragment): a string, or its UTF-8
+ *   bytes — pass bytes when they are already at hand (a stored blob via
+ *   `decodeStoredBlobBytes`) to skip a decode/re-encode round-trip. Strings
+ *   are encoded as `Buffer.from(html, 'utf8')` does, lone surrogates as U+FFFD.
  * @returns 32-byte SHA-256 hash of the masked `<body>` content, ready to
  *   insert into a `BLOB` column.
  * @example
@@ -28,6 +31,8 @@ import { computeBodyHash as computeBodyHashNative } from '@nitpicker/core/comput
  * hashA.equals(hashB); // true — the differing token is masked before hashing
  * ```
  */
-export function computeBodyHash(html: string): Buffer {
-	return computeBodyHashNative(Buffer.from(html, 'utf8'));
+export function computeBodyHash(html: string | Uint8Array): Buffer {
+	return computeBodyHashNative(
+		typeof html === 'string' ? Buffer.from(html, 'utf8') : html,
+	);
 }

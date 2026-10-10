@@ -9,6 +9,11 @@ const MASK_PLACEHOLDER = '__MASKED_ID__';
  * value (a cache-busting hash, a per-build CSS-module suffix, a session or
  * order id) hash the same.
  *
+ * Not on any runtime path: `computeBodyHash` runs the Rust port
+ * (`@nitpicker/core`). This function is the parity oracle for
+ * `compute-body-hash.parity.spec.ts` only, excluded from the build
+ * (`tsconfig.json`). Folding the stages into one pass is #430.
+ *
  * A token is masked only when it mixes letters and digits — a pure-digit
  * match (phone numbers, product codes, dates) or a pure-alphabetic match (an
  * ordinary English word) is left untouched, since those are far more likely

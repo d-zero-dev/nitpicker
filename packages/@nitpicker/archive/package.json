@@ -96,6 +96,10 @@
 			"import": "./lib/decode-html-blob.js",
 			"types": "./lib/decode-html-blob.d.ts"
 		},
+		"./decode-stored-blob-bytes": {
+			"import": "./lib/decode-stored-blob-bytes.js",
+			"types": "./lib/decode-stored-blob-bytes.d.ts"
+		},
 		"./error-kind/classify-error-kind": {
 			"import": "./lib/error-kind/classify-error-kind.js",
 			"types": "./lib/error-kind/classify-error-kind.d.ts"
