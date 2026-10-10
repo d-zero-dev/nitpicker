@@ -30,7 +30,7 @@
 		"lint:stylelint:check": "npx stylelint \"packages/**/*.css\"",
 		"lint:textlint": "npx textlint --fix \"{*,./**/*}.{md,mdc}\" && npx textlint \"{*,./**/*}.{md,mdc}\"",
 		"lint:textlint:check": "npx textlint \"{*,./**/*}.{md,mdc}\"",
-		"release": "lerna version --exact --conventional-commits --conventional-graduate --no-push",
+		"release": "lerna version --exact --force-publish=@nitpicker/core-darwin-arm64,@nitpicker/core-linux-x64-gnu --conventional-commits --conventional-graduate --no-push",
 		"release:alpha": "lerna version --exact --force-publish --conventional-commits --conventional-prerelease --preid alpha --no-push",
 		"release:beta": "lerna version --exact --force-publish --conventional-commits --conventional-prerelease --preid beta --no-push",
 		"release:rc": "lerna version --exact --force-publish --conventional-commits --conventional-prerelease --preid rc --no-push",

@@ -27,8 +27,8 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: Build
         run: |
-          cargo build --release --locked --package nitpicker_napi --manifest-path packages/@nitpicker/core/Cargo.toml
-          cp packages/@nitpicker/core/target/release/libnitpicker_napi.so core.linux-x64-gnu.node
+          cargo build --profile dist --locked --package nitpicker_napi --manifest-path packages/@nitpicker/core/Cargo.toml
+          cp packages/@nitpicker/core/target/dist/libnitpicker_napi.so core.linux-x64-gnu.node
       - name: Check the glibc symbol floor
         run: |
           newest=$(objdump -T core.linux-x64-gnu.node | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -Vu | tail -n 1)
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.20.0
-      - run: node packages/@nitpicker/core/scripts/build-native.mjs
+      - run: node packages/@nitpicker/core/scripts/build-native.mjs --profile dist
       - run: node packages/@nitpicker/core/scripts/verify-prebuilt.mjs packages/@nitpicker/core/core.darwin-arm64.node
       - uses: actions/upload-artifact@v7.0.1
         with:

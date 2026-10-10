@@ -50,7 +50,7 @@ yarn build                                         # 全パッケージビルド
 yarn lint                                          # lint + prettier + cspell + rustfmt + clippy
 ```
 
-- **Rust ツールチェーン必須**: `@nitpicker/core` は Rust（napi-rs）のネイティブアドオンで、`yarn build` が `cargo build` を呼ぶ。バージョンはルートの `rust-toolchain.toml` で固定（rustup が自動取得）。セットアップは CONTRIBUTING.md。cargo も `yarn test:rust` / `yarn lint` 経由で実行し、直接叩かない
+- **Rust ツールチェーン必須**: `@nitpicker/core` は Rust（napi-rs）のネイティブアドオンで、`yarn build` が `cargo build` を呼ぶ。バージョンはルートの `rust-toolchain.toml` で固定（rustup が自動取得）。セットアップは CONTRIBUTING.md。ローカルでは cargo も `yarn test:rust` / `yarn lint` 経由で実行し、直接叩かない（CI の `rust-test` ジョブだけは `yarn install` を省くため `test:rust` と同じコマンドを直接実行しており、`test:rust` を変えたら `.github/workflows/ci.yml` も合わせる）
 - **ネイティブアドオンは prebuilt 配布のみ・フォールバックなし**: 対応は darwin-arm64 と linux-x64（glibc 2.28 以上）。ローカルビルドは `packages/@nitpicker/core/core.<platform>.node`（gitignore 済み）に置かれ、ローダーが優先的に読む
 
 - **1関数1ファイルにはユニットテスト必須**。バグ修正や仕様が明確な変更はテストファースト

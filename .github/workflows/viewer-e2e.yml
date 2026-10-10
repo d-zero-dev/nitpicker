@@ -15,6 +15,7 @@ on:
       - 'packages/@nitpicker/query/**'
       - 'packages/@nitpicker/archive/**'
       - 'packages/@nitpicker/core/**'
+      - 'rust-toolchain.toml'
       - 'packages/@nitpicker/cli/**'
       - '.github/workflows/viewer-e2e.yml'
 

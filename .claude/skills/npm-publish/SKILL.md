@@ -39,6 +39,7 @@ Lerna **fixed モード**のため、全パッケージが同一バージョン�
 ## ネイティブアドオン（`@nitpicker/core`）の注意
 
 - `@nitpicker/core` には JavaScript のフォールバックがない。プラットフォーム別パッケージが `.node` なしで publish されると、そのプラットフォームで `npx @nitpicker/cli` が起動しなくなる。`publish.yml` は `build-core.yml` の 2 バイナリ（glibc 2.28 コンテナの linux-x64-gnu、macOS の darwin-arm64）がそろい、それぞれ golden fixture の検証を通ってから publish する
+- プラットフォーム別パッケージのディレクトリには `package.json` と README しかなく、Rust のコード（`core/crates/`）を変えても lerna は変更を検出しない。そのため `yarn release` は 2 パッケージを `--force-publish` で毎回 publish する（`release:alpha` 等はもともと全パッケージを force-publish している）。外すと、Rust の修正を含むリリースで古いバイナリが exact pin されたまま配布される
 - 手順 10 の検証に加えて、darwin-arm64 と WSL2（linux-x64-gnu）の実機で `npx @nitpicker/cli@<version> crawl <URL>` が起動することをユーザーに確認してもらう。CI の検証はバイナリ単体の読み込みまでで、npm からのインストール経路（`optionalDependencies` の解決）は実機でしか確かめられない
 - 対応プラットフォームの制限（darwin-arm64 と linux-x64 glibc >= 2.28 のみ）を初めて含むリリースでは、リリースノートに書く
 
