@@ -9,9 +9,9 @@ import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
- * Committed archive whose `page_meta.body_hash` values were written by the
- * JavaScript `computeBodyHash`, before the computation moved into the native
- * addon. See `fixtures/README.md`.
+ * Committed archive whose `page_meta.body_hash` values were computed by the
+ * JavaScript stages that `@nitpicker/archive`'s `src/body-hash/` keeps as a
+ * parity oracle, not by the native addon. See `fixtures/README.md`.
  */
 const FIXTURE = path.resolve(
 	import.meta.dirname,
