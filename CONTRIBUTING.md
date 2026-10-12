@@ -58,6 +58,9 @@ yarn test
 # Rust のユニットテスト（@nitpicker/core の crate）
 yarn test:rust
 
+# Rust 化のベンチの動作確認（yarn build 済みであること。詳細は scripts/README.md）
+yarn bench:smoke
+
 # E2E テスト
 yarn vitest run --config vitest.e2e.config.ts
 

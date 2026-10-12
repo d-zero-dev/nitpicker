@@ -14,6 +14,7 @@
 		"dev": "lerna run dev",
 		"test": "vitest run --test-timeout 60000",
 		"test:rust": "cargo test --manifest-path packages/@nitpicker/core/Cargo.toml --locked",
+		"bench:smoke": "node scripts/bench-suite.mjs packages/test-server/src/__tests__/e2e/fixtures/report-query-fixture.nitpicker",
 		"lint": "run-s lint:eslint lint:stylelint lint:markuplint lint:prettier lint:textlint lint:cspell lint:rustfmt lint:clippy",
 		"lint:check": "run-s lint:eslint:check lint:stylelint:check lint:markuplint:check lint:prettier:check lint:textlint:check lint:cspell lint:rustfmt:check lint:clippy",
 		"lint:clippy": "cargo clippy --manifest-path packages/@nitpicker/core/Cargo.toml --all-targets --locked -- -D warnings",

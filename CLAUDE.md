@@ -44,6 +44,7 @@ npx @nitpicker/cli split <archive> <URL> [...] -o <out> # 指定スコープ配�
 ```sh
 yarn test                                          # ユニットテスト（Vitest）
 yarn test:rust                                     # Rust のユニットテスト（@nitpicker/core の crate、cargo test）
+yarn bench:smoke                                   # Rust 化の基準値ベンチを 2 ページ fixture で全ケース実行（値は検証しない。yarn build が必要、詳細は scripts/README.md）
 yarn vitest run --config vitest.e2e.config.ts      # E2E（maxWorkers: 1、test-server はOS割り当ての動的ポート）
 yarn workspace @nitpicker/viewer test:e2e          # viewer の Playwright E2E
 yarn build                                         # 全パッケージビルド（@nitpicker/core のネイティブアドオンを cargo でビルドする）
