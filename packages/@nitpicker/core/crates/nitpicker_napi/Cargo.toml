@@ -13,6 +13,9 @@ crate-type = ["cdylib"]
 napi = { workspace = true }
 napi-derive = { workspace = true }
 nitpicker_html_scan = { workspace = true }
+nitpicker_template_cluster = { workspace = true }
+rayon = { workspace = true }
+rustc-hash = { workspace = true }
 
 [build-dependencies]
 napi-build = { workspace = true }

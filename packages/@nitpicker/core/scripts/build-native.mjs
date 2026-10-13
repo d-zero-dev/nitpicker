@@ -77,7 +77,9 @@ runCargo([
 	'nitpicker_napi',
 ]);
 
-copyFileSync(
-	path.join(packageDir, 'target', values.profile, target.library),
-	path.join(packageDir, target.addon),
-);
+// Removed first, not overwritten: macOS caches a binary's code signature per
+// file, and a process loading an addon rewritten in place (same inode) is
+// killed with SIGKILL on load.
+const addonPath = path.join(packageDir, target.addon);
+rmSync(addonPath, { force: true });
+copyFileSync(path.join(packageDir, 'target', values.profile, target.library), addonPath);
