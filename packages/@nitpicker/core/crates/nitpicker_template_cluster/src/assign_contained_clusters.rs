@@ -146,8 +146,8 @@ pub fn assign_contained_clusters(clusters: &[ContainedClusterEntry]) -> FxHashMa
 
 /// `token` with the bare `div` / `span` segments between its first and last
 /// segment removed, so clusters differing only in anonymous wrappers compare
-/// equal. Splits on every `>`, including one inside a class name, exactly
-/// like the JavaScript it replaces.
+/// equal. Splits on every `>`, including one inside a class name, as the
+/// stored keys were computed.
 #[must_use]
 pub fn collapse_anonymous_divs(token: &str) -> String {
 	let segments: Vec<&str> = token.split('>').collect();

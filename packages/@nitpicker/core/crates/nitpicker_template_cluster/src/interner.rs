@@ -2,8 +2,10 @@
 //!
 //! Ids are only ever compared for equality and used as set members; nothing
 //! orders by id, because which thread interns a string first — and so the id
-//! it gets — depends on scheduling. Every ordering the output depends on is
-//! by first appearance or by the string itself.
+//! it gets — depends on scheduling. Id lists are sorted (`sorted_set`) only
+//! to compare them as sets (Jaccard, landmark signatures), never to order
+//! output. Every ordering the output depends on is by first appearance or by
+//! the string itself.
 
 use std::hash::{BuildHasher, Hash};
 use std::sync::{Arc, RwLock};

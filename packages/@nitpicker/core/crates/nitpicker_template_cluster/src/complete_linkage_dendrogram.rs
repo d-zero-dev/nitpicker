@@ -69,8 +69,8 @@ impl Similarities {
 /// order, so a caller can pick the cut from the full height sequence.
 ///
 /// Ties go to the lowest candidate index and the chain restarts at the
-/// lowest active index — the exact choices of the JavaScript implementation
-/// the stored keys came from, since a different tie-break can produce a
+/// lowest active index — the choices the stored keys were computed with
+/// (the golden records pin them), since a different tie-break can produce a
 /// different (equally valid) dendrogram.
 #[must_use]
 pub fn complete_linkage_dendrogram(sets: &[Vec<u32>]) -> Vec<Merge> {
@@ -163,8 +163,8 @@ pub fn labels_at_threshold(size: usize, merges: &[Merge], threshold: f64) -> Vec
 	(0..size).map(|index| find(&mut parent, index)).collect()
 }
 
-// Exact float comparisons on purpose: the port must reproduce the
-// JavaScript values bit for bit, not approximately.
+// Exact float comparisons on purpose: the stored keys depend on these
+// values bit for bit, not approximately.
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
@@ -201,5 +201,85 @@ mod tests {
 		assert!(complete_linkage_dendrogram(&[]).is_empty());
 		assert!(complete_linkage_dendrogram(&[vec![1]]).is_empty());
 		assert_eq!(labels_at_threshold(1, &[], 0.8), vec![0]);
+	}
+
+	#[test]
+	fn merges_two_identical_sets_at_height_one() {
+		let merges = complete_linkage_dendrogram(&[vec![1, 2], vec![1, 2]]);
+		assert_eq!(merges.len(), 1);
+		assert_eq!(merges[0].height, 1.0);
+	}
+
+	#[test]
+	fn merges_two_disjoint_sets_at_height_zero() {
+		let merges = complete_linkage_dendrogram(&[vec![1], vec![2]]);
+		assert_eq!(merges.len(), 1);
+		assert_eq!(merges[0].height, 0.0);
+	}
+
+	#[test]
+	fn produces_one_fewer_merge_than_items() {
+		let sets: Vec<Vec<u32>> = (0..5).map(|page| vec![100 + page]).collect();
+		assert_eq!(complete_linkage_dendrogram(&sets).len(), 4);
+	}
+
+	#[test]
+	fn always_lets_the_lower_index_survive() {
+		let merges = complete_linkage_dendrogram(&[vec![1, 2], vec![2, 3], vec![3, 4]]);
+		for merge in &merges {
+			assert!(merge.survivor < merge.dead);
+		}
+	}
+
+	#[test]
+	fn keeps_every_merge_height_within_zero_and_one() {
+		let merges = complete_linkage_dendrogram(&[vec![1, 2, 3], vec![1, 2], vec![7, 8]]);
+		for merge in &merges {
+			assert!((0.0..=1.0).contains(&merge.height));
+		}
+	}
+
+	#[test]
+	fn merges_a_high_similarity_pair_before_a_low_similarity_one() {
+		let merges = complete_linkage_dendrogram(&[vec![1, 2], vec![1, 2], vec![7, 8]]);
+		assert_eq!(merges[0].height, 1.0);
+		assert_eq!(merges[1].height, 0.0);
+	}
+
+	#[test]
+	fn leaves_every_item_a_singleton_without_merges() {
+		assert_eq!(labels_at_threshold(3, &[], 0.8), vec![0, 1, 2]);
+	}
+
+	#[test]
+	fn joins_everything_at_threshold_zero() {
+		let merges = complete_linkage_dendrogram(&[vec![1], vec![2], vec![3]]);
+		let labels = labels_at_threshold(3, &merges, 0.0);
+		assert_eq!(labels[0], labels[1]);
+		assert_eq!(labels[1], labels[2]);
+	}
+
+	#[test]
+	fn keeps_every_item_alone_above_all_heights() {
+		// Every set is disjoint from the others, so every height is 0 < 1.
+		let merges = complete_linkage_dendrogram(&[vec![1], vec![2], vec![3]]);
+		let labels = labels_at_threshold(3, &merges, 1.0);
+		assert_ne!(labels[0], labels[1]);
+		assert_ne!(labels[1], labels[2]);
+		assert_ne!(labels[0], labels[2]);
+	}
+
+	#[test]
+	fn merges_identical_items_and_keeps_a_disjoint_one_apart_at_zero_point_eight() {
+		let merges = complete_linkage_dendrogram(&[vec![1, 2], vec![1, 2], vec![3, 4]]);
+		let labels = labels_at_threshold(3, &merges, 0.8);
+		assert_eq!(labels[0], labels[1]);
+		assert_ne!(labels[0], labels[2]);
+	}
+
+	#[test]
+	fn returns_one_label_per_item() {
+		let merges = complete_linkage_dendrogram(&[vec![1], vec![2]]);
+		assert_eq!(labels_at_threshold(2, &merges, 0.5).len(), 2);
 	}
 }

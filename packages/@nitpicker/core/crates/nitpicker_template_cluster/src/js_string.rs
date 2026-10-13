@@ -1,5 +1,4 @@
-//! JavaScript string semantics the classifier's keys were first computed
-//! with: what `\s` / `trim()` treat as whitespace, how `<` orders strings
+//! JavaScript string semantics the stored classifier keys depend on: what `\s` / `trim()` treat as whitespace, how `<` orders strings
 //! (UTF-16 code units), how `decodeURI` decodes, how `JSON.stringify` quotes.
 
 use std::cmp::Ordering;

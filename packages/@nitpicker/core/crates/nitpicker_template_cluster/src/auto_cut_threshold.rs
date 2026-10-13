@@ -29,8 +29,8 @@ pub fn auto_cut_threshold(heights: &[f64], upper_bound: f64) -> f64 {
 	midpoint.min(upper_bound)
 }
 
-// Exact float comparisons on purpose: the port must reproduce the
-// JavaScript values bit for bit, not approximately.
+// Exact float comparisons on purpose: the stored keys depend on these
+// values bit for bit, not approximately.
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
@@ -42,5 +42,37 @@ mod tests {
 		assert_eq!(auto_cut_threshold(&[1.0, 0.99, 0.98], 0.8), 0.8);
 		assert_eq!(auto_cut_threshold(&[0.5], 0.8), 0.8);
 		assert_eq!(auto_cut_threshold(&[0.5, 0.5], 0.8), 0.8);
+	}
+
+	#[test]
+	fn returns_the_upper_bound_for_no_heights() {
+		assert_eq!(auto_cut_threshold(&[], 0.8), 0.8);
+	}
+
+	#[test]
+	fn returns_the_upper_bound_for_equal_heights() {
+		assert_eq!(auto_cut_threshold(&[0.5, 0.5, 0.5], 0.8), 0.8);
+	}
+
+	#[test]
+	fn returns_the_midpoint_of_the_only_gap() {
+		assert_eq!(auto_cut_threshold(&[0.9, 0.1], 0.8), 0.5);
+	}
+
+	#[test]
+	fn clamps_a_midpoint_above_the_upper_bound() {
+		// Midpoint 0.9 against a bound of 0.8.
+		assert_eq!(auto_cut_threshold(&[0.95, 0.85], 0.8), 0.8);
+	}
+
+	#[test]
+	fn keeps_a_midpoint_below_the_upper_bound() {
+		assert_eq!(auto_cut_threshold(&[0.6, 0.2], 0.8), 0.4);
+	}
+
+	#[test]
+	fn selects_the_largest_gap_not_the_first() {
+		// Gaps between 0.9, 0.8, 0.2, 0.1 are 0.1, 0.6, 0.1.
+		assert_eq!(auto_cut_threshold(&[0.9, 0.8, 0.2, 0.1], 0.8), 0.5);
 	}
 }

@@ -1,7 +1,8 @@
 //! An HTML parser that reports exactly what htmlparser2 12.0.0 reports.
 //!
-//! The template classifier's keys are persisted, and they were first computed
-//! with htmlparser2: which tags its stack closes implicitly, where it says an
+//! The template classifier's keys are persisted in archives (and pinned by
+//! `@nitpicker/archive`'s golden records), and they depend on htmlparser2's
+//! reading of the markup: which tags its stack closes implicitly, where it says an
 //! element starts and ends (`startIndex` / `endIndex`, quirks included — an
 //! opening tag right after `</x >` starts at that tag's `>`), how it decodes
 //! a class name. A spec-conformant HTML5 tree builder would disagree with it

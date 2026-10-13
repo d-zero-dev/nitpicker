@@ -40,8 +40,8 @@ pub fn sorted_set(ids: &[u32]) -> Vec<u32> {
 	sorted
 }
 
-// Exact float comparisons on purpose: the port must reproduce the
-// JavaScript values bit for bit, not approximately.
+// Exact float comparisons on purpose: the stored keys depend on these
+// values bit for bit, not approximately.
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
