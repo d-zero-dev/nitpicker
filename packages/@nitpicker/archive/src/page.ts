@@ -172,6 +172,20 @@ export default class Page {
 	}
 
 	/**
+	 * The page's row id in the archive (`content_items.id`): stable within one
+	 * archive, the key the page's own tables (`page_html_ref`, `page_templates`,
+	 * …) reference it by. Not comparable across archives.
+	 * @example
+	 * ```ts
+	 * const pageIdsWithHtml = await collectPageIdsWithHtml(archive);
+	 * const hasHtml = pageIdsWithHtml.has(page.id);
+	 * ```
+	 */
+	get id(): number {
+		return this.#raw.id;
+	}
+
+	/**
 	 * Whether this page is on an external domain (outside the crawl scope).
 	 */
 	get isExternal() {

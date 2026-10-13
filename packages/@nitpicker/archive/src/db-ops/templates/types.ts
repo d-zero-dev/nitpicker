@@ -1,6 +1,5 @@
 /**
- * The six landmark types page-cluster's `ClusterReason.landmarks`
- * recognizes.
+ * The six landmark types a cluster reason's `landmarks` recognizes.
  */
 export type TemplateClusterLandmarkType =
 	| 'header'
@@ -12,7 +11,7 @@ export type TemplateClusterLandmarkType =
 
 /**
  * Why a Pass-0 block (one of possibly several that merged into a final
- * cluster) was formed — mirrors page-cluster's `BlockingReason`
+ * cluster) was formed — mirrors `@nitpicker/core`'s `TemplateBlockingReason`
  * discriminated union.
  */
 export type TemplateClusterBlockingReason =
@@ -35,19 +34,18 @@ export interface TemplateClusterLandmarkProfile {
 }
 
 /**
- * A copy of the page-cluster engine's `ClusterReason` shape
- * (`template-classification/page-cluster/build-cluster-reason.ts`). Kept
- * independent of the engine (rather than importing its type directly)
- * because this is the persisted contract of `page_template_clusters.reason`
- * that `@nitpicker/query` and the browser-side viewer build type values
- * against: the engine is not part of archive's `exports`, and removing or
- * retyping a field in the engine's shape surfaces as a compile error at the
- * assignment in `classifyPageTemplates` instead of silently changing what
- * older archives are read as. A field the engine *adds* is not caught there
- * (structural assignability) and is persisted as-is in the JSON blob; mirror
- * it here and in `@nitpicker/query`'s `isTemplateClusterReason` when it
- * should be read back. The engine's `ClusterReason` is structurally
- * assignable to this type.
+ * A copy of the classifier's reason shape (`@nitpicker/core`'s
+ * `TemplateClusterReason`, built by `createTemplateClassificationRun`). Kept
+ * independent of it (rather than importing its type directly) because this
+ * is the persisted contract of `page_template_clusters.reason` that
+ * `@nitpicker/query` and the browser-side viewer build type values against,
+ * and removing or retyping a field in core's shape surfaces as a compile
+ * error at the assignment in `classifyPageTemplates` instead of silently
+ * changing what older archives are read as. A field core *adds* is not
+ * caught there (structural assignability) and is persisted as-is in the
+ * JSON blob; mirror it here and in `@nitpicker/query`'s
+ * `isTemplateClusterReason` when it should be read back. Core's reason is
+ * structurally assignable to this type.
  */
 export interface TemplateClusterReason {
 	readonly memberCount: number;

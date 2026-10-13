@@ -126,6 +126,11 @@ function createRawPage(overrides: Partial<DB_Page> = {}): DB_Page {
 
 describe('Page', () => {
 	describe('getters', () => {
+		it('id returns the content_items row id', () => {
+			const page = new Page(createMockArchive() as never, createRawPage({ id: 4242 }));
+			expect(page.id).toBe(4242);
+		});
+
 		it('returns url as ExURL', () => {
 			const page = new Page(createMockArchive() as never, createRawPage());
 			expect(page.url.href).toBe('https://example.com');

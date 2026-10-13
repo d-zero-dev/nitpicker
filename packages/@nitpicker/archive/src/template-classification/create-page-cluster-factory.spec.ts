@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import Archive from '../archive.js';
 
+import { collectPageIdsWithHtml } from './collect-page-ids-with-html.js';
 import { createPageClusterFactory } from './create-page-cluster-factory.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -120,6 +121,25 @@ describe('createPageClusterFactory', () => {
 			imageList: [],
 			isSkipped: false,
 		});
+
+		// Internal HTML page whose stored HTML is empty (no snapshot is
+		// stored for it) — not in `collectPageIdsWithHtml`'s result.
+		await archive.setPage({
+			url: parseUrl('https://example.com/empty')!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 0,
+			responseHeaders: {},
+			html: '',
+			meta: baseMeta,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
 	});
 
 	afterAll(async () => {
@@ -130,11 +150,15 @@ describe('createPageClusterFactory', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
-	it('内部HTMLページのみyieldされる（外部ページ・非HTMLページは除外）、getYieldedUrlsは完走後に反映される', async () => {
+	it('内部HTMLページのみyieldされる（外部ページ・非HTMLページ・HTML無しページは除外）、urlsはイテレーション前から確定している', async () => {
 		const pages = await archive.getPages();
-		const { factory, getYieldedUrls } = createPageClusterFactory(pages, new Map());
+		const { factory, urls } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl: new Map(),
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
-		expect(getYieldedUrls()).toEqual([]);
+		expect(urls).toEqual(['https://example.com/news/1']);
 
 		const signals = [];
 		for await (const signal of factory()) {
@@ -142,24 +166,65 @@ describe('createPageClusterFactory', () => {
 		}
 
 		expect(signals).toHaveLength(1);
-		expect(getYieldedUrls()).toEqual(['https://example.com/news/1']);
+		expect(urls).toEqual(['https://example.com/news/1']);
+	});
+
+	it('内部HTMLページでもpageIdsWithHtmlに無ければyieldされずurlsにも含まれない', async () => {
+		const pages = await archive.getPages();
+		const { factory, urls } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl: new Map(),
+			pageIdsWithHtml: new Set(),
+		});
+
+		const signals = [];
+		for await (const signal of factory()) {
+			signals.push(signal);
+		}
+
+		expect(signals).toEqual([]);
+		expect(urls).toEqual([]);
+	});
+
+	it('pageIdsWithHtmlに挙がっているのに保存済みHTMLが無いページはgetHtmlが説明つきのエラーを投げる', async () => {
+		const pages = await archive.getPages();
+		const empty = pages.find((page) => page.url.href === 'https://example.com/empty')!;
+		const { factory } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl: new Map(),
+			pageIdsWithHtml: new Set([empty.id]),
+		});
+
+		const signals = [];
+		for await (const signal of factory()) {
+			signals.push(signal);
+		}
+
+		expect(signals).toHaveLength(1);
+		await expect(signals[0]!.getHtml()).rejects.toThrow(
+			'createPageClusterFactory: https://example.com/empty has no stored HTML, but collectPageIdsWithHtml listed it',
+		);
 	});
 
 	it('factory()を複数回呼んでも同一順序・同一件数のページを返す', async () => {
 		const pages = await archive.getPages();
-		const { factory } = createPageClusterFactory(pages, new Map());
+		const { factory } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl: new Map(),
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
 		const firstPass: string[] = [];
 		for await (const signal of factory()) {
-			firstPass.push(signal.html);
+			firstPass.push(await signal.getHtml());
 		}
 		const secondPass: string[] = [];
 		for await (const signal of factory()) {
-			secondPass.push(signal.html);
+			secondPass.push(await signal.getHtml());
 		}
 
 		expect(secondPass).toEqual(firstPass);
-		expect(firstPass).toHaveLength(1);
+		expect(firstPass).toEqual(['<html><body><article>one</article></body></html>']);
 	});
 
 	it('paths/host/stylesheetHrefsを正しくマッピングする', async () => {
@@ -167,7 +232,11 @@ describe('createPageClusterFactory', () => {
 		const stylesheetsByUrl = new Map<string, readonly string[]>([
 			['https://example.com/news/1', ['https://example.com/style.css']],
 		]);
-		const { factory } = createPageClusterFactory(pages, stylesheetsByUrl);
+		const { factory } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl,
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
 		const signals = [];
 		for await (const signal of factory()) {
@@ -182,7 +251,11 @@ describe('createPageClusterFactory', () => {
 
 	it('stylesheetsByUrlに存在しないページは空配列になる', async () => {
 		const pages = await archive.getPages();
-		const { factory } = createPageClusterFactory(pages, new Map());
+		const { factory } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl: new Map(),
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
 		const signals = [];
 		for await (const signal of factory()) {
@@ -193,7 +266,7 @@ describe('createPageClusterFactory', () => {
 	});
 });
 
-describe('createPageClusterFactory — 途中で打ち切ったイテレーションはgetYieldedUrlsを汚染しない', () => {
+describe('createPageClusterFactory — urls は途中で打ち切ったイテレーションの影響を受けない', () => {
 	let archive: InstanceType<typeof Archive>;
 	const workingDir2 = path.resolve(
 		__dirname,
@@ -256,9 +329,15 @@ describe('createPageClusterFactory — 途中で打ち切ったイテレーシ�
 		rmSync(workingDir2, { recursive: true, force: true });
 	});
 
-	it('前回の完走結果を保持したまま、未完走のイテレーションはgetYieldedUrlsを上書きしない', async () => {
+	it('urlsはyield順で、完走・途中打ち切りのどちらのイテレーションでも変わらない', async () => {
 		const pages = await archive.getPages();
-		const { factory, getYieldedUrls } = createPageClusterFactory(pages, new Map());
+		const { factory, urls } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl: new Map(),
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
+
+		expect(urls).toEqual(['https://example.com/a', 'https://example.com/b']);
 
 		// First iteration: drain fully.
 		const firstPass = [];
@@ -266,17 +345,16 @@ describe('createPageClusterFactory — 途中で打ち切ったイテレーシ�
 			firstPass.push(signal);
 		}
 		expect(firstPass).toHaveLength(2);
-		expect(getYieldedUrls()).toEqual(['https://example.com/a', 'https://example.com/b']);
+		expect(urls).toEqual(['https://example.com/a', 'https://example.com/b']);
 
-		// Second iteration: stop after the first item, never reaching the end
-		// of the generator body (never calling `onDrained`).
+		// Second iteration: stop after the first item.
 		const secondPass = [];
 		for await (const signal of factory()) {
 			secondPass.push(signal);
 			break;
 		}
 		expect(secondPass).toHaveLength(1);
-		expect(getYieldedUrls()).toEqual(['https://example.com/a', 'https://example.com/b']);
+		expect(urls).toEqual(['https://example.com/a', 'https://example.com/b']);
 	});
 });
 
@@ -381,7 +459,11 @@ describe('createPageClusterFactory — 本文要素（contentRoot）のヒント
 
 	it('クローラが検出した本文要素を contentRoot として渡す（nodeName は小文字、classList はそのまま）', async () => {
 		const pages = await archive.getPages();
-		const { factory } = createPageClusterFactory(pages, new Map());
+		const { factory } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl: new Map(),
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
 		const signals = [];
 		for await (const signal of factory()) {
@@ -398,7 +480,11 @@ describe('createPageClusterFactory — 本文要素（contentRoot）のヒント
 
 	it('本文要素が検出されていないページには contentRoot キー自体を付けない', async () => {
 		const pages = await archive.getPages();
-		const { factory } = createPageClusterFactory(pages, new Map());
+		const { factory } = createPageClusterFactory({
+			pages,
+			stylesheetsByUrl: new Map(),
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
 		const signals = [];
 		for await (const signal of factory()) {

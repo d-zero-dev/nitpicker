@@ -216,4 +216,27 @@ mod tests {
 		assert_eq!(collapse_anonymous_divs("body>div"), "body>div");
 		assert_eq!(collapse_anonymous_divs("div>div>div"), "div>div");
 	}
+
+	#[test]
+	fn collapses_spans_and_runs_but_keeps_classed_bracketed_and_semantic_segments() {
+		assert_eq!(collapse_anonymous_divs("body>div>section"), "body>section");
+		assert_eq!(collapse_anonymous_divs("body>span>section"), "body>section");
+		assert_eq!(
+			collapse_anonymous_divs("body>div>div>section"),
+			"body>section"
+		);
+		assert_eq!(
+			collapse_anonymous_divs("body>div.class>section"),
+			"body>div.class>section"
+		);
+		assert_eq!(
+			collapse_anonymous_divs("body>div[role=main]>section"),
+			"body>div[role=main]>section"
+		);
+		assert_eq!(collapse_anonymous_divs("div>main>span"), "div>main>span");
+		assert_eq!(
+			collapse_anonymous_divs("body>main>section"),
+			"body>main>section"
+		);
+	}
 }

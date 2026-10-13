@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const templateClassificationDir = path.dirname(fileURLToPath(import.meta.url));
-const engineDir = path.join(templateClassificationDir, 'page-cluster');
+const driverDir = path.join(templateClassificationDir, 'page-cluster');
 const archiveSrcDir = path.resolve(templateClassificationDir, '..');
 const archivePackageJsonPath = path.resolve(archiveSrcDir, '..', 'package.json');
 
@@ -32,9 +32,9 @@ function listSourceFiles(dir: string): string[] {
 		.map((relativePath) => path.join(dir, relativePath));
 }
 
-describe('page-cluster エンジンの境界', () => {
-	it('エンジンはディレクトリ内の相対 import と @nitpicker/core・@d-zero/shared・vitest 以外を import しない', () => {
-		const specifiers = listSourceFiles(engineDir).flatMap((filePath) =>
+describe('page-cluster ドライバの境界', () => {
+	it('ドライバはディレクトリ内の相対 import と @nitpicker/core・vitest 以外を import しない', () => {
+		const specifiers = listSourceFiles(driverDir).flatMap((filePath) =>
 			listImportSpecifiers(filePath),
 		);
 
@@ -44,17 +44,17 @@ describe('page-cluster エンジンの境界', () => {
 				...new Set(specifiers.filter((specifier) => !specifier.startsWith('.'))),
 			].toSorted(),
 		).toEqual([
-			'@d-zero/shared/hash',
-			'@nitpicker/core/create-template-stage-a-run',
+			'@nitpicker/core/create-template-classification-run',
 			'@nitpicker/core/template-block-sample-size',
+			'@nitpicker/core/template-corpus-inline-threshold',
 			'@nitpicker/core/types',
 			'vitest',
 		]);
 	});
 
-	it('archive 内でエンジンを import するのは template-classification の 3 ファイル（と分類の spec・golden）だけ', () => {
+	it('archive 内でドライバを import するのは template-classification の 2 ファイル（と分類の spec・golden）だけ', () => {
 		const importers = listSourceFiles(archiveSrcDir)
-			.filter((filePath) => !filePath.startsWith(engineDir + path.sep))
+			.filter((filePath) => !filePath.startsWith(driverDir + path.sep))
 			.filter((filePath) =>
 				listImportSpecifiers(filePath).some((specifier) =>
 					specifier.includes('page-cluster/'),
@@ -66,17 +66,12 @@ describe('page-cluster エンジンの境界', () => {
 		expect(importers).toEqual([
 			'template-classification/classify-page-templates.spec.ts',
 			'template-classification/classify-page-templates.ts',
-			'template-classification/create-content-root-hint.ts',
 			'template-classification/create-page-cluster-factory.ts',
-			'template-classification/golden/build-fixture-corpus.ts',
-			'template-classification/golden/build-synthetic-site.ts',
 			'template-classification/golden/classify-golden-corpus.ts',
-			'template-classification/golden/template-classification-golden.spec.ts',
-			'template-classification/golden/types.ts',
 		]);
 	});
 
-	it('エンジンは archive の exports に載らない', () => {
+	it('ドライバは archive の exports に載らない', () => {
 		const packageJson = JSON.parse(readFileSync(archivePackageJsonPath, 'utf8')) as {
 			exports: Record<string, unknown>;
 		};

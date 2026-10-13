@@ -1,55 +1,114 @@
-/**
- * The page regions treated as chrome: HTML5 sectioning elements and their
- * ARIA landmark roles (`<header>` / `banner`, `<footer>` / `contentinfo`,
- * `<nav>` / `navigation`, `<aside>` / `complementary`, `role="form"`,
- * `<search>` / `search`). `main` is content and never one of them.
- */
-export type LandmarkType = 'header' | 'footer' | 'nav' | 'aside' | 'form' | 'search';
+import type {
+	ContentRootHint,
+	TemplateClassificationRun,
+	TemplateClusterReason,
+	TemplatePageHtml,
+} from '@nitpicker/core/types';
 
 /**
- * One landmark instance of a page as Stage B and cluster reasons read it:
- * its type and the token set of its markup tokenized on its own.
+ * One page as `resolvePageClusterKeys` reads it: the blocking signals, read
+ * on every pass, and the HTML, read only on the passes that use the page.
  */
-export interface LandmarkInstanceTokens {
-	readonly type: LandmarkType;
-	readonly tokens: ReadonlySet<string>;
+export interface PageClusterPage {
+	/** The page URL's path segments (`ExURL.paths`). */
+	readonly paths: readonly string[];
+	/** Absolute hrefs of the page's stylesheets. */
+	readonly stylesheetHrefs: readonly string[];
+	/**
+	 * The page URL's host (hostname, optionally `:port` — `new URL(pageUrl).host`).
+	 * Stylesheets on other hosts take no part in blocking.
+	 */
+	readonly host?: string;
+	/**
+	 * Identity of the page's content-root element, as a crawler detected it.
+	 * Anchors the per-block content depth cap on sites without
+	 * `<main>`/`role="main"`; without it the cap falls back to
+	 * `<main>`/`role="main"` and then the built-in `#main`, `#content`, … list.
+	 */
+	readonly contentRoot?: ContentRootHint;
+	/**
+	 * The page's HTML, non-empty. Called only on the reads that use the page
+	 * (every page once in memory; on the streaming path the block samples on
+	 * the first read and the other pages on the second), so a page's HTML is
+	 * decompressed once however many times the corpus is read.
+	 */
+	getHtml(): string | Promise<string>;
 }
 
 /**
- * Identity of a page's content-root element — the element whose subtree
- * holds the page-specific content and under which Stage A (in
- * `@nitpicker/core`) caps the nesting depth it compares.
+ * Factory returning an iterator over the corpus. Called once per read — the
+ * signals, then the HTML, and on the streaming path the HTML again for the
+ * pages outside the samples. Every call must yield the same pages in the
+ * same order; a corpus that changes size between reads is rejected.
  *
- * Every field that is given must match the same element. Empty strings and
- * empty arrays count as "not given", and a root with no constraint at all
- * matches nothing (otherwise the shallowest element of the page would win
- * and the cap would silently apply to the wrong node).
- *
- * A structured object rather than a CSS selector string: nothing has to be
- * parsed (the HTML parser already exposes `id`/`class`/`role`), it maps 1:1
- * onto the columns a crawler records for its detected main-content element,
- * and a crawler's own selector string is diagnostic (tag + id + classes) and
- * not guaranteed to be unique, so it is the wrong thing to re-parse.
+ * A factory rather than an `AsyncIterable`: one returned once cannot be
+ * traversed a second time, while a factory lets the caller re-issue its
+ * archive query per read, so no read holds the corpus's HTML at once.
  */
-export type ContentRoot = {
-	/** Case-insensitive: a crawler reading `Element.nodeName` reports `'DIV'`, the HTML parser reports `'div'`. */
-	readonly tagName?: string;
-	readonly id?: string;
-	readonly role?: string;
-	/** Every listed class must be present on the element (subset match; order does not matter). */
-	readonly classList?: readonly string[];
-};
+export type PageFactory = () =>
+	| Iterable<PageClusterPage>
+	| AsyncIterable<PageClusterPage>;
 
 /**
- * Result of {@link ./compute-document-frequency.js | computeDocumentFrequency}: how many pages (out of `pageCount`) contain each token.
- *
- * `pageCount` travels bundled with `documentFrequency` rather than being a
- * separate argument at call sites that consume it (e.g.
- * `splitTokensByFrequency`), so the two can never be passed out of sync with
- * each other (e.g. a caller re-slicing the page list after computing
- * frequencies but before using them).
+ * Progress of `resolvePageClusterKeys`, a union on `phase`:
+ * - `pass0-signals`: reading the blocking signals; every 1,000 pages.
+ * - `pass1-block-complete`: one block's clusters are done.
+ * - `pass1b-assign`: streaming path only; every 1,000 pages assigned to the
+ *   sampled clusters.
+ * - `stage-b-start`: the merge across blocks began; once per call.
  */
-export type DocumentFrequency = {
-	documentFrequency: ReadonlyMap<string, number>;
-	pageCount: number;
-};
+export type ProgressEvent =
+	| { readonly phase: 'pass0-signals'; readonly pagesSeen: number }
+	| {
+			readonly phase: 'pass1-block-complete';
+			readonly blockKey: string;
+			readonly blocksProcessed: number;
+			readonly totalBlocks: number;
+	  }
+	| {
+			readonly phase: 'pass1b-assign';
+			readonly pagesAssigned: number;
+			readonly pagesToAssign: number;
+	  }
+	| { readonly phase: 'stage-b-start'; readonly unitCount: number };
+
+/** Options of `resolvePageClusterKeys`. */
+export interface ResolvePageClusterKeysOptions {
+	/** Receives every {@link ProgressEvent}. */
+	readonly onProgress: (event: ProgressEvent) => void;
+}
+
+/** What `resolvePageClusterKeys` returns. */
+export interface PageClusterKeys {
+	/** Each page's cluster key, in corpus order. */
+	readonly keys: string[];
+	/**
+	 * Each final cluster's reason, by key. Built from the clusters' retained
+	 * members (the block samples on the streaming path), sized by cluster
+	 * count, not page count.
+	 */
+	readonly reasons: ReadonlyMap<string, TemplateClusterReason>;
+}
+
+/** One read of the corpus's HTML, as the driver hands it to the run. */
+export interface HtmlRead {
+	/** The corpus. */
+	readonly pages: PageFactory;
+	/**
+	 * The run's `pageMask()` for this read: which pages it uses; its length
+	 * is the page count of the first read.
+	 */
+	readonly mask: Uint8Array;
+	/** Hands a batch to the run (`pushPages` or `pushAssignmentPages`). */
+	readonly push: (batch: TemplatePageHtml[]) => Promise<void>;
+}
+
+/** The read of every page's blocking signals into a run. */
+export interface SignalsRead {
+	/** The corpus. */
+	readonly pages: PageFactory;
+	/** The run the signals go to. */
+	readonly run: TemplateClassificationRun;
+	/** Receives the `pass0-signals` events. */
+	readonly onProgress: ((event: ProgressEvent) => void) | undefined;
+}

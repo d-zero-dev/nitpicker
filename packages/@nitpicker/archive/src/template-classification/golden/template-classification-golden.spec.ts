@@ -3,12 +3,9 @@ import type { GoldenRecord } from './types.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { TEMPLATE_BLOCK_SAMPLE_SIZE as BLOCK_SAMPLE_SIZE } from '@nitpicker/core/template-block-sample-size';
+import { TEMPLATE_CORPUS_INLINE_THRESHOLD as CORPUS_INLINE_THRESHOLD } from '@nitpicker/core/template-corpus-inline-threshold';
 import { beforeAll, describe, expect, it } from 'vitest';
-
-import {
-	BLOCK_SAMPLE_SIZE,
-	CORPUS_INLINE_THRESHOLD,
-} from '../page-cluster/resolve-page-cluster-keys.js';
 
 import { buildFixtureCorpus } from './build-fixture-corpus.js';
 import { buildSyntheticSite } from './build-synthetic-site.js';

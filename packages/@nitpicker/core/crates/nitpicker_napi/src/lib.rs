@@ -5,17 +5,25 @@
 //! Every exported function uses `catch_unwind`, so a Rust panic reaches JS as
 //! a thrown `Error` instead of aborting the whole Node process.
 
-mod template_stage_a;
+mod template_classification;
 
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 
 /// Pages per block a streaming template classification run clusters (see
-/// `template_stage_a`).
+/// `template_classification`).
 #[napi]
 // A small constant (100); the cast cannot truncate.
 #[allow(clippy::cast_possible_truncation)]
 pub const TEMPLATE_BLOCK_SAMPLE_SIZE: u32 = nitpicker_template_cluster::BLOCK_SAMPLE_SIZE as u32;
+
+/// Corpus size above which a template classification run streams (see
+/// `template_classification`).
+#[napi]
+// A small constant (20,000); the cast cannot truncate.
+#[allow(clippy::cast_possible_truncation)]
+pub const TEMPLATE_CORPUS_INLINE_THRESHOLD: u32 =
+	nitpicker_template_cluster::CORPUS_INLINE_THRESHOLD as u32;
 
 /// Computes `page_meta.body_hash` for one HTML document.
 ///

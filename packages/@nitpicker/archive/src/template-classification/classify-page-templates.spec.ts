@@ -183,7 +183,7 @@ describe('classifyPageTemplates', () => {
 		expect(reasonA!.memberCount).toBeGreaterThan(0);
 	});
 
-	it('スタイルシート収集の開始を通知したうえで、クラスタリングの進捗イベントを転送する', async () => {
+	it('スタイルシート収集と保存済みHTMLの列挙の開始を通知したうえで、クラスタリングの進捗イベントを転送する', async () => {
 		const pages = await archive.getPages();
 		const events: string[] = [];
 
@@ -196,7 +196,8 @@ describe('classifyPageTemplates', () => {
 		});
 
 		expect(events[0]).toBe('collecting-stylesheets');
-		expect(events.length).toBeGreaterThan(1);
+		expect(events[1]).toBe('listing-html-snapshots');
+		expect(events.length).toBeGreaterThan(2);
 	});
 
 	it('呼び出しごとに再計算し、結果をキャッシュしない', async () => {
@@ -209,13 +210,43 @@ describe('classifyPageTemplates', () => {
 		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(2);
 	});
 
+	it('返されたキーをファクトリのurls順にURLへ対応づけ、reasonsをそのまま返す', async () => {
+		const pages = await archive.getPages();
+		const reasons = new Map([
+			[
+				'k1',
+				{
+					memberCount: 3,
+					blocking: [],
+					structuralCoreTokens: [],
+					landmarks: {},
+					siblingClusterKeys: [],
+				},
+			],
+		]);
+
+		vi.mocked(resolvePageClusterKeys).mockResolvedValueOnce({
+			keys: ['k1', 'k1', 'k1'],
+			reasons,
+		});
+
+		const result = await classifyPageTemplates({ archive, pages });
+
+		expect([...result.templateKeysByUrl.values()]).toEqual(['k1', 'k1', 'k1']);
+		expect(result.templateKeysByUrl.size).toBe(3);
+		expect(result.clusterReasonsByTemplateKey).toBe(reasons);
+	});
+
 	it('resolvePageClusterKeysの戻り値件数がページ数と食い違う場合はエラーを投げる', async () => {
 		const pages = await archive.getPages();
 
-		vi.mocked(resolvePageClusterKeys).mockResolvedValueOnce(['only-one-key']);
+		vi.mocked(resolvePageClusterKeys).mockResolvedValueOnce({
+			keys: ['only-one-key'],
+			reasons: new Map(),
+		});
 
 		await expect(classifyPageTemplates({ archive, pages })).rejects.toThrow(
-			/resolvePageClusterKeys returned/,
+			'classifyPageTemplates: resolvePageClusterKeys returned 1 keys for 3 pages.',
 		);
 	});
 });

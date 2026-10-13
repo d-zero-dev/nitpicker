@@ -1,20 +1,43 @@
-import type { ClusterReason } from './build-cluster-reason.js';
-import type { ClusterPartitionReport } from './validate-cluster-partition.js';
+import type { PageClusterKeys, PageClusterPage } from './types.js';
 
 import { describe, expect, test } from 'vitest';
 
-import { resolvePageClusterKeysFromArray } from './resolve-page-cluster-keys.js';
+import { resolvePageClusterKeys } from './resolve-page-cluster-keys.js';
 
-describe('resolvePageClusterKeysFromArray', () => {
+/** A page as the specs write it: its HTML inline instead of behind `getHtml()`. */
+type InlinePage = Omit<PageClusterPage, 'getHtml'> & { readonly html: string };
+
+/**
+ * Resolves the pages' cluster keys and reasons.
+ * @param pages
+ */
+function clusterOf(pages: readonly InlinePage[]): Promise<PageClusterKeys> {
+	const mapped: PageClusterPage[] = pages.map(({ html, ...rest }) => ({
+		...rest,
+		getHtml: () => html,
+	}));
+	return resolvePageClusterKeys(() => mapped);
+}
+
+/**
+ * Resolves the pages' cluster keys.
+ * @param pages
+ */
+async function keysOf(pages: readonly InlinePage[]): Promise<string[]> {
+	const { keys } = await clusterOf(pages);
+	return keys;
+}
+
+describe('resolvePageClusterKeys', () => {
 	test('an empty page list returns an empty array', async () => {
-		expect(await resolvePageClusterKeysFromArray([])).toEqual([]);
+		expect(await keysOf([])).toEqual([]);
 	});
 
 	test('matches the exact output documented in the JSDoc @example', async () => {
-		// Kept in sync with resolvePageClusterKeysFromArray's @example: if this ever
+		// Kept in sync with resolvePageClusterKeys's @example: if this ever
 		// fails, the JSDoc example is out of date and must be corrected
 		// alongside the implementation, not the other way around.
-		const result = await resolvePageClusterKeysFromArray([
+		const result = await keysOf([
 			{
 				paths: ['news', '1'],
 				stylesheetHrefs: [],
@@ -41,7 +64,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 	test('two pages that block into the same path group and share an identical structure get the same final key', async () => {
 		const html =
 			'<body><header>H</header><main><div class="card">C</div></main><footer>F</footer></body>';
-		const result = await resolvePageClusterKeysFromArray([
+		const result = await keysOf([
 			{ paths: ['dept-a', 'page1'], stylesheetHrefs: [], html },
 			{ paths: ['dept-a', 'page2'], stylesheetHrefs: [], html },
 		]);
@@ -58,7 +81,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 			'<body><header>H</header><main><div class="card">C</div></main><footer>F</footer></body>';
 		const formHtml =
 			'<body><header>H</header><main><form>F</form></main><footer>F</footer></body>';
-		const result = await resolvePageClusterKeysFromArray([
+		const result = await keysOf([
 			{ paths: ['dept-a', 'page1'], stylesheetHrefs: [], html: cardHtml },
 			{ paths: ['dept-a', 'page2'], stylesheetHrefs: [], html: cardHtml },
 			{ paths: ['dept-a', 'page3'], stylesheetHrefs: [], html: formHtml },
@@ -75,7 +98,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 		// (Stage B cross-block merge only unifies structurally similar pages).
 		// Regression test for the cross-block label-collision gap this
 		// function exists to close via JSON.stringify composition.
-		const result = await resolvePageClusterKeysFromArray([
+		const result = await keysOf([
 			{
 				paths: ['dept-a', 'page1'],
 				stylesheetHrefs: [],
@@ -99,7 +122,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 		// only unifies structurally similar pages across blocks).
 		const htmlA = '<body><header>H</header><main><article>A</article></main></body>';
 		const htmlB = '<body><header>H</header><main><section>B</section></main></body>';
-		const result = await resolvePageClusterKeysFromArray([
+		const result = await keysOf([
 			{
 				paths: ['dept-a', 'page1'],
 				stylesheetHrefs: ['https://example.com/a.css'],
@@ -124,7 +147,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 			{ paths: ['dept-a', '2'], stylesheetHrefs: [], html: '<body><a>x</a></body>' },
 			{ paths: ['dept-b', '2'], stylesheetHrefs: [], html: '<body><b>x</b></body>' },
 		];
-		const result = await resolvePageClusterKeysFromArray(pages);
+		const result = await keysOf(pages);
 
 		expect(result).toHaveLength(pages.length);
 		expect(result[0]).toBe(result[2]); // both dept-a, identical structure
@@ -135,7 +158,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 	test('two pages differing only in header/footer content get the same final key (landmarks are excluded from comparison)', async () => {
 		// A page-category label baked into a shared header/footer does not
 		// prevent two otherwise-identical pages from clustering together.
-		const result = await resolvePageClusterKeysFromArray([
+		const result = await keysOf([
 			{
 				paths: ['dept-a', 'page1'],
 				stylesheetHrefs: [],
@@ -172,7 +195,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 			html: `<body>${sharedHeader}<main>${sharedContent}<div class="content-b"></div></main></body>`,
 		};
 
-		const result = await resolvePageClusterKeysFromArray([pageA, pageB]);
+		const result = await keysOf([pageA, pageB]);
 		expect(result[0]).not.toBe(result[1]);
 	});
 
@@ -210,14 +233,14 @@ describe('resolvePageClusterKeysFromArray', () => {
 				html: `<body>${crumbs}<form></form></body>`,
 			},
 		);
-		const result = await resolvePageClusterKeysFromArray(pages);
+		const result = await keysOf(pages);
 
 		const a = result.at(-2);
 		const b = result.at(-1);
 		expect(a).not.toBe(b);
 	});
 
-	test('reassignOrphans (default true) lets a page with no recorded stylesheets rejoin a same-section css: block', async () => {
+	test('a page with no recorded stylesheets rejoin a same-section css: block', async () => {
 		const html = '<body><header>H</header><main><div class="card">C</div></main></body>';
 		const pages = [
 			{ paths: ['news', '1'], stylesheetHrefs: ['https://example.com/a.css'], html },
@@ -226,47 +249,9 @@ describe('resolvePageClusterKeysFromArray', () => {
 			{ paths: ['other'], stylesheetHrefs: ['https://example.com/b.css'], html },
 		];
 
-		const result = await resolvePageClusterKeysFromArray(pages);
+		const result = await keysOf(pages);
 
 		expect(result[2]).toBe(result[0]);
-	});
-
-	test('reassignOrphans: false leaves an orphan with a genuinely different template in its own separate cluster', async () => {
-		// reassignOrphans: false skips pooling the orphan (news/3) alongside the
-		// css: block for Stage A comparison. Stage B's cross-block merge only
-		// unifies structurally similar pages, so using a different template
-		// (article vs card) keeps the orphan separate regardless of the blocking
-		// key. Note: with identical HTML, Stage B merges same-template pages
-		// cross-block even with reassignOrphans: false — the option influences
-		// Stage A block assignment but not Stage B's structural comparison.
-		const htmlCard =
-			'<body><header>H</header><main><div class="card">C</div></main></body>';
-		const htmlPost =
-			'<body><header>H</header><main><article class="post">P</article></main></body>';
-		const pages = [
-			{
-				paths: ['news', '1'],
-				stylesheetHrefs: ['https://example.com/a.css'],
-				html: htmlCard,
-			},
-			{
-				paths: ['news', '2'],
-				stylesheetHrefs: ['https://example.com/a.css'],
-				html: htmlCard,
-			},
-			{ paths: ['news', '3'], stylesheetHrefs: [], html: htmlPost },
-			{
-				paths: ['other'],
-				stylesheetHrefs: ['https://example.com/b.css'],
-				html: htmlCard,
-			},
-		];
-
-		const result = await resolvePageClusterKeysFromArray(pages, {
-			reassignOrphans: false,
-		});
-
-		expect(result[2]).not.toBe(result[0]);
 	});
 
 	test('pages with a different mix of data-block content blocks are not merged: block markup is compared like any other markup', async () => {
@@ -281,12 +266,12 @@ describe('resolvePageClusterKeysFromArray', () => {
 			html: '<body><article class="detail"><div data-block="quote"><blockquote class="q">Q</blockquote></div></article></body>',
 		};
 
-		const result = await resolvePageClusterKeysFromArray([pageA, pageB]);
+		const result = await keysOf([pageA, pageB]);
 
 		expect(result[0]).not.toBe(result[1]);
 	});
 
-	test("a page whose only stylesheet was third-party becomes an orphan via restrictStylesheetsToFirstParty and is then reassigned by reassignOrphans into its section's css: block", async () => {
+	test("a page whose only stylesheet is third-party is treated as having none and rejoins its section's css: block", async () => {
 		const html = '<body><header>H</header><main><div class="card">C</div></main></body>';
 		const pages = [
 			{ paths: ['news', '1'], stylesheetHrefs: ['https://example.com/a.css'], html },
@@ -299,12 +284,12 @@ describe('resolvePageClusterKeysFromArray', () => {
 			{ paths: ['other'], stylesheetHrefs: ['https://example.com/b.css'], html },
 		];
 
-		const result = await resolvePageClusterKeysFromArray(pages);
+		const result = await keysOf(pages);
 
 		expect(result[2]).toBe(result[0]);
 	});
 
-	test('restrictStylesheetsToFirstParty (default true) prevents an incidental third-party stylesheet reference from splitting an otherwise-matching page into its own block', async () => {
+	test('an incidental third-party stylesheet reference from splitting an otherwise-matching page into its own block', async () => {
 		const html = '<body><header>H</header><main><div class="card">C</div></main></body>';
 		const pages = [
 			{ paths: ['news', '1'], stylesheetHrefs: ['https://example.com/a.css'], html },
@@ -320,52 +305,9 @@ describe('resolvePageClusterKeysFromArray', () => {
 			{ paths: ['other'], stylesheetHrefs: ['https://example.com/b.css'], html },
 		];
 
-		const result = await resolvePageClusterKeysFromArray(pages);
+		const result = await keysOf(pages);
 
 		expect(result[2]).toBe(result[0]);
-	});
-
-	test('restrictStylesheetsToFirstParty: false keeps a page with a genuinely different template in its own cluster, even alongside the extra stylesheet', async () => {
-		// With restrictStylesheetsToFirstParty: false, news/3's extra third-party
-		// stylesheet splits it into its own blocking key for Stage A. Additionally,
-		// news/3 uses a different HTML template (article vs card), so Stage B's
-		// cross-block merge also keeps it separate — the two effects together
-		// prevent any spurious merge.
-		const htmlCard =
-			'<body><header>H</header><main><div class="card">C</div></main></body>';
-		const htmlPost =
-			'<body><header>H</header><main><article class="post">P</article></main></body>';
-		const pages = [
-			{
-				paths: ['news', '1'],
-				stylesheetHrefs: ['https://example.com/a.css'],
-				html: htmlCard,
-			},
-			{
-				paths: ['news', '2'],
-				stylesheetHrefs: ['https://example.com/a.css'],
-				html: htmlCard,
-			},
-			{
-				paths: ['news', '3'],
-				stylesheetHrefs: [
-					'https://example.com/a.css',
-					'https://fonts.cdn.example/css?family=x',
-				],
-				html: htmlPost,
-			},
-			{
-				paths: ['other'],
-				stylesheetHrefs: ['https://example.com/b.css'],
-				html: htmlCard,
-			},
-		];
-
-		const result = await resolvePageClusterKeysFromArray(pages, {
-			restrictStylesheetsToFirstParty: false,
-		});
-
-		expect(result[2]).not.toBe(result[0]);
 	});
 
 	test("providing each page's host avoids a dominant-host tie mistakenly keeping a sitewide third party over the real first party (regression test for a real crawl finding)", async () => {
@@ -427,7 +369,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 
 		// Without host the blocking is wrong: dept-a/dept-b land in the same
 		// css: block (the font CDN wins the tie) and Stage A merges them.
-		const withoutHost = await resolvePageClusterKeysFromArray(
+		const withoutHost = await keysOf(
 			pages.map(({ paths, stylesheetHrefs, html: pageHtml }) => ({
 				paths,
 				stylesheetHrefs,
@@ -446,7 +388,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 			html: `<body><main><section><article><div><span class="unique-${i}">content</span></div></article></section></main></body>`,
 		}));
 
-		expect(new Set(await resolvePageClusterKeysFromArray(pages)).size).toBe(1);
+		expect(new Set(await keysOf(pages)).size).toBe(1);
 	});
 
 	test("the always-on <main> depth cap detects each block's own knee separately, so a small block is not left under-capped by a larger, differently-shaped block", async () => {
@@ -470,7 +412,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 			html: `<body><main><article><section><span class="unique-b-${i}">c</span></section></article></main></body>`,
 		}));
 
-		const keys = await resolvePageClusterKeysFromArray([...deptA, ...deptB]);
+		const keys = await keysOf([...deptA, ...deptB]);
 		const deptAKeys = keys.slice(0, deptA.length);
 		const deptBKeys = keys.slice(deptA.length);
 
@@ -487,11 +429,11 @@ describe('resolvePageClusterKeysFromArray', () => {
 			},
 		];
 
-		expect(await resolvePageClusterKeysFromArray(pages)).toHaveLength(1);
+		expect(await keysOf(pages)).toHaveLength(1);
 	});
 });
 
-describe('resolvePageClusterKeysFromArray (section-local landmarks)', () => {
+describe('resolvePageClusterKeys (section-local landmarks)', () => {
 	test('pages that share a section-local landmark cluster separately from block siblings that lack it', async () => {
 		// Regression scenario mirroring the real-crawl section-local nav
 		// case behind collecting every landmark instance: a subset of pages
@@ -521,10 +463,7 @@ describe('resolvePageClusterKeysFromArray (section-local landmarks)', () => {
 				'<main><article><h1>title</h1><p>body</p></article></main>' +
 				'</body>',
 		}));
-		const result = await resolvePageClusterKeysFromArray([
-			...withLocalNav,
-			...withoutLocalNav,
-		]);
+		const result = await keysOf([...withLocalNav, ...withoutLocalNav]);
 		// All four with-nav pages share a cluster key; all six without-nav
 		// pages share a different cluster key.
 		const withKey = result[0]!;
@@ -558,7 +497,7 @@ describe('resolvePageClusterKeysFromArray (section-local landmarks)', () => {
 				'<main><article><h1>title</h1><p>body</p></article></main>' +
 				'</body>',
 		}));
-		const result = await resolvePageClusterKeysFromArray([outlier, ...siblings]);
+		const result = await keysOf([outlier, ...siblings]);
 		expect(result[0]).toBe(result[1]);
 	});
 
@@ -576,12 +515,12 @@ describe('resolvePageClusterKeysFromArray (section-local landmarks)', () => {
 				'<main><article><p>body</p></article></main>' +
 				'</body>',
 		}));
-		const result = await resolvePageClusterKeysFromArray(pages);
+		const result = await keysOf(pages);
 		for (let i = 1; i < 6; i++) expect(result[i]).toBe(result[0]);
 	});
 });
 
-describe('resolvePageClusterKeysFromArray (page-unique class stripping)', () => {
+describe('resolvePageClusterKeys (page-unique class stripping)', () => {
 	/**
 	 * A static-content page whose content root carries a per-page identity
 	 * class (`<article class="<name>">`), the way a hand-authored site labels
@@ -643,7 +582,7 @@ describe('resolvePageClusterKeysFromArray (page-unique class stripping)', () => 
 			stylesheetHrefs: [],
 			html: listingPage(i),
 		}));
-		const result = await resolvePageClusterKeysFromArray([...statics, ...listings]);
+		const result = await keysOf([...statics, ...listings]);
 
 		const staticKey = result[0]!;
 		for (let i = 0; i < statics.length; i++) expect(result[i]).toBe(staticKey);
@@ -658,7 +597,7 @@ describe('resolvePageClusterKeysFromArray (page-unique class stripping)', () => 
 		// Two pages alone cannot tell "page identifier" from "the one class
 		// that distinguishes two templates" — the gate leaves them as they
 		// are, and they stay apart exactly as they would without stripping.
-		const result = await resolvePageClusterKeysFromArray([
+		const result = await keysOf([
 			{ paths: ['about', 'a.html'], stylesheetHrefs: [], html: labeledStaticPage('a') },
 			{ paths: ['about', 'b.html'], stylesheetHrefs: [], html: labeledStaticPage('b') },
 		]);
@@ -683,7 +622,7 @@ describe('resolvePageClusterKeysFromArray (page-unique class stripping)', () => 
 				'</article><aside class="with-aside"><ul><li><a>x</a></li><li><a>y</a></li></ul><p>note</p></aside>',
 			),
 		}));
-		const result = await resolvePageClusterKeysFromArray([...plain, ...withAside]);
+		const result = await keysOf([...plain, ...withAside]);
 		for (let i = 1; i < plain.length; i++) expect(result[i]).toBe(result[0]);
 		expect(result[8]).toBe(result[9]);
 		expect(result[8]).not.toBe(result[0]);
@@ -707,12 +646,12 @@ describe('resolvePageClusterKeysFromArray (page-unique class stripping)', () => 
 			stylesheetHrefs: [],
 			html: labeledStaticPage(`b-${i}`),
 		}));
-		const result = await resolvePageClusterKeysFromArray([...sectionA, ...sectionB]);
+		const result = await keysOf([...sectionA, ...sectionB]);
 		expect(new Set(result).size).toBe(1);
 	});
 });
 
-describe('resolvePageClusterKeysFromArray (onClusterReason)', () => {
+describe('resolvePageClusterKeys (reasons)', () => {
 	test('two clusters split within the same block are reported as siblings of each other', async () => {
 		// Same fixture as "pages within the same block but with dissimilar
 		// structure get different final keys" above: header/footer are
@@ -723,15 +662,11 @@ describe('resolvePageClusterKeysFromArray (onClusterReason)', () => {
 			'<body><header>H</header><main><div class="card">C</div></main><footer>F</footer></body>';
 		const formHtml =
 			'<body><header>H</header><main><form>F</form></main><footer>F</footer></body>';
-		const reasons = new Map<string, ClusterReason>();
-		const result = await resolvePageClusterKeysFromArray(
-			[
-				{ paths: ['dept-a', 'page1'], stylesheetHrefs: [], html: cardHtml },
-				{ paths: ['dept-a', 'page2'], stylesheetHrefs: [], html: cardHtml },
-				{ paths: ['dept-a', 'page3'], stylesheetHrefs: [], html: formHtml },
-			],
-			{ onClusterReason: (key, reason) => reasons.set(key, reason) },
-		);
+		const { keys: result, reasons } = await clusterOf([
+			{ paths: ['dept-a', 'page1'], stylesheetHrefs: [], html: cardHtml },
+			{ paths: ['dept-a', 'page2'], stylesheetHrefs: [], html: cardHtml },
+			{ paths: ['dept-a', 'page3'], stylesheetHrefs: [], html: formHtml },
+		]);
 
 		// Precondition: the two clusters really did split within one block.
 		expect(result[2]).not.toBe(result[0]);
@@ -744,11 +679,9 @@ describe('resolvePageClusterKeysFromArray (onClusterReason)', () => {
 		expect(cardReason.blocking).toEqual(formReason.blocking);
 	});
 
-	test('omitting onClusterReason returns a plain string[]', async () => {
+	test('a single page returns its key as a plain string[]', async () => {
 		const html = '<body><header>H</header><main>content</main></body>';
-		const result = await resolvePageClusterKeysFromArray([
-			{ paths: ['a'], stylesheetHrefs: [], html },
-		]);
+		const result = await keysOf([{ paths: ['a'], stylesheetHrefs: [], html }]);
 		expect(result).toStrictEqual(['["path:a","cluster:0"]']);
 	});
 
@@ -756,16 +689,12 @@ describe('resolvePageClusterKeysFromArray (onClusterReason)', () => {
 		const sharedHeader = '<header><nav>global</nav></header>';
 		const html1 = `<body>${sharedHeader}<main><nav class="unique-1">x</nav><article>one</article></main></body>`;
 		const html2 = `<body>${sharedHeader}<main><nav class="unique-2">y</nav><article>two</article></main></body>`;
-		const reasons = new Map<string, ClusterReason>();
-		const result = await resolvePageClusterKeysFromArray(
-			[
-				{ paths: ['p', '1'], stylesheetHrefs: [], html: html1 },
-				{ paths: ['p', '2'], stylesheetHrefs: [], html: html2 },
-			],
-			{ onClusterReason: (key, reason) => reasons.set(key, reason) },
-		);
+		const { keys: result, reasons } = await clusterOf([
+			{ paths: ['p', '1'], stylesheetHrefs: [], html: html1 },
+			{ paths: ['p', '2'], stylesheetHrefs: [], html: html2 },
+		]);
 		// Both pages land in the same final cluster (identical header + same
-		// article structure), so one ClusterReason covers both.
+		// article structure), so one reason covers both.
 		expect(result[0]).toBe(result[1]);
 		expect(reasons.size).toBe(1);
 		const reason = reasons.get(result[0]!)!;
@@ -776,18 +705,15 @@ describe('resolvePageClusterKeysFromArray (onClusterReason)', () => {
 		expect(reason.landmarks.nav?.chromeRate).toBe(0);
 	});
 
-	test('main never appears in ClusterReason.landmarks — chrome discovery does not classify content', async () => {
+	test('main never appears in the landmarks of a reason — chrome discovery does not classify content', async () => {
 		const html = '<body><header>H</header><main>content</main></body>';
-		const reasons = new Map<string, ClusterReason>();
-		await resolvePageClusterKeysFromArray([{ paths: ['a'], stylesheetHrefs: [], html }], {
-			onClusterReason: (key, reason) => reasons.set(key, reason),
-		});
+		const { reasons } = await clusterOf([{ paths: ['a'], stylesheetHrefs: [], html }]);
 		expect(Object.keys([...reasons.values()][0]!.landmarks)).not.toContain('main');
 	});
 
-	test('two distinct clusters each get their own shellQuorum-derived ClusterReason, not a corpus-wide one', async () => {
+	test('two distinct clusters each get a reason from their own shell discovery, not a corpus-wide one', async () => {
 		// Cluster A's header/nav tokens never appear anywhere in cluster B's
-		// pages, and vice versa. If shellQuorum were mistakenly computed once
+		// pages, and vice versa. If the classifier's shell discovery ran once
 		// over all 6 pages instead of once per final cluster, each header's
 		// corpus-wide frequency would be 3/6 = 0.5 — below the single-distinct-
 		// signature fallback clamp (0.8) — and neither would read as chrome.
@@ -805,13 +731,10 @@ describe('resolvePageClusterKeysFromArray (onClusterReason)', () => {
 			stylesheetHrefs: [],
 			html: `<body>${headerB}<main><section>content ${i}</section></main></body>`,
 		}));
-		const reasons = new Map<string, ClusterReason>();
-		const result = await resolvePageClusterKeysFromArray(
-			[...clusterAPages, ...clusterBPages],
-			{
-				onClusterReason: (key, reason) => reasons.set(key, reason),
-			},
-		);
+		const { keys: result, reasons } = await clusterOf([
+			...clusterAPages,
+			...clusterBPages,
+		]);
 
 		// Precondition: the two groups really are in different final clusters
 		// (different blocking path AND different tag skeleton: article vs
@@ -830,85 +753,7 @@ describe('resolvePageClusterKeysFromArray (onClusterReason)', () => {
 	});
 });
 
-describe('resolvePageClusterKeysFromArray (onPartitionReport)', () => {
-	/**
-	 * Builds a small multi-template, multi-language corpus: 3 distinct
-	 * templates, each mirrored under 2 language directories with its own
-	 * per-language stylesheet href — small enough to hand-verify, but with
-	 * enough distinct skeletons (3) for `detectMirrorAxis`'s
-	 * `minSkeletonCount` to accept the language position as a real axis
-	 * rather than coincidence.
-	 */
-	function buildMirroredCorpus() {
-		const templates = {
-			faq: '<article><h1>FAQ</h1><dl><dt>Q</dt><dd>A</dd></dl></article>',
-			access: '<section><h1>Access</h1><table><tr><td>map</td></tr></table></section>',
-			gallery: '<figure><h1>Gallery</h1><ul><li><img></li></ul></figure>',
-		};
-		const pages = [];
-		for (const [template, body] of Object.entries(templates)) {
-			for (const lang of ['en', 'zh']) {
-				pages.push({
-					paths: [lang, template, 'index.html'],
-					stylesheetHrefs: [`https://example.test/${lang}/${template}/page.css`],
-					html: `<html><body><header>H</header><main>${body}</main><footer>F</footer></body></html>`,
-				});
-			}
-		}
-		return pages;
-	}
-
-	test('reports the detected mirror axis and one cohesion entry per cluster', async () => {
-		const pages = buildMirroredCorpus();
-		let report: ClusterPartitionReport | undefined;
-		await resolvePageClusterKeysFromArray(pages, {
-			onPartitionReport: (r) => (report = r),
-		});
-
-		expect(report).toBeDefined();
-		expect(report!.mirrorAxis).toEqual({ position: 0, values: new Set(['en', 'zh']) });
-		// Every final cluster gets exactly one cohesion entry — proves the
-		// page-index recovery from `finalGroupsByRoot` covered every page
-		// (a broken recovery would silently under-count clusters here).
-		const totalMembers = report!.cohesion.reduce((sum, c) => sum + c.memberCount, 0);
-		expect(totalMembers).toBe(pages.length);
-	});
-
-	test('omitting onPartitionReport produces the same clusterKeys as providing one that merges nothing', async () => {
-		const pages = buildMirroredCorpus();
-		const withoutReport = await resolvePageClusterKeysFromArray(pages);
-		let report: ClusterPartitionReport | undefined;
-		const withReport = await resolvePageClusterKeysFromArray(pages, {
-			onPartitionReport: (r) => (report = r),
-		});
-		// Precondition: this corpus's 3 templates already cluster correctly
-		// without any auto-merge, so registering the hook must not perturb
-		// the result.
-		expect(
-			report!.crossClusterDuplicates.filter(
-				(d) => d.similarity === 1 || d.corroboratedByMirrorAxis,
-			),
-		).toEqual([]);
-		expect(withReport).toEqual(withoutReport);
-	});
-
-	test('onClusterReason and onPartitionReport compose: memberCount matches when both are registered', async () => {
-		const pages = buildMirroredCorpus();
-		const reasons = new Map<string, ClusterReason>();
-		let report: ClusterPartitionReport | undefined;
-		const keys = await resolvePageClusterKeysFromArray(pages, {
-			onClusterReason: (key, reason) => reasons.set(key, reason),
-			onPartitionReport: (r) => (report = r),
-		});
-		for (const key of new Set(keys)) {
-			const actualMemberCount = keys.filter((k) => k === key).length;
-			expect(reasons.get(key)!.memberCount).toBe(actualMemberCount);
-		}
-		expect(report).toBeDefined();
-	});
-});
-
-describe('resolvePageClusterKeysFromArray (content root)', () => {
+describe('resolvePageClusterKeys (content root)', () => {
 	const tags = [
 		'em',
 		'strong',
@@ -942,11 +787,9 @@ describe('resolvePageClusterKeysFromArray (content root)', () => {
 			...page,
 			contentRoot: { tagName: 'div', id: 'page' },
 		}));
-		expect(new Set(await resolvePageClusterKeysFromArray(withHint)).size).toBe(1);
+		expect(new Set(await keysOf(withHint)).size).toBe(1);
 		// Same pages, no hint, and `page` is not a built-in anchor: uncapped.
-		expect(new Set(await resolvePageClusterKeysFromArray(pagesUnder('page'))).size).toBe(
-			12,
-		);
+		expect(new Set(await keysOf(pagesUnder('page'))).size).toBe(12);
 	});
 
 	test('each page is capped with its own hint when several blocks are interleaved in the input', async () => {
@@ -963,14 +806,12 @@ describe('resolvePageClusterKeysFromArray (content root)', () => {
 			contentRoot: { id: 'pageB' },
 		}));
 		const interleaved = blockA.flatMap((page, i) => [page, blockB[i]!]);
-		const keys = await resolvePageClusterKeysFromArray(interleaved);
+		const keys = await keysOf(interleaved);
 		expect(new Set(keys.filter((_, i) => i % 2 === 0)).size).toBe(1);
 		expect(new Set(keys.filter((_, i) => i % 2 === 1)).size).toBe(1);
 	});
 
 	test('without a hint the built-in fallback list anchors the cap (#main)', async () => {
-		expect(new Set(await resolvePageClusterKeysFromArray(pagesUnder('main'))).size).toBe(
-			1,
-		);
+		expect(new Set(await keysOf(pagesUnder('main'))).size).toBe(1);
 	});
 });

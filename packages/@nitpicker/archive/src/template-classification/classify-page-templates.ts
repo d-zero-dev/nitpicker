@@ -4,13 +4,15 @@ import type {
 } from './types.js';
 import type { TemplateClusterReason } from '../db-ops/templates/types.js';
 
+import { collectPageIdsWithHtml } from './collect-page-ids-with-html.js';
 import { collectPageStylesheetUrls } from './collect-page-stylesheet-urls.js';
 import { createPageClusterFactory } from './create-page-cluster-factory.js';
 import { resolvePageClusterKeys } from './page-cluster/resolve-page-cluster-keys.js';
 
 /**
  * Classifies every internal HTML page in the archive into a template group
- * by DOM-structure similarity, using the page-cluster engine (`./page-cluster/`).
+ * by DOM-structure similarity, using the classifier `./page-cluster/` drives
+ * in `@nitpicker/core`.
  *
  * The result is deliberately **not cached**. A cache keyed on the archive
  * file's identity (path + size + mtime + page count) cannot be correct at the
@@ -19,20 +21,15 @@ import { resolvePageClusterKeys } from './page-cluster/resolve-page-cluster-keys
  * a `--retry-failed` run that replaces a failed page's HTML without changing
  * the page count would be served the previous classification. A crash during
  * classification leaves the crawl's stub directory in place, and resuming it
- * re-runs this step from scratch; the engine has no mid-computation
+ * re-runs this step from scratch; the classifier has no mid-computation
  * checkpoint to resume from either.
  *
- * Internally: the engine's `resolvePageClusterKeys` returns a `clusterKey`
+ * Internally: the driver's `resolvePageClusterKeys` returns a `clusterKey`
  * per page; this function's public naming is `templateKey`, to avoid
  * colliding with nitpicker's unrelated pre-existing "isolated cluster"
  * concept (`@nitpicker/query`'s `compute-isolated-clusters.ts`,
  * link-reachability graph components — a completely different kind of
  * grouping from DOM-structure similarity).
- *
- * `onClusterReason` is always passed to `resolvePageClusterKeys` (not made
- * conditional the way `onProgress` is): reasons are built from state the
- * engine already holds, sized by cluster count, so capturing them costs
- * neither a corpus pass nor progress reporting.
  * @param options - See {@link ClassifyPageTemplatesOptions}.
  * @returns See {@link PageTemplateClassification}.
  * @example
@@ -49,36 +46,32 @@ export async function classifyPageTemplates(
 
 	onProgress?.({ phase: 'collecting-stylesheets' });
 	const stylesheetsByUrl = await collectPageStylesheetUrls(archive);
-	const { factory, getYieldedUrls } = createPageClusterFactory(pages, stylesheetsByUrl);
-
-	const clusterReasonsByTemplateKey = new Map<string, TemplateClusterReason>();
-	const clusterKeys = await resolvePageClusterKeys(factory, {
-		...(onProgress ? { onProgress } : {}),
-		onClusterReason: (clusterKey, reason) => {
-			clusterReasonsByTemplateKey.set(clusterKey, reason);
-		},
+	onProgress?.({ phase: 'listing-html-snapshots' });
+	const pageIdsWithHtml = await collectPageIdsWithHtml(archive);
+	const { factory, urls } = createPageClusterFactory({
+		pages,
+		stylesheetsByUrl,
+		pageIdsWithHtml,
 	});
-	// Safe only after `resolvePageClusterKeys` has resolved — see
-	// `createPageClusterFactory`'s JSDoc for why.
-	const yieldedUrls = getYieldedUrls();
 
-	if (clusterKeys.length !== yieldedUrls.length) {
+	const { keys, reasons } = await resolvePageClusterKeys(
+		factory,
+		onProgress ? { onProgress } : {},
+	);
+	if (keys.length !== urls.length) {
 		// Would silently mis-map template keys to the wrong URLs if allowed
-		// through — see createPageClusterFactory's JSDoc for why this should
-		// be structurally impossible, but a loud failure here is far
-		// preferable to a quiet mis-assignment. No equivalent check exists for
-		// `clusterReasonsByTemplateKey` — see `PageTemplateClassification`'s
-		// own JSDoc for why that map is a best-effort side channel, not a
-		// per-page guarantee.
+		// through; the driver returns one key per page read, so this guards a
+		// broken invariant loudly rather than assigning quietly.
 		throw new Error(
-			`classifyPageTemplates: resolvePageClusterKeys returned ${clusterKeys.length} keys for ${yieldedUrls.length} yielded pages.`,
+			`classifyPageTemplates: resolvePageClusterKeys returned ${keys.length} keys for ${urls.length} pages.`,
 		);
 	}
 
 	const templateKeysByUrl = new Map<string, string>();
-	for (const [index, url] of yieldedUrls.entries()) {
-		templateKeysByUrl.set(url, clusterKeys[index]!);
+	for (const [index, url] of urls.entries()) {
+		templateKeysByUrl.set(url, keys[index]!);
 	}
+	const clusterReasonsByTemplateKey: ReadonlyMap<string, TemplateClusterReason> = reasons;
 
 	return { templateKeysByUrl, clusterReasonsByTemplateKey };
 }

@@ -1,10 +1,10 @@
 import type {
+	GoldenPage,
 	ModuleRenderer,
 	SyntheticSection as Section,
 	SyntheticSiteContext as Context,
 	SyntheticSiteOptions,
 } from './types.js';
-import type { PageClusterSignals } from '../page-cluster/resolve-page-cluster-keys.js';
 
 import { createSeededRandom } from './create-seeded-random.js';
 
@@ -18,7 +18,7 @@ const MAIN_CSS = `https://${HOST}/assets/main.css`;
  * Builds a deterministic multi-template site for the golden test of the
  * template classifier. Real crawls cannot be committed, and the bundled
  * HTML fixtures are unrelated single pages that never form clusters, so
- * this generator is what makes the golden exercise the engine's
+ * this generator is what makes the golden exercise the classifier's
  * cross-page logic. The sections are chosen to reach every stage:
  *
  * - several stylesheet blocks, a path block (no stylesheets) and one-off
@@ -43,12 +43,12 @@ const MAIN_CSS = `https://${HOST}/assets/main.css`;
  * const pages = buildSyntheticSite({ seed: 1, scale: 1 });
  * ```
  */
-export function buildSyntheticSite(options: SyntheticSiteOptions): PageClusterSignals[] {
+export function buildSyntheticSite(options: SyntheticSiteOptions): GoldenPage[] {
 	const random = createSeededRandom(options.seed);
 	let counter = 0;
 	const context: Context = { random, next: () => counter++ };
 
-	const pages: PageClusterSignals[] = [];
+	const pages: GoldenPage[] = [];
 	for (const section of SECTIONS) {
 		const count = section.scales ? section.baseCount * options.scale : section.baseCount;
 		for (let index = 0; index < count; index++) {
@@ -235,7 +235,7 @@ function categoryBody(context: Context): string {
  * @param index - Position in the section.
  * @returns The page's signals.
  */
-function blogPage(context: Context, index: number): PageClusterSignals {
+function blogPage(context: Context, index: number): GoldenPage {
 	const { random } = context;
 	const id = context.next();
 	const entries = repeat(
@@ -420,7 +420,7 @@ function landingBody(context: Context): string {
  * @param body - Page body.
  * @returns A one-off page with a stylesheet no other page loads.
  */
-function oneOffPage(name: string, body: string): PageClusterSignals {
+function oneOffPage(name: string, body: string): GoldenPage {
 	return {
 		paths: name === '' ? [] : [name],
 		stylesheetHrefs: name === '' ? [] : [MAIN_CSS, `https://${HOST}/assets/${name}.css`],
@@ -441,7 +441,7 @@ function sectionPage(
 	index: number,
 	stylesheet: string,
 	html: string,
-): PageClusterSignals {
+): GoldenPage {
 	return {
 		paths: [section, `page-${index}`],
 		stylesheetHrefs: [MAIN_CSS, `https://${HOST}/assets/${stylesheet}.css`],

@@ -10,7 +10,7 @@
  * stylesheet) and restricting to first-party hosts before hashing what's
  * left — that filtered result is what `distinctiveStylesheetUrls` reports
  * (via `ClusterReason.blocking[].reason.distinctiveStylesheetHrefs`, built
- * by the engine's `build-cluster-reason.ts`). This
+ * by the classifier in `@nitpicker/core`). This
  * function instead computes a **raw intersection**: a stylesheet loaded by
  * every page in the cluster *and* by most other pages on the site (e.g. a
  * shared `common.css`) still shows up as "common to this cluster", which is

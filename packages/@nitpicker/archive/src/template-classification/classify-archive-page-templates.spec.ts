@@ -124,9 +124,10 @@ describe('classifyArchivePageTemplates', () => {
 		expect(events[0]).toEqual({ phase: 'loading-pages-start' });
 		expect(events[1]).toEqual({ phase: 'loading-pages', done: 3, total: 3 });
 		expect(events[2]).toEqual({ phase: 'collecting-stylesheets' });
+		expect(events[3]).toEqual({ phase: 'listing-html-snapshots' });
 		expect(events.at(-1)).toEqual({ phase: 'writing-results', templateCount: 2 });
-		// Clustering events sit between the stylesheet step and the write.
-		expect(events.slice(3, -1).length).toBeGreaterThan(0);
+		// Clustering events sit between listing the HTML and the write.
+		expect(events.slice(4, -1).length).toBeGreaterThan(0);
 	});
 
 	it('再実行しても同じテンプレートには同じラベルが付き続ける', async () => {
