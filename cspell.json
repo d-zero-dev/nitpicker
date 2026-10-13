@@ -21,7 +21,9 @@
 		"**/tests/fixtures/*.json",
 		// Template-classification golden records: structural tokens and hashes
 		// derived from the fixtures above
-		"packages/@nitpicker/archive/src/template-classification/golden/__golden__/**"
+		"packages/@nitpicker/archive/src/template-classification/golden/__golden__/**",
+		// htmlparser2's events on those fixtures, keyed by their file names
+		"packages/@nitpicker/core/crates/nitpicker_html_parser/tests/htmlparser2-fixture-events.tsv"
 	],
 	"words": [
 		// Rust: crate names, std methods, code points in the template classifier (#426)
@@ -31,6 +33,7 @@
 		"interner",
 		"rfind",
 		"rustc",
+		"splitn",
 		// Misra-Gries algorithm (DedupeCapTracker, issue #208)
 		"Misra",
 		"Gries",
@@ -126,8 +129,6 @@
 		"Murtagh",
 		"retags",
 		"Vitter",
-		// htmlparser2 Parser callback
-		"oncomment",
 		// WordPress theme whose generated class names page-cluster treats as noise
 		"Divi",
 		// page-cluster synthetic fixture CSS class abbreviations (global nav / footer nav)
