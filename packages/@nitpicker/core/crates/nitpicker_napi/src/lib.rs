@@ -6,7 +6,6 @@
 //! a thrown `Error` instead of aborting the whole Node process.
 
 mod template_classification;
-mod template_stage_a;
 
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;

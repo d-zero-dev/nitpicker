@@ -28,10 +28,6 @@
 			"import": "./lib/create-template-classification-run.js",
 			"types": "./lib/create-template-classification-run.d.ts"
 		},
-		"./create-template-stage-a-run": {
-			"import": "./lib/create-template-stage-a-run.js",
-			"types": "./lib/create-template-stage-a-run.d.ts"
-		},
 		"./template-corpus-inline-threshold": {
 			"import": "./lib/template-corpus-inline-threshold.js",
 			"types": "./lib/template-corpus-inline-threshold.d.ts"
