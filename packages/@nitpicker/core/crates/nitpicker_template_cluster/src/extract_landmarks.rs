@@ -32,19 +32,6 @@ impl LandmarkType {
 		Self::Form,
 		Self::Search,
 	];
-
-	/// The name the type has in a cluster reason (`header`, …).
-	#[must_use]
-	pub fn name(self) -> &'static str {
-		match self {
-			Self::Header => "header",
-			Self::Footer => "footer",
-			Self::Nav => "nav",
-			Self::Aside => "aside",
-			Self::Form => "form",
-			Self::Search => "search",
-		}
-	}
 }
 
 /// Matching type, including `main`, which is content: it is found so that a

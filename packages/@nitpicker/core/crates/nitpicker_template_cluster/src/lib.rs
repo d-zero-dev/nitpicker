@@ -35,7 +35,6 @@ mod jaccard;
 mod js_string;
 mod local_chrome;
 mod page;
-mod parity_probe;
 mod parse_class_list;
 mod run;
 mod seeded_random;
@@ -47,7 +46,6 @@ mod vocabulary;
 
 pub use content_root::ContentRoot;
 pub use extract_landmarks::LandmarkType;
-pub use parity_probe::parity_probe;
 pub use run::{
 	BLOCK_SAMPLE_SIZE, Context, Mode, Output, PageInput, Progress, Run, RunError, Unit, UnitMember,
 };

@@ -7,8 +7,8 @@
 // Regenerate only together with a deliberate change of the decoding the
 // template classifier reproduces: the stored template keys depend on how class
 // names with entities decode, so the table is pinned data, not a dependency.
-// `entities` is resolved from the repository's `node_modules`; the version it
-// was generated from is recorded in the output.
+// `entities` is resolved from `node_modules` and must be the pinned version
+// below (the script checks); the version is recorded in the output.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -21,6 +21,16 @@ const require = createRequire(path.join(packageDir, 'package.json'));
 const decodeEntry = require.resolve('entities/decode');
 const entitiesPackageJson = path.resolve(path.dirname(decodeEntry), '..', 'package.json');
 const { version } = JSON.parse(readFileSync(entitiesPackageJson, 'utf8'));
+// The version htmlparser2 12.0.0 decoded with, whose output the stored keys
+// reproduce. Nothing in the repository depends on `entities` for this, so
+// whichever copy happens to resolve may be another one.
+const PINNED_VERSION = '8.0.0';
+if (version !== PINNED_VERSION) {
+	console.error(
+		`entities@${version} resolved; the table must come from entities@${PINNED_VERSION}. Make that version resolvable from packages/@nitpicker/core for the run, then undo it.`,
+	);
+	process.exit(1);
+}
 const { htmlDecodeTree } = await import(decodeEntry);
 
 const VALUES_PER_LINE = 16;

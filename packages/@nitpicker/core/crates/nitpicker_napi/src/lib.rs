@@ -5,9 +5,6 @@
 //! Every exported function uses `catch_unwind`, so a Rust panic reaches JS as
 //! a thrown `Error` instead of aborting the whole Node process.
 
-// Its `#[napi]` functions are reached only through the generated
-// registration, which a `cargo test` build does not see.
-#[cfg_attr(test, allow(dead_code))]
 mod template_stage_a;
 
 use napi::bindgen_prelude::Buffer;

@@ -415,25 +415,6 @@ impl TemplateStageARun {
 	}
 }
 
-/// The intermediate results of one page as JSON, for the parity tests
-/// against the JavaScript implementation.
-#[napi]
-#[must_use]
-// napi passes arguments by value.
-#[allow(clippy::needless_pass_by_value)]
-pub fn template_stage_a_parity_probe(
-	html: String,
-	content_root: Option<ContentRootInput>,
-) -> String {
-	let hint = content_root.map(|root| ContentRoot {
-		tag_name: root.tag_name,
-		id: root.id,
-		role: root.role,
-		class_list: root.class_list.unwrap_or_default(),
-	});
-	nitpicker_template_cluster::parity_probe(&html, hint.as_ref())
-}
-
 fn to_js_progress(progress: Progress) -> StageAProgress {
 	match progress {
 		Progress::BlockComplete {

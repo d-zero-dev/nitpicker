@@ -7,8 +7,6 @@
 export interface NativeBinding {
 	/** See `compute-body-hash.ts`. */
 	computeBodyHash(html: Uint8Array): Buffer;
-	/** See `template-stage-a-parity-probe.ts`. */
-	templateStageAParityProbe(html: string, contentRoot?: ContentRootHint): string;
 	/** See `create-template-stage-a-run.ts`. */
 	TemplateStageARun: new (
 		blockKeys: readonly string[],

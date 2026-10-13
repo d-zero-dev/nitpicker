@@ -28,10 +28,6 @@
 			"import": "./lib/create-template-stage-a-run.js",
 			"types": "./lib/create-template-stage-a-run.d.ts"
 		},
-		"./template-stage-a-parity-probe": {
-			"import": "./lib/template-stage-a-parity-probe.js",
-			"types": "./lib/template-stage-a-parity-probe.d.ts"
-		},
 		"./types": {
 			"import": "./lib/types.js",
 			"types": "./lib/types.d.ts"
