@@ -1,9 +1,6 @@
-import type {
-	ExtractLandmarksResult,
-	LandmarkInstance,
-	LandmarkType,
-} from './extract-landmarks.js';
+import type { ExtractLandmarksResult, LandmarkInstance } from './extract-landmarks.js';
 import type { CrossBlockUnit } from './merge-cross-block-clusters.js';
+import type { LandmarkType } from './types.js';
 
 import { describe, expect, test } from 'vitest';
 

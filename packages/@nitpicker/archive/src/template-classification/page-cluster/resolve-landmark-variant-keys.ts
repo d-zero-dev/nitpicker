@@ -1,6 +1,5 @@
-import type { LandmarkType } from './extract-landmarks.js';
 import type { ResolveStructuralClusterKeysOptions } from './resolve-structural-cluster-keys.js';
-import type { TokenizeOptions } from './types.js';
+import type { LandmarkType, TokenizeOptions } from './types.js';
 
 import { extractLandmarks } from './extract-landmarks.js';
 import { computePerPageLandmarkInstances } from './per-page-landmark-signatures.js';

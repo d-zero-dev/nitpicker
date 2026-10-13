@@ -10,8 +10,7 @@ import { resolvePageClusterKeys } from '../page-cluster/resolve-page-cluster-key
 /**
  * Classifies a golden corpus the way `classifyPageTemplates` does in
  * production — with an `onProgress` callback, which is what the CLI always
- * passes and which selects the progress-emitting small-corpus driver — and
- * returns the result in its committed form. The reason strings come from
+ * passes — and returns the result in its committed form. The reason strings come from
  * the serializer `replacePageTemplates` stores with, so the golden pins the
  * persisted text, floats included.
  *

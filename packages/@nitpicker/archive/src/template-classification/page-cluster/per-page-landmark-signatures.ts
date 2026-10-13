@@ -1,9 +1,5 @@
-import type {
-	ExtractLandmarksResult,
-	LandmarkPosition,
-	LandmarkType,
-} from './extract-landmarks.js';
-import type { TokenizeOptions } from './types.js';
+import type { ExtractLandmarksResult, LandmarkPosition } from './extract-landmarks.js';
+import type { LandmarkInstanceTokens, LandmarkType, TokenizeOptions } from './types.js';
 
 import { canonicalizeTokenSet } from './canonicalize-token-set.js';
 import { tokenize } from './tokenize.js';
@@ -37,9 +33,7 @@ export const ALL_LANDMARK_TYPES: readonly LandmarkType[] = [
  * plays no part in `tokens`/`signature` computation or in the corpus-
  * frequency logic that consumes this type.
  */
-export type PerPageLandmarkInstance = {
-	readonly type: LandmarkType;
-	readonly tokens: ReadonlySet<string>;
+export type PerPageLandmarkInstance = LandmarkInstanceTokens & {
 	readonly signature: string;
 	readonly position: LandmarkPosition;
 };

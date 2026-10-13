@@ -33,7 +33,7 @@ function listSourceFiles(dir: string): string[] {
 }
 
 describe('page-cluster エンジンの境界', () => {
-	it('エンジンはディレクトリ内の相対 import と htmlparser2・@d-zero/shared・node 組み込み・vitest 以外を import しない', () => {
+	it('エンジンはディレクトリ内の相対 import と @nitpicker/core・htmlparser2・@d-zero/shared・node 組み込み・vitest 以外を import しない', () => {
 		const specifiers = listSourceFiles(engineDir).flatMap((filePath) =>
 			listImportSpecifiers(filePath),
 		);
@@ -46,6 +46,8 @@ describe('page-cluster エンジンの境界', () => {
 		).toEqual([
 			'@d-zero/shared/hash',
 			'@d-zero/shared/sort/alphabetical',
+			'@nitpicker/core/create-template-stage-a-run',
+			'@nitpicker/core/types',
 			'htmlparser2',
 			'node:fs',
 			'node:path',
@@ -75,6 +77,7 @@ describe('page-cluster エンジンの境界', () => {
 			'template-classification/golden/classify-golden-corpus.ts',
 			'template-classification/golden/template-classification-golden.spec.ts',
 			'template-classification/golden/types.ts',
+			'template-classification/native-stage-a-parity.spec.ts',
 		]);
 	});
 

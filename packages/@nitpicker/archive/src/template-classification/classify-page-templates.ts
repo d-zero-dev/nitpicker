@@ -19,21 +19,20 @@ import { resolvePageClusterKeys } from './page-cluster/resolve-page-cluster-keys
  * a `--retry-failed` run that replaces a failed page's HTML without changing
  * the page count would be served the previous classification. A crash during
  * classification leaves the crawl's stub directory in place, and resuming it
- * re-runs this step from scratch; the upstream library has no mid-computation
+ * re-runs this step from scratch; the engine has no mid-computation
  * checkpoint to resume from either.
  *
- * Internally: the external library's `resolvePageClusterKeys` returns a
- * `clusterKey` per page; this function's public naming is `templateKey`,
- * to avoid colliding with nitpicker's unrelated pre-existing "isolated
- * cluster" concept (`@nitpicker/query`'s `compute-isolated-clusters.ts`,
+ * Internally: the engine's `resolvePageClusterKeys` returns a `clusterKey`
+ * per page; this function's public naming is `templateKey`, to avoid
+ * colliding with nitpicker's unrelated pre-existing "isolated cluster"
+ * concept (`@nitpicker/query`'s `compute-isolated-clusters.ts`,
  * link-reachability graph components — a completely different kind of
  * grouping from DOM-structure similarity).
  *
  * `onClusterReason` is always passed to `resolvePageClusterKeys` (not made
- * conditional the way `onProgress` is) — requesting cluster reasons does not
- * force small corpora off the progress-emitting path (see that option's own
- * JSDoc in `./page-cluster/resolve-page-cluster-keys.ts`), so there is no
- * responsiveness cost to always capturing them.
+ * conditional the way `onProgress` is): reasons are built from state the
+ * engine already holds, sized by cluster count, so capturing them costs
+ * neither a corpus pass nor progress reporting.
  * @param options - See {@link ClassifyPageTemplatesOptions}.
  * @returns See {@link PageTemplateClassification}.
  * @example

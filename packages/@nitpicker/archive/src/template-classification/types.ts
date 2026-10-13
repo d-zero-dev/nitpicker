@@ -61,9 +61,7 @@ export interface ClassifyPageTemplatesOptions {
 	 * Progress callback forwarded to the page-cluster engine's
 	 * `resolvePageClusterKeys`, so long-running classification on large
 	 * archives isn't silently unresponsive. Independent of cluster-reason
-	 * capture — `resolvePageClusterKeys` composes `onProgress` and
-	 * `onClusterReason` without either one demoting the corpus off its
-	 * progress-emitting path (see `classifyPageTemplates`'s own JSDoc).
+	 * capture: the engine reports progress the same way with or without it.
 	 */
 	onProgress?: (event: TemplateClassificationProgress) => void;
 }

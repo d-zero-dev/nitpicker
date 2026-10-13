@@ -1,36 +1,11 @@
+import type { LandmarkType } from './types.js';
+
 import { excise } from './excise.js';
 import {
 	findMatchingElements,
 	type MatchingElement,
 } from './find-shallowest-elements.js';
 import { buildLineColumnIndex, offsetToLineColumn } from './offset-to-line-column.js';
-
-/**
- * The six structural regions this module knows how to carve out of a page.
- * Chosen to match both the HTML5 sectioning-element vocabulary and the
- * corresponding ARIA landmark roles, since real sites use either or both
- * (confirmed on two real crawl archives, ~9,200 pages combined: `<header>`/
- * `<footer>`/`<nav>` present on 99%+ of pages; ARIA roles present on ~53% of
- * one of the two sites, layered on top of the tags rather than replacing
- * them).
- *
- * `form` is matched only via `role="form"` (not bare `<form>` tags, which
- * have no implicit landmark role under HTML-AAM unless given an accessible
- * name). `search` is matched via both the `<search>` element (WHATWG
- * landmark shorthand) and `role="search"`.
- *
- * `main` is deliberately not a member of this union even though
- * {@link ./extract-landmarks.js | extractLandmarks} reports it: this type is
- * also the parameter type of `resolveLandmarkVariantKeys` and the vocabulary
- * that chrome discovery (`computePerPageLandmarkInstances`'s
- * `ALL_LANDMARK_TYPES`) iterates over. Admitting `'main'` here would let
- * `resolveLandmarkVariantKeys(pages, 'main')` type-check while silently
- * returning nothing (chrome discovery never looks at `main` instances) —
- * exactly the kind of type-level lie this module avoids elsewhere. `main` is
- * content, not chrome: it never participates in frequency-based chrome
- * discovery, only in position reporting.
- */
-export type LandmarkType = 'header' | 'footer' | 'nav' | 'aside' | 'form' | 'search';
 
 /**
  * `extractLandmarks`'s internal scanning vocabulary: every public

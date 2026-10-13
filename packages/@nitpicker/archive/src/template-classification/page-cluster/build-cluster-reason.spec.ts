@@ -1,6 +1,6 @@
 import type { BlockingReason } from './derive-blocking-reason.js';
-import type { LandmarkType } from './extract-landmarks.js';
 import type { PerPageLandmarkInstance } from './per-page-landmark-signatures.js';
+import type { LandmarkType } from './types.js';
 
 import { describe, expect, test } from 'vitest';
 

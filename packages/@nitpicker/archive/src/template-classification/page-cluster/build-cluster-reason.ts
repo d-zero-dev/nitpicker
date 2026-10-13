@@ -1,6 +1,5 @@
 import type { BlockingReason } from './derive-blocking-reason.js';
-import type { LandmarkType } from './extract-landmarks.js';
-import type { PerPageLandmarkInstance } from './per-page-landmark-signatures.js';
+import type { LandmarkInstanceTokens, LandmarkType } from './types.js';
 
 import {
 	DEFAULT_CHROME_OVERLAP_THRESHOLD,
@@ -118,7 +117,7 @@ export type ClusterReason = {
  */
 export function buildClusterReason(input: {
 	readonly tokenSets: readonly ReadonlySet<string>[];
-	readonly landmarkInstances: readonly (readonly PerPageLandmarkInstance[])[];
+	readonly landmarkInstances: readonly (readonly LandmarkInstanceTokens[])[];
 	readonly blocking: readonly {
 		readonly blockKey: string;
 		readonly reason: BlockingReason;

@@ -1,4 +1,21 @@
 /**
+ * The page regions treated as chrome: HTML5 sectioning elements and their
+ * ARIA landmark roles (`<header>` / `banner`, `<footer>` / `contentinfo`,
+ * `<nav>` / `navigation`, `<aside>` / `complementary`, `role="form"`,
+ * `<search>` / `search`). `main` is content and never one of them.
+ */
+export type LandmarkType = 'header' | 'footer' | 'nav' | 'aside' | 'form' | 'search';
+
+/**
+ * One landmark instance of a page as Stage B and cluster reasons read it:
+ * its type and the token set of its markup tokenized on its own.
+ */
+export interface LandmarkInstanceTokens {
+	readonly type: LandmarkType;
+	readonly tokens: ReadonlySet<string>;
+}
+
+/**
  * Identity of a page's content-root element — the element whose subtree
  * holds the page-specific content and under which
  * {@link ./cap-content-depth.js | capContentDepth} counts nesting depth.

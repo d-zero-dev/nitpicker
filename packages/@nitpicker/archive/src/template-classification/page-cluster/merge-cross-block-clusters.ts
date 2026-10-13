@@ -1,5 +1,5 @@
-import type { PerPageLandmarkInstance } from './per-page-landmark-signatures.js';
 import type { StageALineageEntry } from './stage-a-lineage.js';
+import type { LandmarkInstanceTokens } from './types.js';
 
 import { assignContainedClusters } from './assign-contained-clusters.js';
 import { collapseAnonymousDivs } from './collapse-anonymous-divs.js';
@@ -19,16 +19,13 @@ import { initialLineage } from './stage-a-lineage.js';
 /**
  * One cluster (post-Stage-A) entering cross-block comparison.
  *
- * ## Why `memberLandmarkInstances` rather than raw `ExtractLandmarksResult[]`
+ * ## Why `memberLandmarkInstances` rather than the landmarks' markup
  *
- * Stage B never reads the full `ExtractLandmarksResult` — it only needs each
- * member page's landmark instances (per-type, per-signature, per-token-set)
- * for `shellQuorum`'s per-token page-frequency histogram. Callers pre-run
- * {@link ./per-page-landmark-signatures.js | computePerPageLandmarkInstances}
- * once at unit creation and hand Stage B the compact instance list instead
- * of the ~10× larger raw landmark HTML strings. This is the single largest
- * memory reduction the streaming path relies on: the difference between a
- * 176k-page corpus fitting in an 8 GB heap and exhausting a 12 GB heap.
+ * Stage B only needs each member page's landmark instances as token sets
+ * (per type) for `shellQuorum`'s per-token page-frequency histogram, so
+ * Stage A hands over each instance already tokenized instead of its markup,
+ * about ten times smaller. That difference is what lets the streaming path
+ * hold the units of a 176k-page corpus at all.
  */
 export type CrossBlockUnit = {
 	readonly key: string;
@@ -43,7 +40,7 @@ export type CrossBlockUnit = {
 	 */
 	readonly blockKey?: string;
 	readonly memberTokenSets: readonly ReadonlySet<string>[];
-	readonly memberLandmarkInstances: readonly (readonly PerPageLandmarkInstance[])[];
+	readonly memberLandmarkInstances: readonly (readonly LandmarkInstanceTokens[])[];
 	/**
 	 * Original corpus index of each member, parallel to `memberTokenSets` —
 	 * lets a caller that pools `finalGroupsByRoot`'s output back into
@@ -469,7 +466,7 @@ function hasDiscriminatingL2Signatures(
  */
 export type FinalGroupMembers = {
 	readonly tokenSets: readonly ReadonlySet<string>[];
-	readonly landmarkInstances: readonly (readonly PerPageLandmarkInstance[])[];
+	readonly landmarkInstances: readonly (readonly LandmarkInstanceTokens[])[];
 	/**
 	 * Parallel to `tokenSets` — see {@link CrossBlockUnit}'s own
 	 * `memberPageIndices`. An entry is `-1` for any member whose originating
@@ -556,7 +553,7 @@ export function mergeCrossBlockClusters(
 	// Mutable group state: rootKey → combined member arrays
 	type GroupMembers = {
 		tokenSets: ReadonlySet<string>[];
-		landmarkInstances: (readonly PerPageLandmarkInstance[])[];
+		landmarkInstances: (readonly LandmarkInstanceTokens[])[];
 		pageIndices: number[];
 	};
 
