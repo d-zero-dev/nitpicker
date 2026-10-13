@@ -64,6 +64,12 @@ pub enum Progress {
 		/// To assign in all.
 		pages_to_assign: usize,
 	},
+	/// Stage B began merging Stage A's clusters across blocks (it reports no
+	/// further progress of its own).
+	StageBStart {
+		/// Stage A's clusters entering it.
+		unit_count: usize,
+	},
 }
 
 /// Why a run stopped.
@@ -85,7 +91,7 @@ pub struct Context<'a> {
 }
 
 impl Context<'_> {
-	fn check(&self) -> Result<(), RunError> {
+	pub(crate) fn check(&self) -> Result<(), RunError> {
 		if self.cancelled.load(Ordering::Relaxed) {
 			Err(RunError::Cancelled)
 		} else {
@@ -168,10 +174,9 @@ enum Phase {
 /// not depend on page content — so the first read prepares only the pages
 /// that stay sampled.
 ///
-/// The TypeScript the stored samples came from (removed in #426; the PRNG
-/// and seed hash live on in `@nitpicker/archive`'s `reservoir-sample.ts`),
-/// per page in order — unlike `reservoirSample`, it keeps the slot order,
-/// which decides cluster labels:
+/// The TypeScript the stored samples came from (removed in #426), per page
+/// in order — unlike `reservoir_sample_positions`, which Stage B uses, it keeps the
+/// slot order, which decides cluster labels:
 ///
 /// ```text
 /// if (bucket.pages.length < size) bucket.pages.push(page);
@@ -969,8 +974,8 @@ mod tests {
 	#[test]
 	fn samples_each_block_by_algorithm_r_seeded_by_its_key() {
 		// Pinned from the TypeScript streaming sampler in `sample_blocks`' doc.
-		// As sets they are also what `@nitpicker/archive`'s `reservoirSample`
-		// (same PRNG and seed hash) picks from each block's pages.
+		// As sets they are also what `reservoir_sample_positions` (same PRNG
+		// and seed hash, sorted) picks from each block's pages.
 		assert_eq!(
 			sample_blocks(
 				&["path:a".to_owned(), "css:b".to_owned()],
@@ -978,6 +983,11 @@ mod tests {
 				3
 			),
 			vec![vec![9, 7, 6], vec![1, 4, 8]]
+		);
+		// Pages 6, 7 and 9 sit at positions 4, 5 and 6 of block a's nine.
+		assert_eq!(
+			crate::reservoir_sample::reservoir_sample_positions(9, 3, "path:a"),
+			vec![4, 5, 6]
 		);
 	}
 

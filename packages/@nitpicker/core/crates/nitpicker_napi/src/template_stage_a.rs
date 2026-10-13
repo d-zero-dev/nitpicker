@@ -487,5 +487,14 @@ fn to_js_progress(progress: Progress) -> StageAProgress {
 			pages_assigned: Some(to_u32(pages_assigned)),
 			pages_to_assign: Some(to_u32(pages_to_assign)),
 		},
+		// Only a whole classification runs Stage B; a Stage A run never sends it.
+		Progress::StageBStart { .. } => StageAProgress {
+			phase: "stage-b-start".to_owned(),
+			block_key: None,
+			blocks_processed: None,
+			total_blocks: None,
+			pages_assigned: None,
+			pages_to_assign: None,
+		},
 	}
 }

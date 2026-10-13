@@ -61,16 +61,16 @@ mod tests {
 
 	#[test]
 	fn hashes_an_astral_character_at_both_of_its_utf16_indices() {
-		// `fnv1a32` in `@nitpicker/archive`'s `reservoir-sample.ts` (a loop
-		// over `codePointAt(i)`) gives these.
+		// The TypeScript `fnv1a32` the stored samples were seeded with (a loop
+		// over `codePointAt(i)`, removed in #426) gave these.
 		assert_eq!(fnv1a32("path:\u{1F600}"), 793_062_020);
 		assert_eq!(fnv1a32("path:\u{1F600}x"), 1_709_353_652);
 	}
 
 	#[test]
 	fn reproduces_the_javascript_sequence() {
-		// `mulberry32(1)` in `@nitpicker/archive`'s `reservoir-sample.ts` (and
-		// the golden tests' seeded random) starts 0.6270739405881613,
+		// `mulberry32(1)` in JavaScript (as `@nitpicker/archive`'s golden
+		// tests' seeded random computes it) starts 0.6270739405881613,
 		// 0.002735721180215478.
 		let mut random = SeededRandom { state: 1 };
 		assert_eq!(random.next_f64(), 0.627_073_940_588_161_3);

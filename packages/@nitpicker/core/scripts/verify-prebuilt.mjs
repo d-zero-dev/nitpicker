@@ -1,6 +1,6 @@
 // Loads a built `.node` file directly (no workspace install needed) and checks
 // it against the body-hash golden fixture, then runs one small template
-// classification (Stage A) to its known keys — a smoke check that the export
+// classification to its known keys — a smoke check that the export
 // works in this build, not a substitute for the template golden records.
 // CI runs this on every prebuilt binary — on the platform it targets —
 // before it can be published.
@@ -45,15 +45,26 @@ console.log(`${golden.length} golden cases passed for ${addonPath}`);
 const LIST = '<body><main><ul><li><a>x</a></li><li><a>y</a></li></ul></main></body>';
 const DETAIL =
 	'<body><main><article><h1>t</h1><p>p</p><figure><img></figure></article></main></body>';
-const run = new binding.TemplateStageARun(['path:news'], new Uint32Array(4), false);
+const run = new binding.TemplateClassificationRun();
+run.pushSignals(
+	['1', '2', '3', '4'].map((page) => ({
+		paths: ['news', page],
+		stylesheetHrefs: [],
+		stylesheetHosts: [],
+	})),
+);
+await run.block();
 await run.pushPages([LIST, LIST, DETAIL, DETAIL].map((html) => ({ html })));
 await run.finishPages();
-const { keys, keyOfPage } = await run.takeOutput();
-const stageAKeys = Array.from(keyOfPage, (key) => keys[key]).join(' ');
-const expectedStageAKeys =
+const { output } = await run.takeOutput();
+const { keys, keyOfPage } = output;
+const templateKeys = Array.from(keyOfPage, (key) => keys[key]).join(' ');
+const expectedTemplateKeys =
 	'["path:news","cluster:0"] ["path:news","cluster:0"] ["path:news","cluster:1"] ["path:news","cluster:1"]';
-if (stageAKeys !== expectedStageAKeys) {
-	console.error(`MISMATCH Stage A: expected ${expectedStageAKeys}, got ${stageAKeys}`);
+if (templateKeys !== expectedTemplateKeys) {
+	console.error(
+		`MISMATCH template classification: expected ${expectedTemplateKeys}, got ${templateKeys}`,
+	);
 	process.exit(1);
 }
-console.log(`Stage A smoke check passed for ${addonPath}`);
+console.log(`Template classification smoke check passed for ${addonPath}`);
