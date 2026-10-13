@@ -63,4 +63,25 @@ mod tests {
 		assert_eq!(derived[0], vec![100]);
 		assert_eq!(derived[10], vec![1]);
 	}
+
+	#[test]
+	fn keeps_nine_pages_unchanged_even_with_a_token_on_every_page() {
+		let sets: Vec<Vec<u32>> = (0..9).map(|page| vec![1, 100 + page]).collect();
+		assert_eq!(derive_comparison_sets(&sets), sets);
+	}
+
+	#[test]
+	fn removes_tokens_present_on_every_page_from_ten_pages_up() {
+		let sets: Vec<Vec<u32>> = (0..10).map(|page| vec![1, 100 + page]).collect();
+		let derived = derive_comparison_sets(&sets);
+		assert_eq!(derived[0], vec![100]);
+		assert_eq!(derived[9], vec![109]);
+	}
+
+	#[test]
+	fn keeps_the_full_set_when_every_token_is_chrome() {
+		let sets: Vec<Vec<u32>> = vec![vec![1]; 10];
+		let derived = derive_comparison_sets(&sets);
+		assert_eq!(derived[0], vec![1]);
+	}
 }

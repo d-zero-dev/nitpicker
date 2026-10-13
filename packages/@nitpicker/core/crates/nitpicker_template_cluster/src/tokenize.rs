@@ -209,8 +209,8 @@ struct Opaque {
 	r#type: Option<Box<str>>,
 }
 
-/// The state of one replay: the htmlparser2 handler of the JavaScript
-/// tokenizer, building a tree instead of path strings (a wrapper's folding
+/// The state of one replay: an htmlparser2 handler over the recorded
+/// events, building a tree instead of path strings (a wrapper's folding
 /// is only known once it closes, so paths are built top-down at the end).
 struct Replay<'a, 'b, 'c> {
 	html: &'a str,
@@ -553,5 +553,391 @@ mod tests {
 			),
 			None
 		);
+	}
+
+	/// Tokens and class ids of `html` with the classes named in `allowed`
+	/// (when given), plus the ids of `expected_classes` for comparison.
+	fn run(
+		html: &str,
+		allowed: Option<&[&str]>,
+		expected_classes: &[&str],
+	) -> (Vec<String>, Vec<u32>, Vec<u32>) {
+		let vocabulary = Vocabulary::default();
+		let mut ids = Ids::Shared(&vocabulary);
+		let allowed: Option<FxHashSet<u32>> =
+			allowed.map(|names| names.iter().map(|name| ids.class(name)).collect());
+		let expected: Vec<u32> = expected_classes
+			.iter()
+			.map(|name| ids.class(name))
+			.collect();
+		let result = tokenize(html, allowed.as_ref(), &mut ids);
+		let tokens = result
+			.tokens
+			.iter()
+			.map(|id| vocabulary.token(*id).to_string())
+			.collect();
+		(tokens, result.classes, expected)
+	}
+
+	fn strip_shas(tokens: Vec<String>) -> Vec<String> {
+		tokens
+			.into_iter()
+			.map(|token| match token.find("sha=") {
+				Some(start) => format!("{}sha=X{}", &token[..start], &token[start + 4 + 16..]),
+				None => token,
+			})
+			.collect()
+	}
+
+	fn sha_of(token: &str) -> &str {
+		let start = token.find("sha=").expect("token has a sha") + 4;
+		&token[start..start + 16]
+	}
+
+	#[test]
+	fn repeated_identical_cards_produce_one_distinct_path_per_leaf() {
+		assert_eq!(
+			token_strings(
+				"<body><main class=\"product-list\"><div class=\"grid\">\
+				<div class=\"card\"><img src=\"a.jpg\" class=\"thumb\" /><h3>Widget A</h3><p class=\"price\">$10</p></div>\
+				<div class=\"card\"><img src=\"b.jpg\" class=\"thumb\" /><h3>Widget B</h3><p class=\"price\">$20</p></div>\
+				<div class=\"card\"><img src=\"c.jpg\" class=\"thumb\" /><h3>Widget C</h3><p class=\"price\">$30</p></div>\
+				</div></main></body>"
+			),
+			vec![
+				"body>main.product-list>.grid>.card>img.thumb",
+				"body>main.product-list>.grid>.card>h3",
+				"body>main.product-list>.grid>.card>p.price",
+			]
+		);
+	}
+
+	#[test]
+	fn ignores_visible_text_and_handles_mixed_leaf_and_non_leaf_paragraphs() {
+		assert_eq!(
+			token_strings(
+				"<body><article><h1>My Blog Post Title</h1>\
+				<p>Some intro text that should be completely ignored by the tokenizer.</p>\
+				<p>Another paragraph with <a href=\"/x\">a link</a> inside it.</p></article></body>"
+			),
+			vec!["body>article>h1", "body>article>p", "body>article>p>a"]
+		);
+	}
+
+	#[test]
+	fn a_current_state_class_on_one_sibling_does_not_corrupt_the_others() {
+		assert_eq!(
+			token_strings(
+				"<body><header><nav class=\"main-nav\"><ul>\
+				<li><a href=\"/\">Home</a></li>\
+				<li class=\"current\"><a href=\"/about\">About</a></li>\
+				<li><a href=\"/contact\">Contact</a></li>\
+				</ul></nav></header></body>"
+			),
+			vec![
+				"body>header>nav.main-nav>ul>li>a",
+				"body>header>nav.main-nav>ul>li.current>a",
+			]
+		);
+	}
+
+	#[test]
+	fn keeps_input_and_button_type_as_a_structural_signal() {
+		assert_eq!(
+			token_strings(
+				"<body><form><input type=\"text\" name=\"q\" /><input type=\"checkbox\" name=\"agree\" />\
+				<input type=\"radio\" name=\"plan\" /><input type=\"email\" name=\"email\" />\
+				<button type=\"submit\">Send</button></form></body>"
+			),
+			vec![
+				"body>form>input[type=text]",
+				"body>form>input[type=checkbox]",
+				"body>form>input[type=radio]",
+				"body>form>input[type=email]",
+				"body>form>button[type=submit]",
+			]
+		);
+	}
+
+	#[test]
+	fn names_each_svg_as_one_opaque_leaf_even_when_svgs_nest() {
+		let raw = token_strings(
+			"<body><div class=\"icons\">\
+			<svg viewBox=\"0 0 24 24\"><path d=\"M0 0h24v24H0z\" /></svg>\
+			<svg viewBox=\"0 0 24 24\" role=\"img\"><circle cx=\"12\" cy=\"12\" r=\"10\" /></svg>\
+			<svg><svg><rect width=\"10\" height=\"10\" /></svg></svg>\
+			</div></body>",
+		);
+		assert_eq!(raw.len(), 3);
+		assert_ne!(sha_of(&raw[0]), sha_of(&raw[2]));
+		assert_eq!(
+			strip_shas(raw),
+			vec![
+				"body>.icons>svg[sha=X]",
+				"body>.icons>svg[role=img,sha=X]",
+				"body>.icons>svg[sha=X]",
+			]
+		);
+	}
+
+	#[test]
+	fn keeps_script_type_beside_the_content_hash() {
+		assert_eq!(
+			strip_shas(token_strings(
+				"<body><div class=\"page\">\
+				<script type=\"application/ld+json\">{ \"@type\": \"Product\", \"name\": \"Widget\" }</script>\
+				<script>console.log('tracked');</script></div></body>"
+			)),
+			vec![
+				"body>.page>script[sha=X,type=application/ld+json]",
+				"body>.page>script[sha=X]",
+			]
+		);
+	}
+
+	#[test]
+	fn collapses_wrappers_with_auto_generated_classes_via_folding() {
+		assert_eq!(
+			token_strings(
+				"<body><div class=\"sc-a1b2c3\"><div class=\"css-4d5e6f\"><span class=\"_g7h8i9\">Label</span></div></div></body>"
+			),
+			vec!["body>span"]
+		);
+	}
+
+	#[test]
+	fn leaves_out_a_body_class_from_every_leaf_path() {
+		assert_eq!(
+			token_strings("<body class=\"law-page\"><header>x</header></body>"),
+			vec!["body>header"]
+		);
+	}
+
+	#[test]
+	fn pages_differing_only_in_body_class_produce_identical_tokens() {
+		let a =
+			token_strings("<body class=\"law-page\"><header>x</header><footer>y</footer></body>");
+		let b = token_strings(
+			"<body class=\"humanities-page\"><header>x</header><footer>y</footer></body>",
+		);
+		assert_eq!(a, vec!["body>header", "body>footer"]);
+		assert_eq!(a, b);
+	}
+
+	#[test]
+	fn folds_fifty_levels_of_bare_wrapper_divs() {
+		let html = format!(
+			"<body>{}<span>x</span>{}</body>",
+			"<div>".repeat(50),
+			"</div>".repeat(50)
+		);
+		assert_eq!(token_strings(&html), vec!["body>span"]);
+	}
+
+	#[test]
+	fn a_thousand_identical_siblings_collapse_to_one_token() {
+		let html = format!("<body><ul>{}</ul></body>", "<li></li>".repeat(1000));
+		assert_eq!(token_strings(&html), vec!["body>ul>li"]);
+	}
+
+	#[test]
+	fn two_hundred_thousand_flat_siblings_do_not_overflow() {
+		let html = format!("<body><ul>{}</ul></body>", "<li></li>".repeat(200_000));
+		assert_eq!(token_strings(&html), vec!["body>ul>li"]);
+	}
+
+	#[test]
+	fn recovers_unclosed_list_items_by_implicit_closing() {
+		assert_eq!(
+			token_strings("<body><ul><li>A<li>B</ul></body>"),
+			vec!["body>ul>li"]
+		);
+	}
+
+	#[test]
+	fn force_closes_a_document_truncated_mid_tag() {
+		assert_eq!(token_strings("<body><div><span>a"), vec!["body>span"]);
+	}
+
+	#[test]
+	fn yields_no_tokens_without_a_body() {
+		assert!(token_strings("<html><head><title>x</title></head></html>").is_empty());
+		assert!(token_strings("").is_empty());
+	}
+
+	#[test]
+	fn an_empty_body_is_itself_a_leaf() {
+		assert_eq!(token_strings("<body></body>"), vec!["body"]);
+	}
+
+	#[test]
+	fn ignores_a_second_top_level_body() {
+		assert_eq!(
+			token_strings("<body><div>1</div></body><body><div>2</div></body>"),
+			vec!["body>div"]
+		);
+	}
+
+	#[test]
+	fn ignores_a_body_tag_nested_in_body_content_but_keeps_its_content() {
+		assert_eq!(
+			token_strings("<body><div><body><span>x</span></body></div></body>"),
+			vec!["body>span"]
+		);
+	}
+
+	#[test]
+	fn ignores_comments_so_a_comment_only_element_is_a_leaf() {
+		assert_eq!(
+			token_strings("<body><div><!-- only comment --></div></body>"),
+			vec!["body>div"]
+		);
+		assert_eq!(
+			token_strings("<body><!-- c --><div>x</div></body>"),
+			vec!["body>div"]
+		);
+	}
+
+	#[test]
+	fn normalizes_uppercase_tags_attributes_and_unquoted_values() {
+		assert_eq!(
+			token_strings("<BODY><DIV CLASS=\"Card\"  ROLE=button><SPAN>x</SPAN></DIV></BODY>"),
+			vec!["body>.Card[role=button]>span"]
+		);
+	}
+
+	#[test]
+	fn ignores_id_data_and_non_role_aria_attributes() {
+		assert_eq!(
+			token_strings(
+				"<body><div id=\"product-12345\" data-testid=\"card-42\" aria-label=\"Product card\" \
+				aria-current=\"page\" class=\"card\"></div></body>"
+			),
+			vec!["body>.card"]
+		);
+	}
+
+	#[test]
+	fn a_childless_element_is_itself_a_leaf() {
+		assert_eq!(
+			token_strings("<body><div class=\"spacer\"></div></body>"),
+			vec!["body>.spacer"]
+		);
+	}
+
+	#[test]
+	fn a_bare_wrapper_with_one_child_is_elided() {
+		assert_eq!(
+			token_strings("<body><div><ul><li></li></ul></div></body>"),
+			vec!["body>ul>li"]
+		);
+	}
+
+	#[test]
+	fn a_bare_wrapper_with_two_children_keeps_its_segment() {
+		assert_eq!(
+			token_strings("<body><div><span></span><span></span></div></body>"),
+			vec!["body>div>span"]
+		);
+	}
+
+	#[test]
+	fn a_classed_wrapper_always_prefixes_its_segment() {
+		assert_eq!(
+			token_strings("<body><div class=\"card\"><ul><li></li></ul></div></body>"),
+			vec!["body>.card>ul>li"]
+		);
+	}
+
+	#[test]
+	fn a_bare_div_becomes_foldable_once_its_only_class_is_noise() {
+		assert_eq!(
+			token_strings("<body><div class=\"sc-bdVaJa\"><p></p></div></body>"),
+			vec!["body>p"]
+		);
+		assert_eq!(
+			token_strings("<body><ul class=\"nav sc-bdVaJa\"></ul></body>"),
+			vec!["body>ul.nav"]
+		);
+	}
+
+	#[test]
+	fn matches_the_documented_examples() {
+		let (tokens, classes, expected) = run(
+			"<body><div class=\"card\"><ul><li>A</li><li>B</li></ul></div></body>",
+			None,
+			&["card"],
+		);
+		assert_eq!(tokens, vec!["body>.card>ul>li"]);
+		assert_eq!(classes, expected);
+
+		let (tokens, classes, expected) = run(
+			"<body><article class=\"outline\"><div class=\"grid\"><p>x</p></div></article></body>",
+			Some(&["grid"]),
+			&["grid"],
+		);
+		assert_eq!(tokens, vec!["body>article>.grid>p"]);
+		assert_eq!(classes, expected);
+	}
+
+	#[test]
+	fn lists_each_kept_class_once_in_first_seen_order_without_body_classes() {
+		let (_, classes, expected) = run(
+			"<body class=\"page-home\"><header class=\"site-header\"><nav class=\"main-nav\"><a>x</a></nav></header>\
+			<main><div class=\"card featured\"><p>a</p></div><div class=\"card\"><p>b</p></div></main></body>",
+			None,
+			&["site-header", "main-nav", "card", "featured"],
+		);
+		assert_eq!(classes, expected);
+	}
+
+	#[test]
+	fn a_class_dropped_by_the_allowed_set_folds_its_div_away() {
+		let html = "<body><div class=\"outline\"><p>x</p></div></body>";
+		let (tokens, _, _) = run(html, None, &[]);
+		assert_eq!(tokens, vec!["body>.outline>p"]);
+		let (tokens, _, _) = run(html, Some(&[]), &[]);
+		assert_eq!(tokens, vec!["body>p"]);
+		let (tokens, _, _) = run(
+			"<body><div class=\"outline\"><p>x</p></div></body>",
+			Some(&["card"]),
+			&[],
+		);
+		assert_eq!(tokens, vec!["body>p"]);
+		// A non-foldable tag keeps its name once its only class is dropped.
+		let (tokens, _, _) = run(
+			"<body><article class=\"outline\"><p>x</p></article></body>",
+			Some(&[]),
+			&[],
+		);
+		assert_eq!(tokens, vec!["body>article>p"]);
+	}
+
+	#[test]
+	fn the_allowed_set_does_not_touch_body_handling() {
+		let (tokens, classes, _) = run("<body class=\"page-home\"><p>x</p></body>", Some(&[]), &[]);
+		assert_eq!(tokens, vec!["body>p"]);
+		assert!(classes.is_empty());
+	}
+
+	#[test]
+	fn excludes_noise_classes_from_the_class_list() {
+		let (_, classes, expected) = run(
+			"<body><div class=\"card sc-bdVaJa\"><p>x</p></div></body>",
+			None,
+			&["card"],
+		);
+		assert_eq!(classes, expected);
+	}
+
+	#[test]
+	fn keeps_every_non_noise_class_when_no_allowed_set_is_given() {
+		let (tokens, classes, expected) = run(
+			"<body><div class=\"outline grid\"><p>x</p></div></body>",
+			None,
+			&["grid", "outline"],
+		);
+		assert_eq!(tokens, vec!["body>.grid.outline>p"]);
+		assert_eq!(classes, expected);
 	}
 }

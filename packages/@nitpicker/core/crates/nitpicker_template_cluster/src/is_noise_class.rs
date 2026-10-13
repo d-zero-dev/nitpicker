@@ -1,8 +1,8 @@
 //! Auto-generated class names that change per build while the template does
 //! not (CSS Modules, styled-components, emotion, bundler content hashes).
 //!
-//! Each check below is one of the JavaScript patterns the classifier was
-//! tuned with, written out by hand because the `regex` crate has no
+//! Each check below is one of the JavaScript regular expressions the stored
+//! keys were computed with, written out by hand because the `regex` crate has no
 //! look-ahead. Every character class in them is ASCII, and without the `u`
 //! flag JavaScript's case-insensitive matching never folds a non-ASCII
 //! character into ASCII, so a byte-level ASCII check is exact.
@@ -132,6 +132,58 @@ mod tests {
 			"\u{17F}c-abcde",
 		] {
 			assert!(!is_noise_class(name), "{name}");
+		}
+	}
+
+	#[test]
+	fn classifies_every_documented_class_name() {
+		let cases = [
+			("_a1b2c3", true),
+			("sc-bdVaJa", true),
+			("css-1x2y3z", true),
+			("chunk-a3f9c1", true),
+			("k3j9zq2a", true),
+			("card", false),
+			("card--active", false),
+			("footer", false),
+			("current", false),
+			// CamelCase words ending in a digit are not generic hashes.
+			("Section1", false),
+			("Banner99", false),
+			// BEM names survive.
+			("card__title--large", false),
+			("nav__list-item--is-current", false),
+			// Bundler content-hash suffix.
+			("s-1a2b3c4d", true),
+			// Tailwind arbitrary values.
+			("w-[137px]", false),
+			// webpack CSS Modules.
+			("Layout_root__f3k9d", true),
+			("Header_title__3xJ9k", true),
+			// A single-underscore hash suffix is a known, accepted gap.
+			("hsForm_9f8e7d6c", false),
+			// Short names after `__` fall below the 5-character floor.
+			("menu__list", false),
+			("grid__col2", false),
+			// Single-underscore variant suffixes are not hashes.
+			("et_pb_gutters3", false),
+			("grid_col12", false),
+			("row_span24", false),
+			("tab_index1a", false),
+			("avatar_size32", false),
+			// Real words that fit a hash pattern's character set.
+			("sc-header", false),
+			("sc-active", false),
+			("sc-container", false),
+			("css-editor", false),
+			("css-toolbar", false),
+			("section-facade", false),
+			("section-decade", false),
+			// A styled-components hash longer than 10 characters.
+			("sc-aB3xQ9zR7kM2", true),
+		];
+		for (name, expected) in cases {
+			assert_eq!(is_noise_class(name), expected, "{name}");
 		}
 	}
 }

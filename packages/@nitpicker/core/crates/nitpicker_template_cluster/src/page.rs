@@ -134,8 +134,8 @@ pub struct Preparation {
 /// and its tokens at every candidate content depth.
 ///
 /// One parse of the landmark-free markup serves every depth: each depth's
-/// cut is replayed as skipped events (see [`tokens_without`]), where the
-/// JavaScript this replaces cut and re-parsed the markup once per depth.
+/// cut is replayed as skipped events (see [`tokens_without`]) instead of
+/// cutting and re-parsing the markup once per depth.
 pub fn prepare_page(
 	html: &str,
 	hint: Option<&ContentRoot>,
@@ -252,4 +252,105 @@ pub fn assignment_tokens(
 		}
 	}
 	sorted_set(&tokens)
+}
+
+#[cfg(test)]
+mod tests {
+	use std::path::{Path, PathBuf};
+
+	use nitpicker_html_parser::parse;
+	use rustc_hash::FxHashSet;
+
+	use crate::collect_deep_spans::collect_deep_spans;
+	use crate::content_root::find_content_root;
+	use crate::detect_content_depth_cap::CANDIDATE_DEPTHS;
+	use crate::excise::excise;
+	use crate::extract_landmarks::extract_landmarks;
+	use crate::skip_ranges::skip_ranges;
+	use crate::tokenize::{ReplayCache, tokenize, tokenize_events};
+	use crate::vocabulary::{Ids, Vocabulary};
+
+	fn html_files(directory: &Path, files: &mut Vec<PathBuf>) {
+		for entry in std::fs::read_dir(directory).unwrap() {
+			let path = entry.unwrap().path();
+			if path.is_dir() {
+				html_files(&path, files);
+			} else if path
+				.extension()
+				.is_some_and(|extension| extension == "html")
+			{
+				files.push(path);
+			}
+		}
+	}
+
+	/// Every fixture whole and cut short at seven points (on char
+	/// boundaries), so unclosed elements and cuts inside tags are covered.
+	fn corpus() -> Vec<(String, String)> {
+		// The fixtures live with the classifier's tests in `@nitpicker/archive`.
+		let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+			.join("../../../archive/src/template-classification/page-cluster/__fixtures__");
+		let mut files = Vec::new();
+		html_files(&fixtures, &mut files);
+		files.sort();
+		let mut corpus = Vec::new();
+		for file in files {
+			let html = std::fs::read_to_string(&file).unwrap();
+			let chars = html.chars().count();
+			for eighth in 1..8 {
+				let cut: String = html.chars().take(chars * eighth / 8).collect();
+				corpus.push((format!("{} ({eighth}/8)", file.display()), cut));
+			}
+			corpus.push((file.display().to_string(), html));
+		}
+		corpus
+	}
+
+	/// Where the replay claims to apply, it must give exactly what parsing
+	/// the cut markup gives — the guarantee `tokens_without` relies on.
+	#[test]
+	fn replays_every_depth_cut_exactly_as_a_reparse_would() {
+		let vocabulary = Vocabulary::default();
+		let mut ids = Ids::Shared(&vocabulary);
+		let no_classes = FxHashSet::default();
+		let (mut replayed, mut reparsed) = (0usize, 0usize);
+		for (name, html) in corpus() {
+			let prepared = extract_landmarks(&html, &parse(&html)).remainder;
+			let document = parse(&prepared);
+			let Some(content) = find_content_root(&prepared, &document, None) else {
+				continue;
+			};
+			let mut cache = ReplayCache::default();
+			for (depth, spans) in collect_deep_spans(&prepared, content, &CANDIDATE_DEPTHS)
+				.iter()
+				.enumerate()
+			{
+				let cut = excise(&prepared, spans);
+				for allowed in [None, Some(&no_classes)] {
+					let replay = skip_ranges(&prepared, &document, spans).and_then(|ranges| {
+						tokenize_events(
+							&prepared, &document, &ranges, allowed, &mut cache, &mut ids,
+						)
+					});
+					let Some(replay) = replay else {
+						reparsed += 1;
+						continue;
+					};
+					replayed += 1;
+					assert_eq!(
+						replay,
+						tokenize(&cut, allowed, &mut ids),
+						"{name} at depth {}",
+						CANDIDATE_DEPTHS[depth]
+					);
+				}
+			}
+		}
+		// The replay is the fast path: it must stay the common one, and enough
+		// cuts must be compared for the equality above to mean something.
+		assert!(
+			replayed > reparsed * 4 && replayed >= 1000,
+			"replayed {replayed}, reparsed {reparsed}"
+		);
+	}
 }

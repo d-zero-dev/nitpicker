@@ -50,4 +50,64 @@ mod tests {
 	fn matches_the_javascript_digest_of_an_empty_string() {
 		assert_eq!(hash_content(""), "e3b0c44298fc1c14");
 	}
+
+	#[test]
+	fn returns_a_sixteen_character_lowercase_hex_digest() {
+		let digest = hash_content("console.log(\"hi\")");
+		assert_eq!(digest.len(), 16);
+		assert!(
+			digest
+				.chars()
+				.all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+		);
+	}
+
+	#[test]
+	fn is_deterministic_for_identical_content() {
+		assert_eq!(
+			hash_content(".card { color: red; }"),
+			hash_content(".card { color: red; }")
+		);
+	}
+
+	#[test]
+	fn does_not_unify_the_absence_of_whitespace_with_a_run_of_it() {
+		assert_ne!(
+			hash_content(".card{color:red}"),
+			hash_content(".card{\n  color:   red\n}")
+		);
+	}
+
+	#[test]
+	fn ignores_indentation_and_line_breaks_alone() {
+		assert_eq!(
+			hash_content("function f() {\n  return 1;\n}"),
+			hash_content("function f() { return 1; }")
+		);
+	}
+
+	#[test]
+	fn differs_for_different_content() {
+		assert_ne!(hash_content("a"), hash_content("b"));
+	}
+
+	#[test]
+	fn trims_leading_and_trailing_whitespace() {
+		assert_eq!(hash_content("  hello  "), hash_content("hello"));
+		assert_eq!(hash_content("hello"), "2cf24dba5fb0a30e");
+	}
+
+	#[test]
+	fn collapses_whitespace_runs_including_newlines_to_one_space() {
+		assert_eq!(
+			hash_content("var\n\n  a  =\r\n1;"),
+			hash_content("var a = 1;")
+		);
+	}
+
+	#[test]
+	fn does_not_merge_tokens_separated_by_a_single_space() {
+		assert_ne!(hash_content("var a=1;"), hash_content("var a = 1;"));
+		assert_eq!(hash_content("var a=1;"), hash_content("var  a=1;"));
+	}
 }

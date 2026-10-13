@@ -125,7 +125,21 @@ pub fn collect_deep_spans(
 #[cfg(test)]
 mod tests {
 	use super::collect_deep_spans;
+	use crate::content_root::find_content_root;
 	use crate::excise::excise;
+
+	/// `html` capped at `depth` inside the page's own content root (the
+	/// shallowest `<main>` / `role="main"` here); unchanged without one.
+	fn capped_at_root(html: &str, depth: usize) -> String {
+		let document = nitpicker_html_parser::parse(html);
+		match find_content_root(html, &document, None) {
+			Some(content) => {
+				let spans = collect_deep_spans(html, content, &[depth]).remove(0);
+				excise(html, &spans)
+			}
+			None => html.to_owned(),
+		}
+	}
 
 	fn capped(html: &str, depth: usize) -> String {
 		let content = html.find("<main>").unwrap() + 6..html.rfind("</main>").unwrap();
@@ -165,5 +179,71 @@ mod tests {
 		let spans = collect_deep_spans(html, content, &[1, 2, 3]);
 		// <p> spans 17..32, <b> spans 20..28.
 		assert_eq!(spans, vec![vec![17..32], vec![20..28], vec![]]);
+	}
+
+	#[test]
+	fn leaves_content_shallower_than_the_cap_unchanged() {
+		let html = "<body><main><div><p>shallow</p></div></main></body>";
+		assert_eq!(capped_at_root(html, 3), html);
+	}
+
+	#[test]
+	fn anchors_on_a_role_main_element_without_a_main_tag() {
+		let html = "<body><div role=\"main\"><div><div><div>deep</div></div></div></div></body>";
+		assert_eq!(
+			capped_at_root(html, 1),
+			"<body><div role=\"main\"><div></div></div></body>"
+		);
+	}
+
+	#[test]
+	fn leaves_a_page_without_a_content_root_unchanged() {
+		let html = "<body><p>no main here</p></body>";
+		assert_eq!(capped_at_root(html, 1), html);
+	}
+
+	#[test]
+	fn keeps_the_root_element_and_its_attributes_even_at_depth_zero() {
+		assert_eq!(
+			capped_at_root(
+				"<body><main class=\"detail\"><div>content</div></main></body>",
+				0
+			),
+			"<body><main class=\"detail\"></main></body>"
+		);
+	}
+
+	#[test]
+	fn caps_each_independent_too_deep_branch() {
+		let html = "<body><main><section><div><div>deep-a</div></div></section><section><div><div>deep-b</div></div></section></main></body>";
+		assert_eq!(
+			capped_at_root(html, 2),
+			"<body><main><section><div></div></section><section><div></div></section></main></body>"
+		);
+	}
+
+	#[test]
+	fn caps_inside_the_shallowest_of_several_main_elements() {
+		// The second <main> (a direct child of body) is shallower than the
+		// first (nested in a <div>), so it is the one capped.
+		let html = "<body><div><main><div><div><div>deep</div></div></div></main></div><main><div><div><div>also-deep</div></div></div></main></body>";
+		assert_eq!(
+			capped_at_root(html, 1),
+			"<body><div><main><div><div><div>deep</div></div></div></main></div><main><div></div></main></body>"
+		);
+	}
+
+	#[test]
+	fn never_counts_or_cuts_the_inside_of_a_script() {
+		let html = "<body><main><div><script>var deep = { a: { b: { c: 1 } } };</script></div></main></body>";
+		assert_eq!(capped_at_root(html, 1), html);
+	}
+
+	#[test]
+	fn leaves_an_unclosed_too_deep_element_in_place() {
+		// No closing </div> before </main>: the parser closes the element
+		// where no real closing tag for it exists, so the cut is dropped.
+		let html = "<body><main><div><div>unclosed</main></body>";
+		assert_eq!(capped_at_root(html, 1), html);
 	}
 }

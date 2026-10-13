@@ -54,5 +54,32 @@ mod tests {
 	#[test]
 	fn returns_nothing_for_an_empty_attribute() {
 		assert!(parse_class_list("   ").is_empty());
+		assert!(parse_class_list("").is_empty());
+	}
+
+	#[test]
+	fn sorts_case_insensitively() {
+		assert_eq!(
+			parse_class_list("zeta alpha Beta"),
+			vec!["alpha", "Beta", "zeta"]
+		);
+	}
+
+	#[test]
+	fn deduplicates_repeated_class_names() {
+		assert_eq!(parse_class_list("foo foo bar"), vec!["bar", "foo"]);
+	}
+
+	#[test]
+	fn filters_noise_classes() {
+		assert_eq!(
+			parse_class_list("card sc-bdVaJa featured"),
+			vec!["card", "featured"]
+		);
+	}
+
+	#[test]
+	fn treats_an_all_noise_attribute_as_empty() {
+		assert!(parse_class_list("sc-bdVaJa").is_empty());
 	}
 }

@@ -85,7 +85,7 @@ pub fn is_fold_candidate(
 
 #[cfg(test)]
 mod tests {
-	use super::{build_opaque_segment, build_segment, is_fold_candidate};
+	use super::{build_opaque_segment, build_segment, is_fold_candidate, push_bracket};
 
 	#[test]
 	fn replaces_a_wrapper_tag_with_its_classes() {
@@ -124,5 +124,99 @@ mod tests {
 		assert!(!is_fold_candidate("span", &["a"], None, None));
 		assert!(!is_fold_candidate("div", &[], Some("main"), None));
 		assert!(!is_fold_candidate("section", &[], None, None));
+	}
+
+	#[test]
+	fn drops_the_tag_name_of_div_and_span_with_classes() {
+		assert_eq!(
+			build_segment("div", &["card", "featured"], None, None),
+			".card.featured"
+		);
+		assert_eq!(build_segment("span", &["icon"], None, None), ".icon");
+	}
+
+	#[test]
+	fn keeps_the_tag_name_of_div_and_span_without_classes() {
+		assert_eq!(build_segment("div", &[], None, None), "div");
+		assert_eq!(build_segment("span", &[], None, None), "span");
+	}
+
+	#[test]
+	fn always_keeps_the_tag_name_of_other_tags() {
+		assert_eq!(build_segment("ul", &["list"], None, None), "ul.list");
+		assert_eq!(build_segment("ul", &[], None, None), "ul");
+	}
+
+	#[test]
+	fn appends_role_as_a_bracket_suffix() {
+		assert_eq!(
+			build_segment("div", &["card"], Some("button"), None),
+			".card[role=button]"
+		);
+	}
+
+	#[test]
+	fn appends_type_as_a_bracket_suffix() {
+		assert_eq!(
+			build_segment("input", &[], None, Some("checkbox")),
+			"input[type=checkbox]"
+		);
+	}
+
+	#[test]
+	fn combines_role_and_type_in_one_bracket_in_key_order() {
+		assert_eq!(
+			build_segment("input", &[], Some("switch"), Some("checkbox")),
+			"input[role=switch,type=checkbox]"
+		);
+	}
+
+	#[test]
+	fn preserves_a_tailwind_arbitrary_value_class_verbatim() {
+		assert_eq!(
+			build_segment("div", &["w-[137px]"], None, None),
+			".w-[137px]"
+		);
+		assert_eq!(
+			build_segment("div", &["w-[137px]"], Some("button"), None),
+			".w-[137px][role=button]"
+		);
+	}
+
+	#[test]
+	fn formats_an_empty_bracket_as_nothing() {
+		let mut out = String::new();
+		push_bracket(&mut out, &[("role", None), ("type", None)]);
+		assert_eq!(out, "");
+	}
+
+	#[test]
+	fn formats_a_single_bracket_attribute() {
+		let mut out = String::new();
+		push_bracket(&mut out, &[("role", Some("button")), ("type", None)]);
+		assert_eq!(out, "[role=button]");
+	}
+
+	#[test]
+	fn formats_role_sha_and_type_together_in_key_order() {
+		let mut out = String::new();
+		push_bracket(
+			&mut out,
+			&[
+				("role", Some("img")),
+				("sha", Some("abcd1234ef567890")),
+				("type", None),
+			],
+		);
+		assert_eq!(out, "[role=img,sha=abcd1234ef567890]");
+	}
+
+	#[test]
+	fn treats_div_span_with_class_less_role_less_type_less_as_candidates_and_nothing_else() {
+		assert!(is_fold_candidate("div", &[], None, None));
+		assert!(!is_fold_candidate("div", &["card"], None, None));
+		assert!(!is_fold_candidate("span", &[], None, Some("text")));
+		assert!(!is_fold_candidate("ul", &[], None, None));
+		assert!(!is_fold_candidate("li", &[], None, None));
 	}
 }

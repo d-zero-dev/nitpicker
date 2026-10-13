@@ -1,7 +1,7 @@
 /// FNV-1a over `codePointAt(i)` for every UTF-16 index `i` of `input` — at
 /// a surrogate pair's first unit the whole code point, at its second the
-/// low surrogate alone — so a block key seeds the same sample it did in
-/// JavaScript.
+/// low surrogate alone — the JavaScript loop the stored samples were seeded
+/// with.
 #[must_use]
 pub fn fnv1a32(input: &str) -> u32 {
 	let mut hash: u32 = 2_166_136_261;
@@ -19,8 +19,8 @@ pub fn fnv1a32(input: &str) -> u32 {
 	hash
 }
 
-/// Mulberry32, seeded from a block key: the sampling sequence of the
-/// JavaScript implementation, number for number.
+/// Mulberry32, seeded from a block key: the sampling sequence the stored
+/// keys were computed with, number for number.
 pub struct SeededRandom {
 	state: u32,
 }
@@ -44,8 +44,8 @@ impl SeededRandom {
 	}
 }
 
-// Exact float comparisons on purpose: the port must reproduce the
-// JavaScript values bit for bit, not approximately.
+// Exact float comparisons on purpose: the stored keys depend on these
+// values bit for bit, not approximately.
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
@@ -57,6 +57,13 @@ mod tests {
 		// published test vector for "a".
 		assert_eq!(fnv1a32(""), 2_166_136_261);
 		assert_eq!(fnv1a32("a"), 0xE40C_292C);
+	}
+
+	#[test]
+	fn hashes_an_astral_character_at_both_of_its_utf16_indices() {
+		// JavaScript's loop over `codePointAt(i)` gives these.
+		assert_eq!(fnv1a32("path:\u{1F600}"), 793_062_020);
+		assert_eq!(fnv1a32("path:\u{1F600}x"), 1_709_353_652);
 	}
 
 	#[test]

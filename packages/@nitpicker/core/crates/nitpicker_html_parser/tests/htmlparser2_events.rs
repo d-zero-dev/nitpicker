@@ -1,6 +1,8 @@
 //! Event sequences recorded from htmlparser2 12.0.0 (a handler logging
-//! `onopentag` / `onclosetag` with `parser.startIndex` / `parser.endIndex`),
-//! pinned so a change to the port shows up as a diff against them.
+//! `onopentag` / `onclosetag` with `parser.startIndex` / `parser.endIndex`,
+//! as `scripts/record-htmlparser2-events.mjs` does), pinned so a change to
+//! the port shows up as a readable diff on small cases;
+//! `htmlparser2_fixture_events.rs` covers the fixtures by digest.
 
 // cspell:ignore ampx
 

@@ -457,6 +457,23 @@ impl EntityDecoder {
 #[cfg(test)]
 mod tests {
 	use super::{DecodingMode, Emitted, EntityDecoder, WriteResult};
+	use crate::html_decode_tree::HTML_DECODE_TREE;
+
+	#[test]
+	fn holds_the_decode_tree_of_entities_8_0_0() {
+		// Length and FNV-1a 64 (over each value's little-endian bytes) of
+		// entities@8.0.0's `htmlDecodeTree`, so a regenerated table that
+		// differs from the one the stored keys were decoded with fails here.
+		let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+		for value in HTML_DECODE_TREE {
+			for byte in value.to_le_bytes() {
+				hash ^= u64::from(byte);
+				hash = hash.wrapping_mul(0x0100_0000_01b3);
+			}
+		}
+		assert_eq!(HTML_DECODE_TREE.len(), 12_075);
+		assert_eq!(hash, 0xfee1_a3ba_3b21_b3bc);
+	}
 
 	/// Decodes the reference starting right after the `&` at the front of
 	/// `input`, the way the tokenizer feeds it.

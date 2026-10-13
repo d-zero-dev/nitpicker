@@ -89,4 +89,10 @@ mod tests {
 		assert!(is_genuine_close("<x-\u{e9}></x-\u{c9}>", 13, "x-\u{e9}"));
 		assert!(!is_genuine_close("<x-\u{e9}></x-e>", 12, "x-\u{e9}"));
 	}
+
+	#[test]
+	fn accepts_a_tag_name_with_regex_metacharacters() {
+		assert!(is_genuine_close("<div(foo></div(foo>", 19, "div(foo"));
+		assert!(!is_genuine_close("<div(foo>H</body>", 17, "div(foo"));
+	}
 }

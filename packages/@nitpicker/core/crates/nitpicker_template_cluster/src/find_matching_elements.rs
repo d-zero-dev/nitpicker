@@ -181,4 +181,110 @@ mod tests {
 			vec![]
 		);
 	}
+
+	fn slices(html: &str) -> Vec<(String, usize)> {
+		let document = nitpicker_html_parser::parse(html);
+		find_matching_elements(html, &document, |tag, _role, _attributes| {
+			if tag == "header" { vec![()] } else { vec![] }
+		})
+		.into_iter()
+		.map(|element| (html[element.start..element.end].to_owned(), element.depth))
+		.collect()
+	}
+
+	#[test]
+	fn returns_every_match_in_document_order_with_its_depth() {
+		assert_eq!(
+			slices("<body><header>A</header><main><header>Nested</header></main></body>"),
+			vec![
+				("<header>A</header>".to_owned(), 1),
+				("<header>Nested</header>".to_owned(), 2),
+			]
+		);
+	}
+
+	#[test]
+	fn skips_matches_inside_svg() {
+		assert_eq!(
+			slices("<body><svg><header>fake</header></svg><header>real</header></body>"),
+			vec![("<header>real</header>".to_owned(), 1)]
+		);
+	}
+
+	#[test]
+	fn discards_a_candidate_whose_closing_tag_is_not_genuine() {
+		assert_eq!(
+			slices("<body><header>H<main><article>Real</article></main></body>"),
+			vec![]
+		);
+	}
+
+	#[test]
+	fn reports_a_tag_match_and_a_role_match_on_the_same_element() {
+		let html = "<body><header role=\"navigation\">HN</header></body>";
+		let document = nitpicker_html_parser::parse(html);
+		let found = find_matching_elements(html, &document, |tag, role, _attributes| {
+			let mut kinds = Vec::new();
+			if tag == "header" {
+				kinds.push("header");
+			}
+			if role == Some("navigation") {
+				kinds.push("nav");
+			}
+			kinds
+		});
+		let mut kinds: Vec<&str> = found.iter().map(|element| element.kind).collect();
+		kinds.sort_unstable();
+		assert_eq!(kinds, vec!["header", "nav"]);
+		assert_eq!(found[0].start, found[1].start);
+		assert_eq!(found[0].end, found[1].end);
+	}
+
+	#[test]
+	fn hands_the_raw_attributes_to_the_matcher() {
+		let html = "<body><div id=\"main\" class=\"a b\">x</div><div id=\"other\">y</div></body>";
+		let document = nitpicker_html_parser::parse(html);
+		let mut seen: Vec<(Option<String>, Option<String>)> = Vec::new();
+		let _ = find_matching_elements::<()>(html, &document, |_tag, _role, attributes| {
+			seen.push((
+				attributes
+					.id
+					.as_ref()
+					.map(|value| value.raw(html).to_owned()),
+				attributes
+					.class
+					.as_ref()
+					.map(|value| value.raw(html).to_owned()),
+			));
+			vec![]
+		});
+		assert_eq!(
+			seen,
+			vec![
+				(None, None),
+				(Some("main".to_owned()), Some("a b".to_owned())),
+				(Some("other".to_owned()), None),
+			]
+		);
+	}
+
+	#[test]
+	fn lets_a_matcher_identify_elements_by_id() {
+		let html = "<body><div id=\"main\">x</div></body>";
+		let document = nitpicker_html_parser::parse(html);
+		let found = find_matching_elements(html, &document, |_tag, _role, attributes| {
+			if attributes.id.as_ref().map(|value| value.raw(html)) == Some("main") {
+				vec![()]
+			} else {
+				vec![]
+			}
+		});
+		assert_eq!(
+			found
+				.iter()
+				.map(|element| &html[element.start..element.end])
+				.collect::<Vec<_>>(),
+			vec!["<div id=\"main\">x</div>"]
+		);
+	}
 }

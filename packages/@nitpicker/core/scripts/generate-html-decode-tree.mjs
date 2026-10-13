@@ -2,36 +2,44 @@
 // character reference trie of the `entities` package that htmlparser2 decodes
 // attribute values with, as a Rust array.
 //
-//   node scripts/generate-html-decode-tree.mjs
+//   node scripts/generate-html-decode-tree.mjs <entities package directory>
 //
 // Regenerate only together with a deliberate change of the decoding the
 // template classifier reproduces: the stored template keys depend on how class
 // names with entities decode, so the table is pinned data, not a dependency.
-// `entities` is resolved from `node_modules` and must be the pinned version
-// below (the script checks); the version is recorded in the output.
+// Nothing in the repository depends on `entities` for this, so its directory
+// is passed in: an install of exactly the pinned version below (the script
+// checks), e.g. `yarn add entities@8.0.0` in a scratch directory. The version
+// is recorded in the output, and `html_decode_tree.rs`'s test pins the
+// table's length and digest, so a regenerated table that differs fails it.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const require = createRequire(path.join(packageDir, 'package.json'));
 
-// `entities` exports no `./package.json`; its `./decode` entry sits in `dist/`.
-const decodeEntry = require.resolve('entities/decode');
-const entitiesPackageJson = path.resolve(path.dirname(decodeEntry), '..', 'package.json');
-const { version } = JSON.parse(readFileSync(entitiesPackageJson, 'utf8'));
-// The version htmlparser2 12.0.0 decoded with, whose output the stored keys
-// reproduce. Nothing in the repository depends on `entities` for this, so
-// whichever copy happens to resolve may be another one.
-const PINNED_VERSION = '8.0.0';
-if (version !== PINNED_VERSION) {
+const entitiesDir = process.argv[2];
+if (!entitiesDir) {
 	console.error(
-		`entities@${version} resolved; the table must come from entities@${PINNED_VERSION}. Make that version resolvable from packages/@nitpicker/core for the run, then undo it.`,
+		'Usage: node scripts/generate-html-decode-tree.mjs <entities package directory>',
 	);
 	process.exit(1);
 }
-const { htmlDecodeTree } = await import(decodeEntry);
+const { version } = JSON.parse(
+	readFileSync(path.join(entitiesDir, 'package.json'), 'utf8'),
+);
+// The version htmlparser2 12.0.0 decoded with, whose output the stored keys
+// reproduce.
+const PINNED_VERSION = '8.0.0';
+if (version !== PINNED_VERSION) {
+	console.error(
+		`entities@${version} given; the table must come from entities@${PINNED_VERSION}.`,
+	);
+	process.exit(1);
+}
+const { htmlDecodeTree } = await import(
+	pathToFileURL(path.join(entitiesDir, 'dist', 'decode.js')).href
+);
 
 const VALUES_PER_LINE = 16;
 const lines = [];
