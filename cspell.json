@@ -34,6 +34,8 @@
 		"rfind",
 		"rustc",
 		"splitn",
+		// Internationalizing Domain Names in Applications (URL host parsing)
+		"IDNA",
 		// Misra-Gries algorithm (DedupeCapTracker, issue #208)
 		"Misra",
 		"Gries",
@@ -121,7 +123,7 @@
 
 		// libraries / authors
 
-		// page-cluster engine (archive/src/template-classification/page-cluster/):
+		// Template classifier (core's nitpicker_template_cluster):
 		// clustering/distance terminology and algorithm authors
 		"Jaccard",
 		"medoid",
