@@ -65,8 +65,8 @@ const DEFAULT_MIN_CSS_GROUP_SIZE = 2;
  * blocking predicates with OR to generate *candidate pairs* for a later
  * similarity/classification pass. This function instead commits each page to
  * exactly one final key: `resolve-page-cluster-keys.js`'s
- * `resolvePageClusterKeys` *does* run a later refinement step
- * (`resolveStructuralClusterKeys`) on top of whichever key a page lands on,
+ * `resolvePageClusterKeys` *does* run a later refinement step (Stage A's
+ * structural clustering) on top of whichever key a page lands on,
  * but only within that one key's candidate pool — it has no way to pull in
  * a page that this function routed to a different key. So this function's
  * per-page choice is still effectively final for blocking purposes: a page

@@ -1,12 +1,12 @@
 import type { BlockingReason } from './derive-blocking-reason.js';
 import type { LandmarkInstanceTokens, LandmarkType } from './types.js';
 
+import { ALL_LANDMARK_TYPES } from './all-landmark-types.js';
 import {
 	DEFAULT_CHROME_OVERLAP_THRESHOLD,
 	isChromeLandmarkInstance,
 } from './is-chrome-landmark-instance.js';
 import { computeQuorumCore } from './merge-cross-block-clusters.js';
-import { ALL_LANDMARK_TYPES } from './per-page-landmark-signatures.js';
 import { shellQuorum } from './shell-quorum.js';
 
 /**
@@ -25,17 +25,11 @@ export type LandmarkClusterProfile = {
 	 * classified as chrome against this cluster's own shell for the type —
 	 * the "header/footer is shared chrome" half of the user-facing story.
 	 *
-	 * The denominator is per-page-deduplicated instances (same rule
-	 * {@link ./per-page-landmark-signatures.js | computePerPageLandmarkInstances}
-	 * always applies: two instances on the same page that tokenize to the
-	 * same signature — a CMS-duplicated footer, or a `<header
-	 * role="navigation">` matching both `header` and `nav` at the identical
-	 * span — count once). A caller reconstructing a single instance's chrome
-	 * verdict via `extractLandmarks` + `tokenize` +
-	 * `isChromeLandmarkInstance` classifies that one instance correctly
-	 * regardless of this rule; only a caller trying to reproduce this exact
-	 * ratio by counting raw, un-deduplicated instances across a page would
-	 * see a different number.
+	 * The denominator is per-page-deduplicated instances (Stage A keeps one
+	 * of the instances on a page that tokenize to the same token set — a
+	 * CMS-duplicated footer, or a `<header role="navigation">` matching both
+	 * `header` and `nav` at the identical span), so a caller counting raw,
+	 * un-deduplicated instances across a page would see a different ratio.
 	 */
 	readonly chromeRate: number;
 	/**

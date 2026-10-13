@@ -1,6 +1,11 @@
 import { hash } from '@d-zero/shared/hash';
 
-import { HASH_LENGTH } from './hash-content.js';
+/**
+ * Hex characters kept of the SHA-256 digest: 64 bits tell stylesheet sets
+ * apart with room to spare and keep block keys short. Also the length of the
+ * content hashes in tokens (the native Stage A's `hash_content`).
+ */
+const HASH_LENGTH = 16;
 
 /**
  * Derives a coarse grouping key from the set of stylesheet URLs a page
@@ -25,10 +30,9 @@ import { HASH_LENGTH } from './hash-content.js';
  * about what the page loads) before hashing. The sorted list is
  * JSON-serialized before hashing rather than joined with a plain delimiter
  * (e.g. `"\n"`) so that no character sequence inside one href can be
- * mistaken for a boundary between two hrefs. Hashing (via SHA-256, reusing
- * {@link ./hash-content.js | HASH_LENGTH} for the same truncation length the
- * package's other hashed keys use) keeps the key a fixed size regardless of
- * how many stylesheets a page loads or how long their URLs are.
+ * mistaken for a boundary between two hrefs. Hashing (SHA-256, truncated to
+ * {@link HASH_LENGTH}) keeps the key a fixed size regardless of how many
+ * stylesheets a page loads or how long their URLs are.
  * @param stylesheetHrefs
  * @example
  * ```ts

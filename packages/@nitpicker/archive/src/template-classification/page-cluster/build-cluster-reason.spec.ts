@@ -1,35 +1,17 @@
 import type { BlockingReason } from './derive-blocking-reason.js';
-import type { PerPageLandmarkInstance } from './per-page-landmark-signatures.js';
-import type { LandmarkType } from './types.js';
+import type { LandmarkInstanceTokens, LandmarkType } from './types.js';
 
 import { describe, expect, test } from 'vitest';
 
 import { buildClusterReason } from './build-cluster-reason.js';
-
-const zeroPosition = {
-	startOffset: 0,
-	endOffset: 0,
-	startLine: 1,
-	startColumn: 1,
-	endLine: 1,
-	endColumn: 1,
-};
 
 /**
  *
  * @param type
  * @param tokens
  */
-function instance(
-	type: LandmarkType,
-	tokens: readonly string[],
-): PerPageLandmarkInstance {
-	return {
-		type,
-		tokens: new Set(tokens),
-		signature: [...tokens].toSorted().join('|'),
-		position: zeroPosition,
-	};
+function instance(type: LandmarkType, tokens: readonly string[]): LandmarkInstanceTokens {
+	return { type, tokens: new Set(tokens) };
 }
 
 describe('buildClusterReason', () => {

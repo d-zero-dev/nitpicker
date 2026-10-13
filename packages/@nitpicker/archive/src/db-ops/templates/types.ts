@@ -1,6 +1,6 @@
 /**
- * The six landmark types page-cluster's `extractLandmarks` and
- * `ClusterReason.landmarks` recognize.
+ * The six landmark types page-cluster's `ClusterReason.landmarks`
+ * recognizes.
  */
 export type TemplateClusterLandmarkType =
 	| 'header'

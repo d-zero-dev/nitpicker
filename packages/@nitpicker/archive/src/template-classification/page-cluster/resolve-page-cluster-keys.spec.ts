@@ -494,7 +494,7 @@ describe('resolvePageClusterKeysFromArray', () => {
 describe('resolvePageClusterKeysFromArray (section-local landmarks)', () => {
 	test('pages that share a section-local landmark cluster separately from block siblings that lack it', async () => {
 		// Regression scenario mirroring the real-crawl section-local nav
-		// case documented in the extract-landmarks JSDoc: a subset of pages
+		// case behind collecting every landmark instance: a subset of pages
 		// in one block carries an in-<main> section-local <nav> that the
 		// other pages in the same block don't. Landmarks are excised from the
 		// compared content, so on their own the pages would look identical
