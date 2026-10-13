@@ -1,0 +1,5 @@
+# Template-classification inputs and golden records are compared byte for
+# byte (the golden's inputDigest hashes the fixture HTML): never convert
+# their line endings on checkout.
+packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/** -text
+packages/@nitpicker/archive/src/template-classification/golden/__golden__/** -text

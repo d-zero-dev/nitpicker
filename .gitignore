@@ -94,6 +94,7 @@ __*
 !__tests__/
 !__mock__/
 !packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/
+!packages/@nitpicker/archive/src/template-classification/golden/__golden__/
 
 # Credentials
 credentials.json

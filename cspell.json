@@ -18,7 +18,10 @@
 		"**/Cargo.lock",
 		"**/*.node",
 		// Golden fixtures are hex dumps
-		"**/tests/fixtures/*.json"
+		"**/tests/fixtures/*.json",
+		// Template-classification golden records: structural tokens and hashes
+		// derived from the fixtures above
+		"packages/@nitpicker/archive/src/template-classification/golden/__golden__/**"
 	],
 	"words": [
 		// Misra-Gries algorithm (DedupeCapTracker, issue #208)
