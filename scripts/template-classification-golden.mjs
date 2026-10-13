@@ -12,8 +12,9 @@
  * with a progress callback as the CLI passes one) on a throwaway copy of the
  * archive and writes what it stored: every `page_templates` row (as URL →
  * template key) and every `page_template_clusters` reason as its
- * decompressed JSON text. Take dumps with an implementation you trust,
- * before changing the classifier, and keep them **outside the repository**
+ * decompressed JSON text. Take dumps from a build of the base branch (the
+ * keys the archives already store) before changing the classifier, check
+ * the change against them, and keep them **outside the repository**
  * — they contain the crawled URLs. `check` reruns the classification and
  * exits 1 on any difference, printing counts and the first few differing
  * entries (URLs included, so do not paste that output into issues), and
