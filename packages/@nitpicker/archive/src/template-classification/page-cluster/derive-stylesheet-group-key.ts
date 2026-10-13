@@ -2,8 +2,8 @@ import { hash } from '@d-zero/shared/hash';
 
 /**
  * Hex characters kept of the SHA-256 digest: 64 bits tell stylesheet sets
- * apart with room to spare and keep block keys short. Also the length of the
- * content hashes in tokens (the native Stage A's `hash_content`).
+ * apart with room to spare and keep block keys short. Part of every stored
+ * `css:` block key, so it cannot change.
  */
 const HASH_LENGTH = 16;
 

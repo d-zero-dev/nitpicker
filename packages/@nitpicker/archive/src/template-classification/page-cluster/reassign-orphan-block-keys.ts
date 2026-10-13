@@ -17,10 +17,9 @@ export const REASSIGNED_KEY_PREFIX = 'orphan-merge:';
  * call site here indexes `pages`/`pathKeys`/`blockKeys` with a position
  * derived from one of those same arrays' own `.entries()` or `.map()`, so the
  * thrown branch is unreachable in practice; it exists to satisfy
- * `noUncheckedIndexedAccess` without a non-null assertion (same rationale as
- * `requireIndex` in `resolve-page-cluster-keys.ts` and
- * `resolve-structural-cluster-keys.ts`, each kept as an independent copy for
- * the same reason those two are).
+ * `noUncheckedIndexedAccess` without a non-null assertion (the same helper as
+ * `requireIndex` in `complete-linkage-dendrogram.ts`, kept as a file-local
+ * copy so neither module exports it).
  * @param values
  * @param index
  */

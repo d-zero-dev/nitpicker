@@ -16,8 +16,7 @@ export type DendrogramMerge = {
 
 /**
  * `jaccardSimilarity()` returns a floating-point division that can land a
- * hair below the caller's threshold even when mathematically equal. Same
- * epsilon as `resolve-structural-cluster-keys.ts`.
+ * hair below the caller's threshold even when mathematically equal.
  */
 const BOUNDARY_EPSILON = 1e-9;
 
@@ -61,10 +60,11 @@ function find(parent: Int32Array, index: number): number {
 /**
  * Computes the complete-linkage dendrogram for `tokenSets` via the NN-chain
  * algorithm (Murtagh, F., 1983) and returns all `n - 1` merge events in
- * discovery order. This is the same O(n²) NN-chain implementation as
- * `resolve-structural-cluster-keys.ts` — extracted here so that callers can
- * record the full height sequence and apply an arbitrary threshold cut via
- * `labelsAtThreshold`, rather than committing to a fixed threshold upfront.
+ * discovery order, so that callers can record the full height sequence and
+ * apply an arbitrary threshold cut via `labelsAtThreshold`, rather than
+ * committing to a fixed threshold upfront. Stage B's merge uses it; Stage A
+ * runs its own copy natively (`nitpicker_template_cluster`'s
+ * `complete_linkage_dendrogram`), with the same tie-breaks.
  *
  * Recording all merges (not just threshold-clearing ones) is essential for
  * `autoCutThreshold`: to find the largest gap in the height sequence, every
@@ -156,9 +156,8 @@ export function completeLinkageDendrogram(
  *
  * Lance-Williams monotonicity guarantees that only merges at `>= threshold`
  * need to be applied to reconstruct the correct threshold cut, regardless of
- * the order in which NN-chain discovered them. This is the same invariant
- * documented in `resolve-structural-cluster-keys.ts`'s JSDoc for
- * `clusterByCompleteLinkage`.
+ * the order in which NN-chain discovered them: complete linkage never merges
+ * at a height above an earlier merge it depends on.
  * @param size Total number of items (= length of the original `tokenSets`).
  * @param merges All merge events from `completeLinkageDendrogram`.
  * @param threshold Similarity threshold; merges below this are ignored.
