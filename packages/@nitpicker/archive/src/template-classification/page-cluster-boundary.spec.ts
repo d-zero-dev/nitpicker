@@ -54,7 +54,7 @@ describe('page-cluster エンジンの境界', () => {
 		]);
 	});
 
-	it('archive 内でエンジンを import するのは template-classification の 3 ファイル（と分類の spec）だけ', () => {
+	it('archive 内でエンジンを import するのは template-classification の 3 ファイル（と分類の spec・golden）だけ', () => {
 		const importers = listSourceFiles(archiveSrcDir)
 			.filter((filePath) => !filePath.startsWith(engineDir + path.sep))
 			.filter((filePath) =>
@@ -70,6 +70,11 @@ describe('page-cluster エンジンの境界', () => {
 			'template-classification/classify-page-templates.ts',
 			'template-classification/create-content-root-hint.ts',
 			'template-classification/create-page-cluster-factory.ts',
+			'template-classification/golden/build-fixture-corpus.ts',
+			'template-classification/golden/build-synthetic-site.ts',
+			'template-classification/golden/classify-golden-corpus.ts',
+			'template-classification/golden/template-classification-golden.spec.ts',
+			'template-classification/golden/types.ts',
 		]);
 	});
 

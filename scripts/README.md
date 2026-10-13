@@ -4,7 +4,7 @@
 
 ## Rust 化のベンチ基準値（#424）
 
-Rust に移植する処理（#420 のロードマップ）の時間とピーク RSS を、JavaScript 版と Rust 版で同じスクリプトを使って比べるためのベンチ。
+Rust に移植する処理（#420 のロードマップ）の時間とピーク RSS を、JavaScript 版と Rust 版で同じスクリプトを使って比べるためのベンチ。移植で出力が変わらないことの確認は、下の「テンプレート分類の golden」を参照。
 
 | スクリプト                          | 計測対象                                                                      | ケース                                                      |
 | ----------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------- |
@@ -66,3 +66,18 @@ node scripts/bench-run.mjs body-hash <archive.nitpicker> --case js # 1 ケース
 - 小: コミット済みの `packages/test-server/src/__tests__/e2e/fixtures/report-query-fixture.nitpicker`（2 ページ）。CI の `bench-smoke` ジョブが `yarn bench:smoke` で全ケースを回す。全ケースが動いて結果を出すことだけを確認し、値は検証しない。2 ページでは通らない分岐が多い（ブロックが 1 ページずつ、inventory ページなし）。とくに `template-classification` の `breakdown` の streaming 経路（2 万ページ超での標本抽出・Pass 1b・上限付き Stage B）は smoke では一度も通らない。標本の選び方は `bench-lib/select-stage-a-sample.spec.mjs` がエンジンと同じ集合になることを固定し、ほかの分岐の正しさも `bench-lib/` のユニットテストで確認する
 - 中（数千ページ）・大（10 万ページ超）: 手元のアーカイブで実行し、`bench-suite.mjs` が出す表を該当 issue のコメントに貼る。**貼るのは表と JSON だけにする**（進捗ログにはパスが出ることがある）。アーカイブ名・URL・ホスト名など、クロール対象を特定できる情報は書かない。Node のバージョンとマシン種別（`darwin-arm64` / `linux-x64`）は表の上の行に出る
 - `isolated-clusters` は alias 元を候補から除くため、read model をビルド済み（`alias_of_id` が埋まっている）のアーカイブで測る
+
+## テンプレート分類の golden（#426）
+
+`template-classification-golden.mjs` は、コミットできない実アーカイブ（dogfooding のクロール）で、テンプレート分類の出力が変わっていないことを確かめる。コミット済みの golden（`packages/@nitpicker/archive/src/template-classification/golden/`）は合成サイトと HTML fixture しか持たないので、その補完。
+
+```sh
+yarn build
+node scripts/template-classification-golden.mjs dump <archive.nitpicker> <out.json>     # 今の実装の出力を保存
+node scripts/template-classification-golden.mjs check <archive.nitpicker> <golden.json> # 保存した出力と比べる（差分があれば終了コード 1、比較できなければ 2）
+```
+
+- 本番の入口（`classifyArchivePageTemplates`）を、一時ディレクトリに展開したコピーで、CLI と同じく進捗コールバック付きで実行する。比べるのは、保存された `page_templates`（URL → テンプレートキー）と `page_template_clusters` の reason（展開後の JSON 文字列）。アーカイブ本体は変更しない
+- コピーに残っている前回の分類は先に消す。分類したページがすべて保存されていなければ失敗する。分類が 0 件のとき前回の行を比べてしまう事故と、URL を行に戻せず保存されなかったページの見落としを防ぐため
+- 補助関数は `golden-lib/` にある（ユニットテスト付き）
+- `dump` は実装を変える**前に**、信頼できる実装で取る。出力にはクロールした URL が入るので、**リポジトリの外に置く**。`check` が出す差分の例にも URL が入るので、issue や PR に貼らない

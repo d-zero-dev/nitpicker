@@ -5,6 +5,7 @@ import { eachSplitted } from '../../utils/array/each-splitted.js';
 import { compressPayload } from '../_shared/compress-payload.js';
 
 import { assignTemplateLabels } from './assign-template-labels.js';
+import { serializeTemplateClusterReason } from './serialize-template-cluster-reason.js';
 
 /**
  * Replaces the stored DOM-structure template classification with a freshly
@@ -60,7 +61,7 @@ export async function replacePageTemplates(
 		clusterReasonsByTemplateKey && clusterReasonsByTemplateKey.size > 0
 			? [...clusterReasonsByTemplateKey].map(([templateKey, reason]) => {
 					const { body, codec, sizeRaw, sizeStored } = compressPayload(
-						Buffer.from(JSON.stringify(reason), 'utf8'),
+						Buffer.from(serializeTemplateClusterReason(reason), 'utf8'),
 					);
 					return {
 						template_key: templateKey,

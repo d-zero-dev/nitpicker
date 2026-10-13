@@ -10,3 +10,5 @@
 yarn.lock
 # page-cluster's HTML fixtures are tokenizer input: reformatting changes test results
 packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/
+# Golden records are compared byte for byte against the serializer's output
+packages/@nitpicker/archive/src/template-classification/golden/__golden__/
