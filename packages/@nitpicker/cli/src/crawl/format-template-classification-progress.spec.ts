@@ -21,6 +21,9 @@ describe('formatTemplateClassificationProgress', () => {
 			formatTemplateClassificationProgress({ phase: 'collecting-stylesheets' }),
 		).toBe('collecting stylesheet references');
 		expect(
+			formatTemplateClassificationProgress({ phase: 'listing-html-snapshots' }),
+		).toBe('listing stored HTML');
+		expect(
 			formatTemplateClassificationProgress({
 				phase: 'writing-results',
 				templateCount: 1200,

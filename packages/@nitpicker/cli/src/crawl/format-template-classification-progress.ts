@@ -9,7 +9,8 @@ import { formatProgressCount } from '../format-progress-count.js';
  * `N/M unit (X%)` convention every other row uses); `pass0-signals` and
  * `stage-b-start` carry only a running count with no corpus-wide total, so
  * those two render count-only. The count-less step announcements
- * (`loading-pages-start`, `collecting-stylesheets`, `writing-results`) name the
+ * (`loading-pages-start`, `collecting-stylesheets`, `listing-html-snapshots`,
+ * `writing-results`) name the
  * multi-second step that just began, so the row never sits on the previous
  * step's last message.
  *
@@ -33,6 +34,9 @@ export function formatTemplateClassificationProgress(
 		}
 		case 'collecting-stylesheets': {
 			return 'collecting stylesheet references';
+		}
+		case 'listing-html-snapshots': {
+			return 'listing stored HTML';
 		}
 		case 'writing-results': {
 			return `saving ${event.templateCount.toLocaleString()} template(s)`;
