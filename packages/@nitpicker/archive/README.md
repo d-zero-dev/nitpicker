@@ -23,7 +23,7 @@ console.log(classifyErrorKind('net::ERR_NAME_NOT_RESOLVED')); // 'dns'
 
 ## テンプレート分類エンジン（page-cluster）
 
-テンプレート分類（`src/template-classification/`）は、ページを DOM 構造の類似性でクラスタリングするエンジンを `src/template-classification/page-cluster/` に持ちます。エンジンの本番コードはこのディレクトリの外（`htmlparser2` と `@d-zero/shared` を除く）に依存せず、パッケージの `exports` にも載せていません。nitpicker からの入口は `resolve-page-cluster-keys.ts` の `resolvePageClusterKeys` だけで、呼び出しは `classify-page-templates.ts` / `create-page-cluster-factory.ts` / `create-content-root-hint.ts` に閉じています。エンジンの `clusterKey` は nitpicker 側で `templateKey` と呼び替えます。
+テンプレート分類（`src/template-classification/`）は、ページを DOM 構造の類似性でクラスタリングするエンジンを `src/template-classification/page-cluster/` に持ちます。エンジンの本番コードはこのディレクトリの外（`htmlparser2` と `@d-zero/shared` を除く）に依存せず、パッケージの `exports` にも載せていません。nitpicker からの入口は `resolve-page-cluster-keys.ts` の `resolvePageClusterKeys` だけで、呼び出しは `classify-page-templates.ts` / `create-page-cluster-factory.ts` / `create-content-root-hint.ts` に閉じています（ほかはテスト専用の `golden/`）。エンジンの `clusterKey` は nitpicker 側で `templateKey` と呼び替えます。
 
 ### アルゴリズム概観
 
@@ -93,6 +93,18 @@ Stage A/B は「クラスタリング中に」正しい判断をしようとし�
 `validateClusterPartition` はこの 3 つをまとめて呼び出すエントリポイントです。`ClusterReason` と同じく、判断結果ではなく構造化データだけを返します — 検出された重複をどう扱うか（統合するかどうか、`suspicious` フラグをどう解釈するか）は呼び出し側の責務で、実際に統合を適用する場合は `mergeValidatedClusters` に確認済みのクラスタ対を渡します。`resolvePageClusterKeys` に `onPartitionReport` コールバックを渡すと、この検証が Stage B 完了直後に走り、安全な統合（完全一致、またはミラー軸による裏付けあり）が返り値の `clusterKey` に反映されます。
 
 **nitpicker の分類（`classifyPageTemplates`）は `onPartitionReport` を渡していない**ため、アーカイブに保存される `templateKey` にはこの事後検証は適用されません。いずれの関数もエンジン内部のモジュールで、archive の `exports` には載っていません。
+
+### golden（出力を固定するテスト）
+
+`src/template-classification/golden/` は、エンジンの出力（ページごとの `templateKey` と、`page_template_clusters` に保存される reason JSON の文字列）を `__golden__/` に固定し、全件一致を確かめます。入力は、決定的に生成する合成サイト（in-memory 経路と streaming 経路の 2 規模）と `page-cluster/__fixtures__/` の HTML で、エンジンに直接渡します。エンジンを書き換えても出力が同じであることのゲートです。アーカイブ側のアダプタ（`createPageClusterFactory` など）を含む本番経路全体は、実アーカイブで `scripts/template-classification-golden.mjs` を使って確かめます。
+
+出力を意図して変えるときだけ、次のコマンドで `__golden__/` を更新し、理由を PR に書きます（パスを付けないと他の spec の snapshot まで更新されます）。
+
+```sh
+yarn vitest run packages/@nitpicker/archive/src/template-classification/golden --exclude '.claude/**' -u
+```
+
+差分を読むときは `inputDigest` を先に見ます。`inputDigest` が変わっていれば入力（生成器か fixture）が変わっています。`inputDigest` が同じなのにほかのフィールドが変わっていれば、エンジンの出力が変わっています。
 
 ## 関連リンク
 

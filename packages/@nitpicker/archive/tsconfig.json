@@ -13,6 +13,7 @@
 		"lib",
 		"./src/**/*.spec.ts",
 		"./src/template-classification/page-cluster/build-mirrored-template-fixture.ts",
+		"./src/template-classification/golden/**",
 		"./src/body-hash/extract-body.ts",
 		"./src/body-hash/mask-dynamic-ids.ts",
 		"./src/body-hash/normalize-url-like-strings.ts"
