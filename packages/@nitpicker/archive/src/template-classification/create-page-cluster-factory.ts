@@ -24,8 +24,8 @@ import { createContentRootHint } from './create-content-root-hint.js';
  * in-memory threshold HTML once more to assign the pages outside the block
  * samples (see its own docs). Whichever pages end up excluded (empty HTML)
  * must be excluded **identically** on every call, or the pass-to-pass page
- * sequence drifts and the engine's same-order contract breaks. Excluding by `isInternalPage()` is safe (synchronous,
- * deterministic per page). Excluding by empty `getHtml()` is also safe,
+ * sequence drifts and the engine's same-order contract breaks. Excluding
+ * by `isInternalPage()` is safe (synchronous, deterministic per page). Excluding by empty `getHtml()` is also safe,
  * but only because the archive is immutable for the duration of one
  * classification run — the same page's HTML never changes between calls.
  *

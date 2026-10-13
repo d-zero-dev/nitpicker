@@ -108,6 +108,8 @@ yarn vitest run packages/@nitpicker/archive/src/template-classification/golden -
 
 差分を読むときは `inputDigest` を先に見ます。`inputDigest` が変わっていれば入力（生成器か fixture）が変わっています。`inputDigest` が同じなのにほかのフィールドが変わっていれば、エンジンの出力が変わっています。
 
+`page-cluster/__fixtures__/` の HTML は、`@nitpicker/core` の Rust テスト（htmlparser2 との突き合わせ）も読みます。fixture を足したり変えたりしたら、core の `scripts/record-htmlparser2-events.mjs` で記録済みイベントを取り直します（手順はスクリプト冒頭）。取り直すまで core のテストが落ちます。
+
 ## 関連リンク
 
 - [Nitpicker README](../../../README.md)

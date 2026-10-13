@@ -3,7 +3,7 @@ import type { BlockingReason } from './derive-blocking-reason.js';
 import type { ClusteredPage } from './find-cross-cluster-duplicates.js';
 import type { CrossBlockUnit, FinalGroupMembers } from './merge-cross-block-clusters.js';
 import type { Pass0PageSignals, ResolveBlockKeysOptions } from './pass0-blocking.js';
-import type { ContentRoot, LandmarkInstanceTokens, LandmarkType } from './types.js';
+import type { ContentRoot, LandmarkInstanceTokens } from './types.js';
 import type { ClusterPartitionReport } from './validate-cluster-partition.js';
 import type {
 	StageAOutput,
@@ -15,6 +15,7 @@ import type {
 import { createTemplateStageARun } from '@nitpicker/core/create-template-stage-a-run';
 import { TEMPLATE_BLOCK_SAMPLE_SIZE } from '@nitpicker/core/template-block-sample-size';
 
+import { ALL_LANDMARK_TYPES } from './all-landmark-types.js';
 import { buildClusterReason } from './build-cluster-reason.js';
 import { filterFirstPartyStylesheetHrefs } from './filter-first-party-stylesheet-hrefs.js';
 import { mergeCrossBlockClusters } from './merge-cross-block-clusters.js';
@@ -294,7 +295,8 @@ export type ProgressEvent =
  * Pass 0's blocking options plus observability hooks. Stage A takes no
  * options: it runs with the fixed configuration the stored keys were
  * computed with (landmarks excluded, hash-like class names filtered, the
- * content depth swept over 2–10 for a 1.5× knee, a 0.8 similarity bound).
+ * content depth swept over 2, 3, 4, 5, 6, 8 and 10 for a 1.5× knee, a 0.8
+ * similarity bound).
  * @see resolvePageClusterKeys
  */
 export type ResolvePageClusterKeysOptions = ResolveBlockKeysOptions & {
@@ -376,14 +378,13 @@ export type ResolvePageClusterKeysOptions = ResolveBlockKeysOptions & {
  * block, and assigns every other page to the nearest sampled cluster in a
  * second read.
  *
- * Chosen from Phase 0 spike measurements: a ~9,000-page real crawl (biggest
- * block ~3,900) completed in ~108s / 1.25 GB heap on the in-memory path.
- * Doubling that headroom to 20,000 keeps every corpus previously validated
- * (302, 1,416, 8,936, 89 pages) on the exact code path they were validated
- * against, so their gate values (9 / 21 / 63 / 3 clusters respectively)
- * remain byte-reproducible. A ~176,000-page real crawl OOM'd on the in-memory
- * path well below this threshold worth of pages ever being materialized, so
- * anything above 20,000 is routed to streaming.
+ * The in-memory path holds every page until its block is clustered, which a
+ * ~176,000-page crawl could not afford; the corpora the classifier was
+ * validated on (302, 1,416, 8,936 and 89 pages — 9 / 21 / 63 / 3 clusters)
+ * sit well below 20,000, with room for sites twice the largest. Changing it
+ * moves corpora between the two paths, and so changes their stored keys.
+ * `scripts/bench-template-classification.mjs` measures time and peak memory
+ * on either path.
  */
 export const CORPUS_INLINE_THRESHOLD = 20_000;
 
@@ -426,21 +427,19 @@ export type PageFactory = () =>
 	| Iterable<PageClusterSignals>
 	| AsyncIterable<PageClusterSignals>;
 
-/** Pages handed to the native run per call. */
+/**
+ * Pages handed to the native run per call: enough to keep its thread pool
+ * busy on one call, few enough that the next batch is read while it runs.
+ * Only throughput depends on it, never the keys.
+ */
 const PAGES_PER_BATCH = 64;
 
-/** HTML (in UTF-16 code units) handed to the native run per call, at most. */
+/**
+ * HTML (in UTF-16 code units) handed to the native run per call, at most, so
+ * a batch of unusually large pages does not hold their copies all at once.
+ * Only memory and throughput depend on it, never the keys.
+ */
 const HTML_PER_BATCH = 32 * 1024 * 1024;
-
-/** The order Stage A reports landmark types in (`StageAUnit.instanceTypes`). */
-const LANDMARK_TYPE_CODES: readonly LandmarkType[] = [
-	'header',
-	'footer',
-	'nav',
-	'aside',
-	'form',
-	'search',
-];
 
 /**
  * The error for a factory that yields a different corpus on a later read.
@@ -553,7 +552,7 @@ function toCrossBlockUnit(
 			instance++
 		) {
 			instances.push({
-				type: LANDMARK_TYPE_CODES[unit.instanceTypes[instance]!]!,
+				type: ALL_LANDMARK_TYPES[unit.instanceTypes[instance]!]!,
 				tokens: tokensOf(
 					unit.instanceTokens,
 					unit.instanceTokenOffsets[instance]!,
@@ -626,8 +625,9 @@ async function runStageA(
  * and chrome is judged across the corpus. Above it — the streaming path —
  * each block is clustered on a sample of {@link BLOCK_SAMPLE_SIZE} pages and
  * a further read assigns the rest; see that constant for the semantic
- * differences. Either way the factory is read once more than Pass 0 needs
- * per HTML pass, and HTML is never held for the whole corpus by JavaScript.
+ * differences. The factory is read twice — once for Pass 0's signals, once
+ * for the HTML — and on the streaming path a third time to assign the pages
+ * outside the samples; JavaScript never holds the whole corpus's HTML.
  * @param pages
  * @param options
  * @example

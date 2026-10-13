@@ -1,8 +1,9 @@
 import { FOLDABLE_TAGS } from './foldable-tags.js';
 
 /**
- * Only `FOLDABLE_TAGS` qualify — those are the tags `build-segment.ts` omits
- * the name from when they have classes (producing `.c-x` instead of `div.c-x`),
+ * Only `FOLDABLE_TAGS` qualify — those are the tags the native Stage A
+ * (`segment.rs`) writes without their name when they have classes
+ * (producing `.c-x` instead of `div.c-x`),
  * so a bare `div` or `span` with NO class is a structural-only wrapper.
  * Non-foldable tags (`section`, `article`, …) always appear with their tag name
  * and carry semantic meaning even when classless, so they are kept.
