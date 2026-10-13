@@ -1,4 +1,4 @@
-import type { PageClusterSignals } from '../page-cluster/resolve-page-cluster-keys.js';
+import type { GoldenPage } from './types.js';
 
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -16,10 +16,10 @@ import path from 'node:path';
  * @returns One page per `.html` file, sorted by relative path.
  * @example
  * ```ts
- * const pages = buildFixtureCorpus(path.join(engineDir, '__fixtures__'));
+ * const pages = buildFixtureCorpus(path.join(pageClusterDir, '__fixtures__'));
  * ```
  */
-export function buildFixtureCorpus(fixturesDir: string): PageClusterSignals[] {
+export function buildFixtureCorpus(fixturesDir: string): GoldenPage[] {
 	return readdirSync(fixturesDir, { recursive: true, encoding: 'utf8' })
 		.filter((relativePath) => relativePath.endsWith('.html'))
 		.map((relativePath) => relativePath.split(path.sep).join('/'))

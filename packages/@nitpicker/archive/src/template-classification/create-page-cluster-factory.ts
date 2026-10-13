@@ -1,117 +1,69 @@
-import type Page from '../page.js';
-import type {
-	PageClusterSignals,
-	PageFactory,
-} from './page-cluster/resolve-page-cluster-keys.js';
+import type { PageClusterPage, PageFactory } from './page-cluster/types.js';
+import type { CreatePageClusterFactoryOptions } from './types.js';
 
 import { createContentRootHint } from './create-content-root-hint.js';
 
 /**
- * Builds the `PageFactory` that page-cluster's
- * `resolvePageClusterKeys` reads the corpus through, plus a way to read back
- * the URL list it actually yielded (see below for why that can't be known
- * synchronously up front).
+ * Builds the `PageFactory` that page-cluster's `resolvePageClusterKeys`
+ * reads the corpus through, and the URLs of the pages it yields, in order.
  *
  * Only internal HTML pages (`Page.isInternalPage()` — content-type based,
  * matching the "a page is judged by content-type, not `isTarget`" archive
- * invariant) with retrievable HTML are yielded. A page can be an internal
- * HTML page and still have no retrievable HTML (e.g. a skipped or
- * self-heal-affected row) — `page.getHtml()` returning falsy is only known
- * by actually calling it, not from any synchronous field.
+ * invariant) with a non-empty stored HTML snapshot are yielded. Which pages
+ * have one is decided upfront, from `pageIdsWithHtml`
+ * (`collectPageIdsWithHtml`, one query that decompresses nothing), so the
+ * set is fixed before the first read and identical on every read, as the
+ * engine requires, and each page's HTML is decompressed only on the reads
+ * that use it (`getHtml`) instead of on every read just to see whether it
+ * is empty.
  *
- * `resolvePageClusterKeys` calls the returned factory several times to
- * re-read the corpus: blocking signals first, then HTML, and above its
- * in-memory threshold HTML once more to assign the pages outside the block
- * samples (see its own docs). Whichever pages end up excluded (empty HTML)
- * must be excluded **identically** on every call, or the pass-to-pass page
- * sequence drifts and the engine's same-order contract breaks. Excluding
- * by `isInternalPage()` is safe (synchronous, deterministic per page). Excluding by empty `getHtml()` is also safe,
- * but only because the archive is immutable for the duration of one
- * classification run — the same page's HTML never changes between calls.
- *
- * Each yielded signal carries the page's `paths`, `stylesheetHrefs`, `html`,
- * `host`, and — when the crawler detected a main-content element for it —
- * a `contentRoot` hint (see {@link createContentRootHint}) that
- * page-cluster anchors its content-depth cap on.
- *
- * `getYieldedUrls()` reflects the URLs yielded by the **most recently
- * completed** full iteration of the factory's generator, deliberately not a
- * separate up-front probe pass over every candidate's HTML: every documented
- * call shape of `resolvePageClusterKeys` fully drains the factory it's given
- * (that's what "reading the factory" means in its own docs), so by the time
- * `resolvePageClusterKeys` resolves, at least one full drain has already
- * happened and `getYieldedUrls()` reflects it — a dedicated probe pass would
- * only add a full corpus-wide decompression sweep beyond the engine's own,
- * for no benefit. `classifyPageTemplates` still defends against a
- * violated assumption here with a hard length check against
- * `resolvePageClusterKeys`'s result array.
- * @param pages - Candidate pages (as already loaded by
- *   `classifyArchivePageTemplates` — this function does not re-query the archive).
- * @param stylesheetsByUrl - Output of `collectPageStylesheetUrls`, keyed by
- *   `page.url.href`.
- * @returns `factory` to pass to `resolvePageClusterKeys`, and
- *   `getYieldedUrls()` — call this only *after* `resolvePageClusterKeys`
- *   resolves; its result array has exactly the length and order of
- *   `getYieldedUrls()` at that point.
+ * Each yielded page carries its `paths`, `stylesheetHrefs`, `host`, and —
+ * when the crawler detected a main-content element for it — a `contentRoot`
+ * hint (see {@link createContentRootHint}) that the classifier anchors its
+ * content-depth cap on.
+ * @param options - See {@link CreatePageClusterFactoryOptions}.
+ * @returns `factory` to pass to `resolvePageClusterKeys`, and `urls`: the
+ *   yielded pages' `page.url.href`, in the order of the keys it returns.
  * @example
  * ```ts
- * const { factory, getYieldedUrls } = createPageClusterFactory(pages, stylesheetsByUrl);
- * const clusterKeys = await resolvePageClusterKeys(factory);
- * const yieldedUrls = getYieldedUrls(); // safe to read now
+ * const { factory, urls } = createPageClusterFactory({ pages, stylesheetsByUrl, pageIdsWithHtml });
+ * const { keys } = await resolvePageClusterKeys(factory);
+ * // keys[i] is the template key of urls[i]
  * ```
  */
-export function createPageClusterFactory(
-	pages: readonly Page[],
-	stylesheetsByUrl: ReadonlyMap<string, readonly string[]>,
-): { factory: PageFactory; getYieldedUrls: () => readonly string[] } {
-	const candidates = pages.filter((page) => page.isInternalPage());
-	let yieldedUrls: readonly string[] = [];
-
-	const factory: PageFactory = () =>
-		yieldPageClusterSignals(candidates, stylesheetsByUrl, (urls) => {
-			yieldedUrls = urls;
-		});
-
-	return { factory, getYieldedUrls: () => yieldedUrls };
-}
-
-/**
- * The actual per-call iterator body for {@link createPageClusterFactory}'s
- * `PageFactory`. HTML is fetched lazily, one page at a time, so the archive
- * never holds more than one page's decompressed HTML in memory regardless
- * of corpus size — matching page-cluster's own memory-bounding
- * design for its multi-pass reads.
- * @param candidates - Pre-filtered internal HTML pages, in fixed order.
- * @param stylesheetsByUrl - See {@link createPageClusterFactory}.
- * @param onDrained - Called with every yielded URL, in order, once this
- *   particular iteration reaches the end of `candidates` — never called if
- *   the consumer stops iterating early.
- * @yields {PageClusterSignals} One per candidate page with retrievable HTML.
- */
-async function* yieldPageClusterSignals(
-	candidates: readonly Page[],
-	stylesheetsByUrl: ReadonlyMap<string, readonly string[]>,
-	onDrained: (yieldedUrls: readonly string[]) => void,
-): AsyncGenerator<PageClusterSignals> {
-	const yieldedUrls: string[] = [];
-	for (const page of candidates) {
-		const html = await page.getHtml();
-		if (!html) {
-			continue;
-		}
-
+export function createPageClusterFactory(options: CreatePageClusterFactoryOptions): {
+	factory: PageFactory;
+	urls: readonly string[];
+} {
+	const { stylesheetsByUrl, pageIdsWithHtml } = options;
+	const candidates = options.pages.filter(
+		(page) => page.isInternalPage() && pageIdsWithHtml.has(page.id),
+	);
+	const corpus: PageClusterPage[] = candidates.map((page) => {
 		const url = page.url;
-		yieldedUrls.push(url.href);
 		const contentRoot = createContentRootHint(page);
-		yield {
+		return {
 			paths: url.paths,
 			stylesheetHrefs: stylesheetsByUrl.get(url.href) ?? [],
-			html,
 			host: url.port ? `${url.hostname}:${url.port}` : url.hostname,
 			// Left off entirely (not `undefined`) for pages with no detected
-			// main content, so the yielded shape carries no undefined-valued key.
+			// main content, so the page carries no undefined-valued key.
 			...(contentRoot ? { contentRoot } : {}),
+			getHtml: async () => {
+				const html = await page.getHtml();
+				if (!html) {
+					// The archive does not change during a classification, so a
+					// page found with HTML upfront always reads back with it.
+					throw new Error(
+						`createPageClusterFactory: ${url.href} has no stored HTML, but collectPageIdsWithHtml listed it`,
+					);
+				}
+				return html;
+			},
 		};
-	}
-	onDrained(yieldedUrls);
+	});
+	return {
+		factory: () => corpus,
+		urls: candidates.map((page) => page.url.href),
+	};
 }

@@ -1,6 +1,4 @@
-import type { GoldenRecord } from './types.js';
-import type { ClusterReason } from '../page-cluster/build-cluster-reason.js';
-import type { PageClusterSignals } from '../page-cluster/resolve-page-cluster-keys.js';
+import type { GoldenPage, GoldenRecord } from './types.js';
 
 import { createHash } from 'node:crypto';
 
@@ -14,7 +12,8 @@ import { resolvePageClusterKeys } from '../page-cluster/resolve-page-cluster-key
  * the serializer `replacePageTemplates` stores with, so the golden pins the
  * persisted text, floats included.
  *
- * The corpus is handed to the engine as signals directly: the archive-side
+ * The corpus is handed to the driver directly, each page's HTML behind
+ * `getHtml`: the archive-side
  * adapters (`createPageClusterFactory`, `createContentRootHint`,
  * `collectPageStylesheetUrls`, the URL ↔ key mapping in
  * `classifyPageTemplates`) are not exercised here — they have their own
@@ -28,15 +27,16 @@ import { resolvePageClusterKeys } from '../page-cluster/resolve-page-cluster-key
  * ```
  */
 export async function classifyGoldenCorpus(
-	pages: readonly PageClusterSignals[],
+	pages: readonly GoldenPage[],
 ): Promise<GoldenRecord> {
-	const reasons = new Map<string, ClusterReason>();
-	const keys = await resolvePageClusterKeys(() => pages, {
-		onProgress: () => {},
-		onClusterReason: (clusterKey, reason) => {
-			reasons.set(clusterKey, reason);
-		},
-	});
+	const { keys, reasons } = await resolvePageClusterKeys(
+		() =>
+			pages.map(({ html, ...signals }) => ({
+				...signals,
+				getHtml: () => html,
+			})),
+		{ onProgress: () => {} },
+	);
 
 	const templateKeys: string[] = [];
 	const indexByKey = new Map<string, number>();

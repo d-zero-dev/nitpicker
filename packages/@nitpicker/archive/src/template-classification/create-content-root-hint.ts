@@ -1,5 +1,5 @@
 import type Page from '../page.js';
-import type { PageClusterSignals } from './page-cluster/resolve-page-cluster-keys.js';
+import type { ContentRootHint } from '@nitpicker/core/types';
 
 /**
  * Builds the `contentRoot` hint page-cluster anchors its
@@ -20,7 +20,7 @@ import type { PageClusterSignals } from './page-cluster/resolve-page-cluster-key
  * "given but empty" and "absent" the same and a hint with nothing left
  * matches nothing. Returns `undefined` when the page has no detected main
  * content (never rendered, or no candidate element) or nothing usable is
- * left, so the factory can leave the field off the page's signals entirely.
+ * left, so the factory can leave the field off the page entirely.
  *
  * Deliberately not built from `mainContentSelector`: it is a diagnostic
  * `tag#id.class` string that is not guaranteed unique and would need a CSS
@@ -39,7 +39,7 @@ export function createContentRootHint(
 		Page,
 		'mainContentNodeName' | 'mainContentId' | 'mainContentRole' | 'mainContentClassList'
 	>,
-): PageClusterSignals['contentRoot'] {
+): ContentRootHint | undefined {
 	const tagName = page.mainContentNodeName?.toLowerCase();
 	const id = page.mainContentId;
 	const role = page.mainContentRole;

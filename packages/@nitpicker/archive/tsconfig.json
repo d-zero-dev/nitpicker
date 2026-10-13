@@ -12,7 +12,6 @@
 		"node_modules",
 		"lib",
 		"./src/**/*.spec.ts",
-		"./src/template-classification/page-cluster/build-mirrored-template-fixture.ts",
 		"./src/template-classification/golden/**",
 		"./src/body-hash/extract-body.ts",
 		"./src/body-hash/mask-dynamic-ids.ts",

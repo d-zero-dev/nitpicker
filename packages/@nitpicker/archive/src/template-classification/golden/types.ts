@@ -1,8 +1,22 @@
-import type { PageClusterSignals } from '../page-cluster/resolve-page-cluster-keys.js';
+import type { ContentRootHint } from '@nitpicker/core/types';
+
+/**
+ * One page of a golden corpus, as data. Its `JSON.stringify` (field order
+ * included) feeds {@link GoldenRecord.inputDigest}, so the shape is fixed;
+ * `classifyGoldenCorpus` hands it to the driver with `html` behind
+ * `getHtml`.
+ */
+export interface GoldenPage {
+	readonly paths: readonly string[];
+	readonly stylesheetHrefs: readonly string[];
+	readonly html: string;
+	readonly host?: string;
+	readonly contentRoot?: ContentRootHint;
+}
 
 /**
  * The classification of one golden corpus, in the form committed under
- * `__golden__/`. Every field is something a reimplementation of the engine
+ * `__golden__/`. Every field is something a reimplementation of the classifier
  * must reproduce exactly: the per-page template keys are what
  * `page_templates` stores, and each reason string is the exact JSON text
  * `replacePageTemplates` compresses into `page_template_clusters.reason_json`.
@@ -51,7 +65,7 @@ export interface SyntheticSection {
 	readonly baseCount: number;
 	/** `false` for one-off pages whose count must not grow with `scale`. */
 	readonly scales: boolean;
-	readonly render: (context: SyntheticSiteContext, index: number) => PageClusterSignals;
+	readonly render: (context: SyntheticSiteContext, index: number) => GoldenPage;
 }
 
 /**
@@ -62,7 +76,7 @@ export interface SyntheticSiteOptions {
 	readonly seed: number;
 	/**
 	 * Multiplies the page count of every section. `1` gives a corpus of a few
-	 * hundred pages (the engine's in-memory path); large values push it past
+	 * hundred pages (the classifier's in-memory path); large values push it past
 	 * the streaming threshold.
 	 */
 	readonly scale: number;
