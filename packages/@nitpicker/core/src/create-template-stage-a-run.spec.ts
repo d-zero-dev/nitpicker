@@ -122,6 +122,90 @@ describe('createTemplateStageARun', () => {
 		expect(second.output.tokens).toEqual(first.output.tokens);
 	});
 
+	it('produces the same keys and token table for varied pages on every run', async () => {
+		const pages = Array.from({ length: 150 }, (_, index) => ({
+			html: `<body><main><div class="v${index % 7}"><section class="s${index % 5}"><p>${index}</p></section></div></main></body>`,
+		}));
+		const first = await classify(pages, true);
+		for (let repeat = 0; repeat < 3; repeat++) {
+			const again = await classify(pages, true);
+			expect(keysOf(again.output)).toEqual(keysOf(first.output));
+			expect(again.output.tokens).toEqual(first.output.tokens);
+		}
+	});
+
+	it('streams the same result whether pages come in one call or in batches with unread pages blanked', async () => {
+		const pages = Array.from({ length: 200 }, (_, index) => ({
+			html: index % 2 === 0 ? LIST : DETAIL,
+		}));
+		const whole = await classify(pages, true);
+
+		const run = createTemplateStageARun({
+			blockKeys: ['path:news'],
+			blockOfPage: new Uint32Array(pages.length),
+			streaming: true,
+		});
+		const pushInBatches = async (
+			push: (batch: StageAPage[]) => Promise<void>,
+			mask: Uint8Array,
+		) => {
+			const masked = pages.map((page, index) => (mask[index] ? page : { html: '' }));
+			for (let start = 0; start < masked.length; start += 64) {
+				await push(masked.slice(start, start + 64));
+			}
+		};
+		await pushInBatches((batch) => run.pushPages(batch), run.pageMask());
+		await run.finishPages();
+		expect(run.needsAssignment()).toBe(true);
+		await pushInBatches((batch) => run.pushAssignmentPages(batch), run.pageMask());
+		const batched = await run.takeOutput();
+		expect(keysOf(batched)).toEqual(keysOf(whole.output));
+	});
+
+	it('marks the pages each read uses', async () => {
+		const run = createTemplateStageARun({
+			blockKeys: ['path:news'],
+			blockOfPage: new Uint32Array(150),
+			streaming: true,
+		});
+		const firstMask = run.pageMask();
+		expect(firstMask.reduce((sum, used) => sum + used, 0)).toBe(100);
+		await run.pushPages(Array.from({ length: 150 }, () => ({ html: LIST })));
+		await run.finishPages();
+		const secondMask = run.pageMask();
+		expect(secondMask.reduce((sum, used) => sum + used, 0)).toBe(50);
+		expect(firstMask.every((used, index) => used !== secondMask[index])).toBe(true);
+	});
+
+	it('delivers every progress event of a call before the call resolves', async () => {
+		const events: StageAProgress[] = [];
+		const run = createTemplateStageARun({
+			blockKeys: ['path:a', 'path:b', 'path:c'],
+			blockOfPage: Uint32Array.of(0, 0, 1, 1, 2, 2),
+			streaming: true,
+			onProgress: (event) => events.push(event),
+		});
+		for (let block = 0; block < 3; block++) {
+			await run.pushPages([{ html: LIST }, { html: DETAIL }]);
+			expect(events).toHaveLength(block + 1);
+		}
+	});
+
+	it('rejects with the error onProgress threw, then rejects every later call', async () => {
+		const failure = new Error('progress sink failed');
+		const run = createTemplateStageARun({
+			blockKeys: ['path:news'],
+			blockOfPage: new Uint32Array(1),
+			streaming: false,
+			onProgress: () => {
+				throw failure;
+			},
+		});
+		await run.pushPages([{ html: LIST }]);
+		await expect(run.finishPages()).rejects.toBe(failure);
+		await expect(run.takeOutput()).rejects.toBe(failure);
+	});
+
 	it('rejects a call made while the previous one is still running', async () => {
 		const run = createTemplateStageARun({
 			blockKeys: ['path:news'],
@@ -129,8 +213,21 @@ describe('createTemplateStageARun', () => {
 			streaming: false,
 		});
 		const first = run.pushPages([{ html: LIST }]);
-		expect(() => run.pushPages([{ html: LIST }])).toThrow(/still running/);
+		await expect(run.pushPages([{ html: LIST }])).rejects.toThrow(/still running/);
+		expect(() => run.needsAssignment()).toThrow(/still running/);
+		expect(() => run.pageMask()).toThrow(/still running/);
 		await first;
+	});
+
+	it('stops the running call when cancelled', async () => {
+		const run = createTemplateStageARun({
+			blockKeys: ['path:news'],
+			blockOfPage: new Uint32Array(2000),
+			streaming: false,
+		});
+		const call = run.pushPages(Array.from({ length: 2000 }, () => ({ html: DETAIL })));
+		run.cancel();
+		await expect(call).rejects.toThrow(/cancelled/);
 	});
 
 	it('rejects more pages than the run was created for', async () => {
@@ -184,5 +281,25 @@ describe('createTemplateStageARun', () => {
 		await run.finishPages();
 		await run.takeOutput();
 		await expect(run.takeOutput()).rejects.toThrow(/already produced/);
+		expect(() => run.pageMask()).toThrow(/already produced/);
+		expect(run.needsAssignment()).toBe(false);
+	});
+
+	it('rejects a streaming read with the error onProgress threw midway, and every later call', async () => {
+		const failure = new Error('progress sink failed');
+		let seen = 0;
+		const run = createTemplateStageARun({
+			blockKeys: ['path:a', 'path:b', 'path:c'],
+			blockOfPage: Uint32Array.of(0, 0, 1, 1, 2, 2),
+			streaming: true,
+			onProgress: () => {
+				seen++;
+				if (seen === 2) throw failure;
+			},
+		});
+		await expect(
+			run.pushPages(Array.from({ length: 6 }, () => ({ html: LIST }))),
+		).rejects.toBe(failure);
+		await expect(run.finishPages()).rejects.toBe(failure);
 	});
 });

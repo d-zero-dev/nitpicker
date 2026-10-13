@@ -6,10 +6,15 @@
 //! JS keeps reading the next batch meanwhile. Calls must not overlap: the
 //! run is a sequence (sampling decisions follow page order), so a second
 //! call while one is running is rejected rather than queued.
+//!
+//! Progress events cross to JS on a threadsafe function, which does not
+//! order them against the promise's settlement; each reading call therefore
+//! resolves with the number of events it sent, so the JS wrapper can wait
+//! for them before resolving its own promise.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use napi::bindgen_prelude::{Object, Uint8Array, Uint32Array};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
@@ -202,9 +207,26 @@ fn pack(output: Output, vocabulary: &Vocabulary) -> PackedOutput {
 	}
 }
 
+const PRODUCED: &str = "the run already produced its output";
+
 fn active(slot: &mut Option<Run>) -> std::result::Result<&mut Run, RunError> {
 	slot.as_mut()
-		.ok_or_else(|| RunError::Protocol("the run already produced its output".to_owned()))
+		.ok_or_else(|| RunError::Protocol(PRODUCED.to_owned()))
+}
+
+fn still_running() -> Error {
+	Error::new(
+		Status::GenericFailure,
+		"a TemplateStageARun call is still running; await it before the next",
+	)
+}
+
+/// The run, or a failure when an earlier call panicked while holding it.
+fn lock(shared: &Shared) -> Result<MutexGuard<'_, Option<Run>>> {
+	shared
+		.run
+		.lock()
+		.map_err(|_| Error::new(Status::GenericFailure, "the run's lock is poisoned"))
 }
 
 fn to_page_input(page: StageAPageInput) -> PageInput {
@@ -281,12 +303,13 @@ impl TemplateStageARun {
 	}
 
 	/// Runs `work` on rayon's pool and settles the returned promise with its
-	/// result, turned into a JS value by `finish` on the JS thread.
+	/// result, turned into a JS value by `finish` on the JS thread together
+	/// with the number of progress events the work sent.
 	fn spawn<'env, T, D, F>(
 		&self,
 		env: &'env Env,
 		work: F,
-		finish: fn(T) -> D,
+		finish: fn(T, u32) -> D,
 	) -> Result<Object<'env>>
 	where
 		T: Send + 'static,
@@ -294,42 +317,42 @@ impl TemplateStageARun {
 		F: FnOnce(&mut Option<Run>, &Context) -> std::result::Result<T, RunError> + Send + 'static,
 	{
 		if self.shared.busy.swap(true, Ordering::AcqRel) {
-			return Err(Error::new(
-				Status::GenericFailure,
-				"a TemplateStageARun call is still running; await it before the next",
-			));
+			return Err(still_running());
 		}
 		let guard = BusyGuard(Arc::clone(&self.shared));
 		let (deferred, promise) = env.create_deferred()?;
 		let shared = Arc::clone(&self.shared);
 		rayon::spawn(move || {
+			let sent = AtomicU32::new(0);
 			let outcome = catch_unwind(AssertUnwindSafe(|| {
 				let report = |progress: Progress| {
 					if let Some(callback) = &shared.progress {
-						callback.call(
+						let status = callback.call(
 							to_js_progress(progress),
 							ThreadsafeFunctionCallMode::NonBlocking,
 						);
+						// Only queued events reach JS, so only they are counted.
+						if status == Status::Ok {
+							sent.fetch_add(1, Ordering::Relaxed);
+						}
 					}
 				};
 				let context = Context {
 					cancelled: &shared.cancelled,
 					progress: &report,
 				};
-				let mut slot = shared
-					.run
-					.lock()
-					.map_err(|_| RunError::Protocol("the run's lock is poisoned".to_owned()))?;
-				work(&mut slot, &context)
+				let mut slot = lock(&shared)?;
+				work(&mut slot, &context).map_err(|error| to_napi_error(&error))
 			}));
+			let sent = sent.load(Ordering::Relaxed);
 			// The call stays busy until the promise settles on the JS thread, not
 			// merely until the work ends here: otherwise a quick call could free
 			// the run before JS awaited it, and an overlapping call would slip in.
 			deferred.resolve(move |_| {
 				drop(guard);
 				match outcome {
-					Ok(Ok(value)) => Ok(finish(value)),
-					Ok(Err(error)) => Err(to_napi_error(&error)),
+					Ok(Ok(value)) => Ok(finish(value, sent)),
+					Ok(Err(error)) => Err(error),
 					Err(_) => Err(Error::new(
 						Status::GenericFailure,
 						"template classification panicked",
@@ -340,8 +363,17 @@ impl TemplateStageARun {
 		Ok(promise)
 	}
 
-	/// Reads the next pages, in corpus order.
-	#[napi(ts_return_type = "Promise<void>")]
+	/// Locks the run for a synchronous query, which must not overlap a call.
+	fn query(&self) -> Result<MutexGuard<'_, Option<Run>>> {
+		if self.shared.busy.load(Ordering::Acquire) {
+			return Err(still_running());
+		}
+		lock(&self.shared)
+	}
+
+	/// Reads the next pages, in corpus order. Resolves with the number of
+	/// progress events sent.
+	#[napi(ts_return_type = "Promise<number>")]
 	pub fn push_pages<'env>(
 		&self,
 		env: &'env Env,
@@ -351,34 +383,47 @@ impl TemplateStageARun {
 		self.spawn(
 			env,
 			move |slot, context| active(slot)?.push_pages(pages, context),
-			|()| (),
+			|(), sent| sent,
 		)
 	}
 
 	/// Ends the first read (an in-memory run clusters every block here).
-	#[napi(ts_return_type = "Promise<void>")]
+	/// Resolves with the number of progress events sent.
+	#[napi(ts_return_type = "Promise<number>")]
 	pub fn finish_pages<'env>(&self, env: &'env Env) -> Result<Object<'env>> {
 		self.spawn(
 			env,
 			|slot, context| active(slot)?.finish_pages(context),
-			|()| (),
+			|(), sent| sent,
 		)
+	}
+
+	/// Which pages the current read uses (`1`); the others may be sent
+	/// with empty HTML.
+	#[napi]
+	pub fn page_mask(&self) -> Result<Uint8Array> {
+		let run = self.query()?;
+		let run = run
+			.as_ref()
+			.ok_or_else(|| to_napi_error(&RunError::Protocol(PRODUCED.to_owned())))?;
+		Ok(run
+			.page_mask()
+			.into_iter()
+			.map(u8::from)
+			.collect::<Vec<u8>>()
+			.into())
 	}
 
 	/// Whether a streaming run needs a second read to assign the pages
 	/// outside its samples.
 	#[napi]
 	pub fn needs_assignment(&self) -> Result<bool> {
-		let run = self
-			.shared
-			.run
-			.lock()
-			.map_err(|_| Error::new(Status::GenericFailure, "the run's lock is poisoned"))?;
-		Ok(run.as_ref().is_some_and(Run::needs_assignment))
+		Ok(self.query()?.as_ref().is_some_and(Run::needs_assignment))
 	}
 
-	/// Assigns the next pages of the second read, in corpus order.
-	#[napi(ts_return_type = "Promise<void>")]
+	/// Assigns the next pages of the second read, in corpus order. Resolves
+	/// with the number of progress events sent.
+	#[napi(ts_return_type = "Promise<number>")]
 	pub fn push_assignment_pages<'env>(
 		&self,
 		env: &'env Env,
@@ -388,7 +433,7 @@ impl TemplateStageARun {
 		self.spawn(
 			env,
 			move |slot, context| active(slot)?.push_assignment_pages(pages, context),
-			|()| (),
+			|(), sent| sent,
 		)
 	}
 
@@ -398,13 +443,13 @@ impl TemplateStageARun {
 		self.spawn(
 			env,
 			|slot, _| {
-				let run = slot.take().ok_or_else(|| {
-					RunError::Protocol("the run already produced its output".to_owned())
-				})?;
+				let run = slot
+					.take()
+					.ok_or_else(|| RunError::Protocol(PRODUCED.to_owned()))?;
 				let (output, vocabulary) = run.into_output()?;
 				Ok(pack(output, &vocabulary))
 			},
-			PackedOutput::into_js,
+			|output, _| output.into_js(),
 		)
 	}
 

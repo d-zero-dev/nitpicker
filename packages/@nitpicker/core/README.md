@@ -44,6 +44,8 @@ const { keys, keyOfPage } = await run.takeOutput();
 keys[keyOfPage[0]!]; // '["path:news","cluster:0"]'
 ```
 
+`streaming: true` では、ブロックごとに `TEMPLATE_BLOCK_SAMPLE_SIZE`（`@nitpicker/core/template-block-sample-size`）ページのサンプルだけをクラスタリングし、残りのページは 2 回目の読み込み（`pushAssignmentPages`）で最も近いクラスタに割り当てます。どちらの読み込みでも全ページをコーパス順に渡しますが、`pageMask()` が 0 のページは HTML を空文字にして構いません。
+
 ## 開発
 
 Rust ツールチェーンが必要です（バージョンはリポジトリルートの `rust-toolchain.toml` で固定。セットアップは [CONTRIBUTING.md](../../../CONTRIBUTING.md) を参照）。`yarn build` を実行すると、`scripts/build-native.mjs` がホスト向けのアドオンをビルドしてパッケージ直下に `core.<platform>.node` として置きます。ローダーはこのローカルビルドを先に探し、なければプラットフォーム別パッケージを読み込みます。
@@ -51,7 +53,7 @@ Rust ツールチェーンが必要です（バージョンはリポジトリル
 - Rust のコードは `crates/` 配下の Cargo workspace にあります。napi に依存するのは `nitpicker_napi`（公開関数だけの薄い層）だけで、計算本体の crate は `cargo test` だけでテストできます
 - `yarn test:rust` で Rust のテスト、`yarn lint` で rustfmt と clippy も実行します
 - body hash は既存アーカイブに保存済みの値と byte 単位で一致させています。`crates/nitpicker_html_scan/tests/fixtures/body-hash-golden.json` は `@nitpicker/archive` の `src/body-hash/` にある JavaScript 段階実装（parity テストの oracle）から生成した golden fixture です
-- テンプレート分類の Stage A（`crates/nitpicker_template_cluster`）も、既存アーカイブの `templateKey` と一致させています。HTML は htmlparser2 12.0.0 の挙動を移植した `crates/nitpicker_html_parser` で読みます（エンティティの表 `src/html_decode_tree.rs` は `scripts/generate-html-decode-tree.mjs` が `entities` パッケージから生成したもの）。一致の確認は `@nitpicker/archive` の golden（`src/template-classification/golden/`）で行います
+- テンプレート分類の Stage A（`crates/nitpicker_template_cluster`）も、既存アーカイブの `templateKey` と一致させています。HTML は htmlparser2 12.0.0 の挙動を移植した `crates/nitpicker_html_parser` で読みます（エンティティの表 `src/html_decode_tree.rs` は `scripts/generate-html-decode-tree.mjs` が `entities` パッケージから生成したもの。パーサーの比較基準 `tests/htmlparser2-fixture-events.tsv` は `scripts/record-htmlparser2-events.mjs` が htmlparser2 から記録したもの）。一致の確認は `@nitpicker/archive` の golden（`src/template-classification/golden/`）で行います
 
 ## 関連リンク
 
