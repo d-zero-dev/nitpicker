@@ -17,10 +17,9 @@ export const REASSIGNED_KEY_PREFIX = 'orphan-merge:';
  * call site here indexes `pages`/`pathKeys`/`blockKeys` with a position
  * derived from one of those same arrays' own `.entries()` or `.map()`, so the
  * thrown branch is unreachable in practice; it exists to satisfy
- * `noUncheckedIndexedAccess` without a non-null assertion (same rationale as
- * `requireIndex` in `resolve-page-cluster-keys.ts` and
- * `resolve-structural-cluster-keys.ts`, each kept as an independent copy for
- * the same reason those two are).
+ * `noUncheckedIndexedAccess` without a non-null assertion (the same helper as
+ * `requireIndex` in `complete-linkage-dendrogram.ts`, kept as a file-local
+ * copy so neither module exports it).
  * @param values
  * @param index
  */
@@ -68,10 +67,10 @@ function requireIndex<T>(values: ArrayLike<T>, index: number): T {
  * about.
  *
  * Does not itself compare page content: it only decides which pages should
- * be pooled together for {@link ./resolve-structural-cluster-keys.js |
- * resolveStructuralClusterKeys} to adjudicate (via
- * {@link ./resolve-page-cluster-keys.js | resolvePageClusterKeys}'s existing
- * per-key grouping, unchanged) — an orphan folded into a `css:` block's pool
+ * be pooled together for Stage A's per-block structural clustering to
+ * adjudicate (via {@link ./resolve-page-cluster-keys.js |
+ * resolvePageClusterKeys}'s per-key grouping) — an orphan folded into a
+ * `css:` block's pool
  * still ends up in its own singleton cluster if its content doesn't actually
  * match.
  *
@@ -79,8 +78,8 @@ function requireIndex<T>(values: ArrayLike<T>, index: number): T {
  * (the same coarse granularity `pathDepth` already gives `path:` keys), so
  * multiple genuinely-different-template `css:` blocks that merely happen to
  * share one broad URL section (e.g. everything under a large sub-site's
- * top-level segment) get pooled into the *same* `resolveStructuralClusterKeys`
- * call as each other, not just alongside the orphan that triggered the merge.
+ * top-level segment) get pooled into the *same* Stage A block as each
+ * other, not just alongside the orphan that triggered the merge.
  * Confirmed on real crawl data (8,936 pages): this correctly reunited an
  * orphan with a 1,008-page same-template cluster it had been split from, and
  * the corpus's cluster count improved net (1,984 → 1,972) — but as a side

@@ -4,10 +4,10 @@ import type { PageClusterSignals, ProgressEvent } from './resolve-page-cluster-k
 import { describe, expect, test } from 'vitest';
 
 import {
+	BLOCK_SAMPLE_SIZE,
 	CORPUS_INLINE_THRESHOLD,
 	resolvePageClusterKeys,
 	resolvePageClusterKeysFromArray,
-	resolvePageClusterKeysInMemory,
 } from './resolve-page-cluster-keys.js';
 
 /**
@@ -41,17 +41,17 @@ function buildTinyCorpus(): PageClusterSignals[] {
 	return pages;
 }
 
+const NEWS_KEY = '["css:9984f85c50cf6d72","cluster:0"]';
+const ABOUT_KEY = '["path:about","cluster:0"]';
+const CONTACT_KEY = '["path:contact","cluster:0"]';
+
+/** {@link buildTinyCorpus}'s keys: the news pages share a stylesheet block. */
+const TINY_KEYS = [NEWS_KEY, NEWS_KEY, NEWS_KEY, ABOUT_KEY, CONTACT_KEY];
+
 describe('resolvePageClusterKeys (async factory)', () => {
 	test('empty input returns empty result', async () => {
 		const keys = await resolvePageClusterKeys(() => []);
 		expect(keys).toEqual([]);
-	});
-
-	test('small corpus matches resolvePageClusterKeysInMemory exactly', async () => {
-		const pages = buildTinyCorpus();
-		const streamed = await resolvePageClusterKeys(() => pages);
-		const inMemory = resolvePageClusterKeysInMemory(pages);
-		expect(streamed).toEqual(inMemory);
 	});
 
 	test('async iterable factory works', async () => {
@@ -68,8 +68,42 @@ describe('resolvePageClusterKeys (async factory)', () => {
 			}
 		}
 		const streamed = await resolvePageClusterKeys(() => asyncPages());
-		const inMemory = resolvePageClusterKeysInMemory(pages);
-		expect(streamed).toEqual(inMemory);
+		expect(streamed).toEqual(TINY_KEYS);
+	});
+
+	test('rejects a factory that yields fewer pages on a later read', async () => {
+		const pages = buildTinyCorpus();
+		let calls = 0;
+		await expect(
+			resolvePageClusterKeys(() => (++calls === 1 ? pages : pages.slice(0, 4))),
+		).rejects.toThrow(
+			'a read of the page factory produced 4 pages but Pass 0 saw 5 — the factory must produce the same pages in the same order on every call',
+		);
+	});
+
+	test('rejects with the error a factory throws midway through a later read', async () => {
+		const pages = buildTinyCorpus();
+		const failure = new Error('archive read failed');
+		let calls = 0;
+		/**
+		 * @yields {PageClusterSignals} The first two pages, then throws.
+		 */
+		function* failing(): Generator<PageClusterSignals> {
+			yield pages[0]!;
+			yield pages[1]!;
+			throw failure;
+		}
+		await expect(
+			resolvePageClusterKeys(() => (++calls === 1 ? pages : failing())),
+		).rejects.toBe(failure);
+	});
+
+	test('rejects a factory that yields more pages on a later read', async () => {
+		const pages = buildTinyCorpus();
+		let calls = 0;
+		await expect(
+			resolvePageClusterKeys(() => (++calls === 1 ? pages : [...pages, pages[0]!])),
+		).rejects.toThrow('a read of the page factory produced 6 pages but Pass 0 saw 5');
 	});
 
 	test('single-shot factory (small corpus stays under threshold, factory invoked twice)', async () => {
@@ -83,18 +117,22 @@ describe('resolvePageClusterKeys (async factory)', () => {
 			return pages;
 		}
 		await resolvePageClusterKeys(factory);
-		// Small corpus takes the in-memory path, which invokes the factory
-		// exactly twice (once for blocking signals, once for full pages).
+		// A corpus at or below the threshold needs no assignment read, so the
+		// factory is invoked exactly twice (once for blocking signals, once for
+		// the HTML of Stage A).
 		expect(calls).toBe(2);
 	});
 });
 
+describe('BLOCK_SAMPLE_SIZE', () => {
+	test('is the native Stage A sample size', () => {
+		expect(BLOCK_SAMPLE_SIZE).toBe(100);
+	});
+});
+
 describe('resolvePageClusterKeysFromArray', () => {
-	test('produces the same result as resolvePageClusterKeysInMemory on the same input', async () => {
-		const pages = buildTinyCorpus();
-		const fromArray = await resolvePageClusterKeysFromArray(pages);
-		const inMemory = resolvePageClusterKeysInMemory(pages);
-		expect(fromArray).toEqual(inMemory);
+	test('keys every page of the array', async () => {
+		expect(await resolvePageClusterKeysFromArray(buildTinyCorpus())).toEqual(TINY_KEYS);
 	});
 
 	test('empty input returns empty', async () => {
@@ -142,75 +180,69 @@ describe('resolvePageClusterKeys onProgress on small corpus', () => {
 		expect(pass1IndicesBeforeStageB).toBe(pass1Count);
 	});
 
-	test('result with onProgress is byte-for-byte identical to resolvePageClusterKeysInMemory', async () => {
-		const pages = buildTinyCorpus();
-		const withProgress = await resolvePageClusterKeys(() => pages, {
+	test('keys are the same with onProgress as without it', async () => {
+		const withProgress = await resolvePageClusterKeys(() => buildTinyCorpus(), {
 			onProgress: () => {
 				// discard; only the return value matters here
 			},
 		});
-		const inMemory = resolvePageClusterKeysInMemory(pages);
-		expect(withProgress).toEqual(inMemory);
-	});
-
-	test('no onProgress delegates to sync in-memory path (no yield overhead)', async () => {
-		// Regression guard for the deliberate short-circuit that keeps
-		// library-only callers on the pre-refactor code path. The clearest
-		// black-box signal is that the sync `resolvePageClusterKeysInMemory`
-		// helper is what produces the reference keys — so asserting equality
-		// against it (rather than a hand-written expected array) is what
-		// documents the intended equivalence.
-		const pages = buildTinyCorpus();
-		const withoutProgress = await resolvePageClusterKeys(() => pages);
-		const inMemory = resolvePageClusterKeysInMemory(pages);
-		expect(withoutProgress).toEqual(inMemory);
+		expect(withProgress).toEqual(TINY_KEYS);
 	});
 });
 
 describe('resolvePageClusterKeys (onClusterReason)', () => {
-	test('small corpus with onClusterReason produces the same keys and reasons as resolvePageClusterKeysInMemory', async () => {
-		const pages = buildTinyCorpus();
-		const streamedReasons = new Map<string, ClusterReason>();
-		const streamed = await resolvePageClusterKeys(() => pages, {
-			onClusterReason: (key, reason) => streamedReasons.set(key, reason),
+	test('reports one reason per final cluster, built from its members', async () => {
+		const reasons = new Map<string, ClusterReason>();
+		const keys = await resolvePageClusterKeys(() => buildTinyCorpus(), {
+			onClusterReason: (key, reason) => reasons.set(key, reason),
 		});
-		const inMemoryReasons = new Map<string, ClusterReason>();
-		const inMemory = resolvePageClusterKeysInMemory(pages, {
-			onClusterReason: (key, reason) => inMemoryReasons.set(key, reason),
+		expect(keys).toEqual(TINY_KEYS);
+		expect([...reasons.keys()]).toEqual([NEWS_KEY, ABOUT_KEY, CONTACT_KEY]);
+		expect(reasons.get(NEWS_KEY)).toEqual({
+			memberCount: 3,
+			blocking: [
+				{
+					blockKey: 'css:9984f85c50cf6d72',
+					reason: {
+						kind: 'css',
+						distinctiveStylesheetHrefs: ['https://x.example.com/news.css'],
+					},
+				},
+			],
+			structuralCoreTokens: ['body>article>h1', 'body>article>p'],
+			landmarks: {
+				footer: {
+					presenceRate: 1,
+					chromeRate: 1,
+					shellTokens: ['body>footer'],
+					memberCountWithInstance: 3,
+				},
+			},
+			siblingClusterKeys: [],
 		});
-		expect(streamed).toEqual(inMemory);
-		expect(streamedReasons).toEqual(inMemoryReasons);
-		expect(streamedReasons.size).toBeGreaterThan(0);
+		expect(reasons.get(CONTACT_KEY)?.structuralCoreTokens).toEqual([
+			'body>form>button',
+			'body>form>input',
+			'body>form>label',
+		]);
 	});
 
-	test('combined with onProgress on a small corpus, fires both onClusterReason and progress events, with matching reasons and keys to the sync path', async () => {
-		const pages = buildTinyCorpus();
+	test('combined with onProgress, fires both the reasons and the progress events', async () => {
 		const events: ProgressEvent[] = [];
 		const reasons = new Map<string, ClusterReason>();
-		const result = await resolvePageClusterKeys(() => pages, {
+		const result = await resolvePageClusterKeys(() => buildTinyCorpus(), {
 			onClusterReason: (key, reason) => reasons.set(key, reason),
 			onProgress: (event) => events.push(event),
 		});
-
-		const inMemoryReasons = new Map<string, ClusterReason>();
-		const inMemory = resolvePageClusterKeysInMemory(pages, {
-			onClusterReason: (key, reason) => inMemoryReasons.set(key, reason),
-		});
-		expect(result).toEqual(inMemory);
-		expect(reasons).toEqual(inMemoryReasons);
-		expect(reasons.size).toBeGreaterThan(0);
-
+		expect(result).toEqual(TINY_KEYS);
+		expect([...reasons.keys()]).toEqual([NEWS_KEY, ABOUT_KEY, CONTACT_KEY]);
 		expect(events.some((e) => e.phase === 'pass1-block-complete')).toBe(true);
 		expect(events.filter((e) => e.phase === 'stage-b-start')).toHaveLength(1);
 	});
 
 	test('a corpus above CORPUS_INLINE_THRESHOLD completes on the streaming path and fires onClusterReason once per final cluster, without throwing', async () => {
-		// Regression guard for the fixed design flaw this replaces: the old
-		// `includeLandmarkPositions` retained every member page's landmark
-		// data until final clustering completed, which is why it had to
-		// reject corpora over this threshold outright. `ClusterReason` is
-		// sized by cluster count, not page count, so it has no such ceiling —
-		// this test's whole point is proving that by actually crossing the
+		// `ClusterReason` is sized by cluster count, not page count, so it has no
+		// page-count ceiling — this test proves that by actually crossing the
 		// threshold instead of asserting a thrown error.
 		const bigCount = CORPUS_INLINE_THRESHOLD + 1;
 		/**
@@ -231,7 +263,7 @@ describe('resolvePageClusterKeys (onClusterReason)', () => {
 		for (const key of distinctKeys) expect(reasons.has(key)).toBe(true);
 	}, 30_000);
 
-	test('Pass 1b tokenizes non-sample pages with the allowedClasses learned from the block sample', async () => {
+	test('Pass 1b strips page-unique classes from non-sample pages using the recurring classes learned from the block sample', async () => {
 		// Every page carries a page-unique label on the wrapper right under
 		// <body>, so with the label kept every root-to-leaf path of the page
 		// differs from every other page's (Jaccard 0 against every sample
@@ -324,22 +356,23 @@ describe('resolvePageClusterKeys (content root on the streaming path)', () => {
 		expect(new Set(keys).size).toBe(2);
 	}, 90_000);
 
-	test('the small-corpus path keeps the hint when it re-reads the factory', async () => {
-		const pages = [...generate(24)];
-		const streamed = await resolvePageClusterKeysFromArray(pages);
-		expect(streamed).toStrictEqual(resolvePageClusterKeysInMemory(pages));
-		expect(new Set(streamed).size).toBe(2);
+	/** The two templates of `generate(24)`, alternating. */
+	const ALTERNATING_KEYS = Array.from({ length: 24 }, (_, i) =>
+		i % 2 === 0 ? '["path:p","cluster:0"]' : '["path:p","cluster:1"]',
+	);
+
+	test('a corpus at or below the threshold keeps the hint when the factory is re-read', async () => {
+		expect(await resolvePageClusterKeys(() => generate(24))).toStrictEqual(
+			ALTERNATING_KEYS,
+		);
 	});
 
-	test('the progress-reporting small-corpus path also keeps the hint', async () => {
-		// Passing `onProgress` selects a different in-memory driver than the
-		// no-callback case above, with its own per-block Stage A call.
+	test('a corpus at or below the threshold keeps the hint when onProgress is given', async () => {
 		const events: string[] = [];
 		const keys = await resolvePageClusterKeys(() => generate(24), {
 			onProgress: (event) => events.push(event.phase),
 		});
 		expect(events).toContain('stage-b-start');
-		expect(new Set(keys).size).toBe(2);
-		expect(keys).toStrictEqual(resolvePageClusterKeysInMemory([...generate(24)]));
+		expect(keys).toStrictEqual(ALTERNATING_KEYS);
 	});
 });

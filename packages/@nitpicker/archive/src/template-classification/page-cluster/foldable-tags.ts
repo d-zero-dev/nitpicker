@@ -1,8 +1,8 @@
 /**
- * Tags eligible to have their tag name replaced by `.class` in
- * `build-segment.ts` and to be elided entirely from the path when they have
- * exactly one element child in `is-fold-candidate.ts`. Kept as a single
- * source of truth so the two modules can't silently disagree on which tags
- * are "generic wrappers".
+ * The "generic wrapper" tags: the native Stage A writes them as `.class`
+ * (without the tag name) and folds them out of the path when they wrap a
+ * single element (`segment.rs` in `nitpicker_template_cluster`); Stage B
+ * reads a bare one as an anonymous wrapper. The two lists must agree, since
+ * Stage B recognises what Stage A wrote.
  */
 export const FOLDABLE_TAGS = new Set(['div', 'span']);

@@ -8,7 +8,8 @@ import path from 'node:path';
  * one corpus for the golden test. The pages are unrelated to each other, so
  * the corpus contributes little clustering structure; what it adds is
  * real-world markup (CMS themes, frameworks, multilingual and adversarial
- * pages) for the tokenizer and the landmark / depth-cap passes. Each page
+ * pages) for the HTML parser, tokenization and the landmark / depth-cap
+ * passes. Each page
  * is keyed by its directory and file name, with no stylesheets, so Pass 0
  * blocks the corpus by directory.
  * @param fixturesDir - Absolute path of `page-cluster/__fixtures__/`.

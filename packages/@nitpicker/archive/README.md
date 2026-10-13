@@ -23,7 +23,9 @@ console.log(classifyErrorKind('net::ERR_NAME_NOT_RESOLVED')); // 'dns'
 
 ## テンプレート分類エンジン（page-cluster）
 
-テンプレート分類（`src/template-classification/`）は、ページを DOM 構造の類似性でクラスタリングするエンジンを `src/template-classification/page-cluster/` に持ちます。エンジンの本番コードはこのディレクトリの外（`htmlparser2` と `@d-zero/shared` を除く）に依存せず、パッケージの `exports` にも載せていません。nitpicker からの入口は `resolve-page-cluster-keys.ts` の `resolvePageClusterKeys` だけで、呼び出しは `classify-page-templates.ts` / `create-page-cluster-factory.ts` / `create-content-root-hint.ts` に閉じています（ほかはテスト専用の `golden/`）。エンジンの `clusterKey` は nitpicker 側で `templateKey` と呼び替えます。
+テンプレート分類（`src/template-classification/`）は、ページを DOM 構造の類似性でクラスタリングするエンジンを `src/template-classification/page-cluster/` に持ちます。エンジンの本番コードはこのディレクトリの外（`@nitpicker/core` と `@d-zero/shared` を除く）に依存せず、パッケージの `exports` にも載せていません。nitpicker からの入口は `resolve-page-cluster-keys.ts` の `resolvePageClusterKeys` だけで、呼び出しは `classify-page-templates.ts` / `create-page-cluster-factory.ts` / `create-content-root-hint.ts` に閉じています（ほかはテスト専用の `golden/`）。エンジンの `clusterKey` は nitpicker 側で `templateKey` と呼び替えます。
+
+下図のうち chrome discovery・Stage A・Pass 1b は、[@nitpicker/core](../core/README.md) のネイティブアドオン（Rust の `nitpicker_template_cluster`）が実行します。`resolvePageClusterKeys` は Pass 0 で決めたブロックとページの HTML をアドオンに渡し、返ってきたクラスタを Stage B に渡します。出力は既存アーカイブに保存済みの `templateKey` とバイト単位で一致し、`src/template-classification/golden/` の golden がそれを固定しています。
 
 ### アルゴリズム概観
 
@@ -105,6 +107,8 @@ yarn vitest run packages/@nitpicker/archive/src/template-classification/golden -
 ```
 
 差分を読むときは `inputDigest` を先に見ます。`inputDigest` が変わっていれば入力（生成器か fixture）が変わっています。`inputDigest` が同じなのにほかのフィールドが変わっていれば、エンジンの出力が変わっています。
+
+`page-cluster/__fixtures__/` の HTML は、`@nitpicker/core` の Rust テスト（htmlparser2 との突き合わせ）も読みます。fixture を足したり変えたりしたら、core の `scripts/record-htmlparser2-events.mjs` で記録済みイベントを取り直します（手順はスクリプト冒頭）。取り直すまで core のテストが落ちます。
 
 ## 関連リンク
 

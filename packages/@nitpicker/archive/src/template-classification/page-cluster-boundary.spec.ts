@@ -33,7 +33,7 @@ function listSourceFiles(dir: string): string[] {
 }
 
 describe('page-cluster エンジンの境界', () => {
-	it('エンジンはディレクトリ内の相対 import と htmlparser2・@d-zero/shared・node 組み込み・vitest 以外を import しない', () => {
+	it('エンジンはディレクトリ内の相対 import と @nitpicker/core・@d-zero/shared・vitest 以外を import しない', () => {
 		const specifiers = listSourceFiles(engineDir).flatMap((filePath) =>
 			listImportSpecifiers(filePath),
 		);
@@ -45,11 +45,9 @@ describe('page-cluster エンジンの境界', () => {
 			].toSorted(),
 		).toEqual([
 			'@d-zero/shared/hash',
-			'@d-zero/shared/sort/alphabetical',
-			'htmlparser2',
-			'node:fs',
-			'node:path',
-			'node:url',
+			'@nitpicker/core/create-template-stage-a-run',
+			'@nitpicker/core/template-block-sample-size',
+			'@nitpicker/core/types',
 			'vitest',
 		]);
 	});

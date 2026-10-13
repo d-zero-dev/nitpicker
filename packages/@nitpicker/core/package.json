@@ -23,6 +23,18 @@
 		"./compute-body-hash": {
 			"import": "./lib/compute-body-hash.js",
 			"types": "./lib/compute-body-hash.d.ts"
+		},
+		"./create-template-stage-a-run": {
+			"import": "./lib/create-template-stage-a-run.js",
+			"types": "./lib/create-template-stage-a-run.d.ts"
+		},
+		"./template-block-sample-size": {
+			"import": "./lib/template-block-sample-size.js",
+			"types": "./lib/template-block-sample-size.d.ts"
+		},
+		"./types": {
+			"import": "./lib/types.js",
+			"types": "./lib/types.d.ts"
 		}
 	},
 	"scripts": {

@@ -64,9 +64,9 @@ export type ClusterPartitionReport = {
  * loaded back from an archive.
  *
  * Takes already-tokenized pages rather than raw HTML — a caller with a
- * `resolvePageClusterKeys` result already has token sets on hand (or can
- * derive them via {@link ./tokenize.js | tokenize}), and re-tokenizing here
- * would cost a second full corpus pass for no benefit.
+ * `resolvePageClusterKeys` result already has token sets on hand (Stage B's
+ * `finalGroupsByRoot`), and re-tokenizing here would cost a second full
+ * corpus pass for no benefit.
  * @param pages
  * @param options
  * @example

@@ -1,11 +1,7 @@
 /**
- * Structural-similarity primitive shared by two downstream stages that are
- * not yet implemented: base-cluster generation over `tokenize()` output
- * turned into sets (MinHash/LSH candidate scoring approximates this same
- * ratio) and the default distance for merging medoids in the eventual
- * hierarchical clustering step. Both need "how much of these two token sets
- * overlaps" as a plain, parameter-free calculation, independent of whichever
- * hashing/banding scheme ends up approximating it at scale.
+ * Structural-similarity primitive of Stage B and partition validation:
+ * "how much of these two token sets overlaps" as a plain, parameter-free
+ * calculation (Stage A computes the same ratio natively).
  *
  * Two empty sets return `1`, not `0` or `NaN`: an empty `<body>` compared
  * against another empty `<body>` has no structural difference to report, so

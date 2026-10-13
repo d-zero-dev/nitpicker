@@ -26,10 +26,9 @@ export const DEFAULT_CHROME_OVERLAP_THRESHOLD = 0.8;
  * that actually matters for classifying one instance.
  *
  * An instance with zero tokens is never chrome (there is nothing to
- * corroborate) — matches {@link ./per-page-landmark-signatures.js | computePerPageLandmarkInstances}'s
- * own choice to drop zero-token instances before they ever reach a
- * `PerPageLandmarkInstance`, kept here as a defensive default rather than an
- * assumption about every caller.
+ * corroborate) — matches Stage A's own choice to drop zero-token instances
+ * before they ever reach Stage B, kept here as a defensive default rather
+ * than an assumption about every caller.
  * @param instanceTokens
  * @param shellTokens
  * @param threshold

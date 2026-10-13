@@ -1,18 +1,8 @@
-import type { LandmarkType } from './extract-landmarks.js';
-import type { PerPageLandmarkInstance } from './per-page-landmark-signatures.js';
+import type { LandmarkInstanceTokens, LandmarkType } from './types.js';
 
 import { describe, expect, test } from 'vitest';
 
 import { shellQuorum } from './shell-quorum.js';
-
-const DUMMY_POSITION = {
-	startOffset: 0,
-	endOffset: 0,
-	startLine: 1,
-	startColumn: 1,
-	endLine: 1,
-	endColumn: 1,
-};
 
 /**
  *
@@ -22,13 +12,8 @@ const DUMMY_POSITION = {
 function instance(
 	tokens: readonly string[],
 	type: LandmarkType = 'header',
-): PerPageLandmarkInstance {
-	return {
-		type,
-		tokens: new Set(tokens),
-		signature: JSON.stringify(tokens.toSorted()),
-		position: DUMMY_POSITION,
-	};
+): LandmarkInstanceTokens {
+	return { type, tokens: new Set(tokens) };
 }
 
 describe('shellQuorum', () => {
@@ -52,7 +37,7 @@ describe('shellQuorum', () => {
 		// midpoint (0.34), grouping the 0.65 token with the two 1.00 tokens
 		// as shell, and excluding the 0.03/0.02 tokens as page-specific noise.
 		const pageCount = 100;
-		const perPage: PerPageLandmarkInstance[][] = [];
+		const perPage: LandmarkInstanceTokens[][] = [];
 		for (let i = 0; i < pageCount; i++) {
 			const tokens: string[] = ['a', 'b'];
 			if (i < 65) tokens.push('c');

@@ -1,69 +1,34 @@
-import type {
-	ExtractLandmarksResult,
-	LandmarkInstance,
-	LandmarkType,
-} from './extract-landmarks.js';
 import type { CrossBlockUnit } from './merge-cross-block-clusters.js';
+import type { LandmarkInstanceTokens, LandmarkType } from './types.js';
 
 import { describe, expect, test } from 'vitest';
 
 import { mergeCrossBlockClusters } from './merge-cross-block-clusters.js';
-import { computePerPageLandmarkInstances } from './per-page-landmark-signatures.js';
+
+/** The order in which a page's landmark instances are listed: by type, then document order. */
+const LANDMARK_TYPE_ORDER: readonly LandmarkType[] = [
+	'header',
+	'footer',
+	'nav',
+	'aside',
+	'form',
+	'search',
+];
+
+/** A page without any landmark instance. */
+const noLandmarks: readonly LandmarkInstanceTokens[] = [];
 
 /**
- * Converts an old-style per-member `ExtractLandmarksResult[]` fixture into
- * the pre-tokenized `PerPageLandmarkInstance[][]` shape that `CrossBlockUnit`
- * now stores. Every test in this file historically constructed landmark
- * fixtures as full `ExtractLandmarksResult` objects; this shim funnels them
- * through the same tokenization Stage B used to do at read time, keeping
- * every existing test's semantics intact under the new field name.
- * @param landmarks
+ * Builds one page's landmark instances from literal token arrays — one token
+ * array per landmark instance, grouped by landmark type.
+ * @param overrides
  */
-function toInstances(landmarks: readonly ExtractLandmarksResult[]) {
-	return computePerPageLandmarkInstances(landmarks);
-}
-
-/**
- * Builds fixture {@link LandmarkInstance}s from raw HTML strings. Position
- * values are arbitrary but distinct per instance — this file's tests never
- * assert on position.
- * @param htmlList
- */
-function toLandmarkInstances(htmlList: readonly string[]): LandmarkInstance[] {
-	return htmlList.map((html, i) => ({
-		html,
-		startOffset: i,
-		endOffset: i + html.length,
-		startLine: 1,
-		startColumn: i + 1,
-		endLine: 1,
-		endColumn: i + html.length + 1,
-	}));
-}
-
-const noLandmarks: ExtractLandmarksResult = {
-	header: [],
-	footer: [],
-	nav: [],
-	aside: [],
-	form: [],
-	search: [],
-	main: [],
-	remainderHtml: '',
-};
-
-const landmarksWith = (
-	overrides: Partial<Record<LandmarkType, readonly string[]>>,
-): ExtractLandmarksResult => {
-	const result = { ...noLandmarks };
-	for (const [type, htmlList] of Object.entries(overrides) as [
-		LandmarkType,
-		readonly string[],
-	][]) {
-		result[type] = toLandmarkInstances(htmlList);
-	}
-	return result;
-};
+const instancesWith = (
+	overrides: Partial<Record<LandmarkType, readonly (readonly string[])[]>>,
+): LandmarkInstanceTokens[] =>
+	LANDMARK_TYPE_ORDER.flatMap((type) =>
+		(overrides[type] ?? []).map((tokens) => ({ type, tokens: new Set(tokens) })),
+	);
 
 describe('mergeCrossBlockClusters', () => {
 	test('empty input returns empty maps', () => {
@@ -76,7 +41,7 @@ describe('mergeCrossBlockClusters', () => {
 		const unit: CrossBlockUnit = {
 			key: 'k1',
 			memberTokenSets: [new Set(['body>main>.card'])],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const result = mergeCrossBlockClusters([unit], {});
 		expect(result.rootByKey.get('k1')).toBe('k1');
@@ -87,12 +52,12 @@ describe('mergeCrossBlockClusters', () => {
 		const unit1: CrossBlockUnit = {
 			key: 'k1',
 			memberTokenSets: [tokens],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'k2',
 			memberTokenSets: [tokens],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const result = mergeCrossBlockClusters([unit1, unit2], {});
 		expect(result.rootByKey.get('k1')).toBe(result.rootByKey.get('k2'));
@@ -104,14 +69,14 @@ describe('mergeCrossBlockClusters', () => {
 			memberTokenSets: [
 				new Set(['body>main>article', 'body>main>article>h1', 'body>main>article>p']),
 			],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'k2',
 			memberTokenSets: [
 				new Set(['body>aside>section', 'body>aside>section>ul', 'body>footer>nav']),
 			],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const result = mergeCrossBlockClusters([unit1, unit2], {});
 		expect(result.rootByKey.get('k1')).toBe('k1');
@@ -133,7 +98,7 @@ describe('mergeCrossBlockClusters', () => {
 					'body>main>section.c-reports>ul.c-reports__list',
 				]),
 			],
-			memberLandmarkInstances: toInstances([noLandmarks, noLandmarks]),
+			memberLandmarkInstances: [noLandmarks, noLandmarks],
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'projects',
@@ -147,7 +112,7 @@ describe('mergeCrossBlockClusters', () => {
 					'body>main>section.c-projects>ul.c-projects__list',
 				]),
 			],
-			memberLandmarkInstances: toInstances([noLandmarks, noLandmarks]),
+			memberLandmarkInstances: [noLandmarks, noLandmarks],
 		};
 		const result = mergeCrossBlockClusters([unit1, unit2], {});
 		expect(result.rootByKey.get('reports')).toBe(result.rootByKey.get('projects'));
@@ -161,14 +126,14 @@ describe('mergeCrossBlockClusters', () => {
 			memberTokenSets: [
 				new Set(['body>main>section.type-a', 'body>main>section.type-a>p']),
 			],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'solo-b',
 			memberTokenSets: [
 				new Set(['body>main>section.type-b', 'body>main>section.type-b>p']),
 			],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const result = mergeCrossBlockClusters([unit1, unit2], {});
 		expect(result.rootByKey.get('solo-a')).toBe('solo-a');
@@ -179,17 +144,17 @@ describe('mergeCrossBlockClusters', () => {
 		const unit1: CrossBlockUnit = {
 			key: 'a',
 			memberTokenSets: [new Set(['x'])],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'b',
 			memberTokenSets: [new Set(['y'])],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const unit3: CrossBlockUnit = {
 			key: 'c',
 			memberTokenSets: [new Set(['z'])],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const result = mergeCrossBlockClusters([unit1, unit2, unit3], {});
 		expect(result.rootByKey.has('a')).toBe(true);
@@ -202,12 +167,12 @@ describe('mergeCrossBlockClusters', () => {
 		const unit1: CrossBlockUnit = {
 			key: 'k1',
 			memberTokenSets: [tokens],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'k2',
 			memberTokenSets: [tokens],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const r1 = mergeCrossBlockClusters([unit1, unit2], {});
 		const r2 = mergeCrossBlockClusters([unit1, unit2], {});
@@ -220,12 +185,12 @@ describe('mergeCrossBlockClusters', () => {
 		const unit1: CrossBlockUnit = {
 			key: 'block-a',
 			memberTokenSets: [tokens],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'block-b',
 			memberTokenSets: [tokens],
-			memberLandmarkInstances: toInstances([noLandmarks]),
+			memberLandmarkInstances: [noLandmarks],
 		};
 		const result = mergeCrossBlockClusters([unit1, unit2], {});
 		const rootKey = result.rootByKey.get('block-a')!;
@@ -234,19 +199,20 @@ describe('mergeCrossBlockClusters', () => {
 
 	test('units with landmarks merge when shells also match', () => {
 		// Both units have the same landmark header → shell corroboration passes
-		const landmarks = landmarksWith({
-			header: ['<header><nav class="c-global-nav"><a>Home</a></nav></header>'],
+		// (a header with the global nav)
+		const landmarks = instancesWith({
+			header: [['body>header>nav.c-global-nav>a']],
 		});
 		const tokens = new Set(['body>main>.content']);
 		const unit1: CrossBlockUnit = {
 			key: 'l1',
 			memberTokenSets: [tokens],
-			memberLandmarkInstances: toInstances([landmarks]),
+			memberLandmarkInstances: [landmarks],
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'l2',
 			memberTokenSets: [tokens],
-			memberLandmarkInstances: toInstances([landmarks]),
+			memberLandmarkInstances: [landmarks],
 		};
 		const result = mergeCrossBlockClusters([unit1, unit2], {});
 		expect(result.rootByKey.get('l1')).toBe(result.rootByKey.get('l2'));
@@ -258,13 +224,13 @@ describe('mergeCrossBlockClusters shellQuorum (via mergeCrossBlockClusters exerc
 		// Every page has the same site-wide <header>. In a 5-page unit, that
 		// header's signature has page-frequency 1.0. autoCutThreshold with
 		// only 1 signature returns the clamp (0.8), so freq 1.0 ≥ 0.8 → shell.
-		const header = ['<header><a>Home</a></header>'];
-		const landmarksAll = landmarksWith({ header });
+		const header = [['body>header>a']]; // a header with a bare home link
+		const landmarksAll = instancesWith({ header });
 		const tokens = new Set(['body>main>.card']);
 		const unit: CrossBlockUnit = {
 			key: 'k',
 			memberTokenSets: Array.from({ length: 5 }, () => tokens),
-			memberLandmarkInstances: toInstances(Array.from({ length: 5 }, () => landmarksAll)),
+			memberLandmarkInstances: Array.from({ length: 5 }, () => landmarksAll),
 		};
 		// The clustering itself just needs to run without crashing to prove
 		// the histogram path works with a well-populated signature.
@@ -281,10 +247,11 @@ describe('mergeCrossBlockClusters shellQuorum (via mergeCrossBlockClusters exerc
 		// shell corroboration. With per-token page-frequency counting, the
 		// core skeleton tokens each hit freq 1.0 and correctly populate the
 		// shell.
+		// Each page's header: the shared nav link plus its own `pageTitle-<i>` element.
 		const perPageHeaders = Array.from({ length: 5 }, (_, i) => [
-			`<header><nav><a>Home</a></nav><p class="pageTitle-${i}"></p></header>`,
+			['body>header>nav>a', `body>header>p.pageTitle-${i}`],
 		]);
-		const landmarksList = perPageHeaders.map((header) => landmarksWith({ header }));
+		const landmarksList = perPageHeaders.map((header) => instancesWith({ header }));
 		// Same landmarks on both units + same main-anchored core token, so
 		// L2 shell corroboration is the only thing that could unify them.
 		// If the shell were empty, this merge would silently fail.
@@ -292,12 +259,12 @@ describe('mergeCrossBlockClusters shellQuorum (via mergeCrossBlockClusters exerc
 		const unitA: CrossBlockUnit = {
 			key: 'A',
 			memberTokenSets: Array.from({ length: 5 }, () => tokens),
-			memberLandmarkInstances: toInstances(landmarksList),
+			memberLandmarkInstances: landmarksList,
 		};
 		const unitB: CrossBlockUnit = {
 			key: 'B',
 			memberTokenSets: Array.from({ length: 5 }, () => tokens),
-			memberLandmarkInstances: toInstances(landmarksList),
+			memberLandmarkInstances: landmarksList,
 		};
 		const result = mergeCrossBlockClusters([unitA, unitB], {});
 		// Same tokens sets merge via fine stage (Jaccard = 1.0), independent
@@ -316,19 +283,19 @@ describe('mergeCrossBlockClusters shellQuorum (via mergeCrossBlockClusters exerc
 		// enter shell. The units' shells then have no material overlap with
 		// each other, so shell corroboration alone can't merge them if their
 		// underlying tokens are structurally different.
-		const perPageHeaders = Array.from({ length: 5 }, (_, i) => [
-			`<header><a>Article ${i}</a></header>`,
-		]);
-		const landmarksList = perPageHeaders.map((header) => landmarksWith({ header }));
+		// Each page's header differs only in its link text, which tokenization
+		// ignores, so the literal token set is the same on every page.
+		const perPageHeaders = Array.from({ length: 5 }, () => [['body>header>a']]);
+		const landmarksList = perPageHeaders.map((header) => instancesWith({ header }));
 		const unitA: CrossBlockUnit = {
 			key: 'A',
 			memberTokenSets: Array.from({ length: 5 }, () => new Set(['body>main>.article'])),
-			memberLandmarkInstances: toInstances(landmarksList),
+			memberLandmarkInstances: landmarksList,
 		};
 		const unitB: CrossBlockUnit = {
 			key: 'B',
 			memberTokenSets: Array.from({ length: 5 }, () => new Set(['body>aside>.widget'])),
-			memberLandmarkInstances: toInstances(landmarksList),
+			memberLandmarkInstances: landmarksList,
 		};
 		const result = mergeCrossBlockClusters([unitA, unitB], {});
 		// Cores are disjoint and shells don't corroborate → A and B stay
@@ -373,22 +340,22 @@ describe('mergeCrossBlockClusters cohesion guard', () => {
 		const hub: CrossBlockUnit = {
 			key: 'hub',
 			memberTokenSets: Array.from({ length: 4 }, () => new Set(hubTokens)),
-			memberLandmarkInstances: toInstances(Array.from({ length: 4 }, () => noLandmarks)),
+			memberLandmarkInstances: Array.from({ length: 4 }, () => noLandmarks),
 		};
 		const s1: CrossBlockUnit = {
 			key: 's1',
 			memberTokenSets: Array.from({ length: 4 }, () => new Set(s1Tokens)),
-			memberLandmarkInstances: toInstances(Array.from({ length: 4 }, () => noLandmarks)),
+			memberLandmarkInstances: Array.from({ length: 4 }, () => noLandmarks),
 		};
 		const s2: CrossBlockUnit = {
 			key: 's2',
 			memberTokenSets: Array.from({ length: 4 }, () => new Set(s2Tokens)),
-			memberLandmarkInstances: toInstances(Array.from({ length: 4 }, () => noLandmarks)),
+			memberLandmarkInstances: Array.from({ length: 4 }, () => noLandmarks),
 		};
 		const s3: CrossBlockUnit = {
 			key: 's3',
 			memberTokenSets: Array.from({ length: 4 }, () => new Set(s3Tokens)),
-			memberLandmarkInstances: toInstances(Array.from({ length: 4 }, () => noLandmarks)),
+			memberLandmarkInstances: Array.from({ length: 4 }, () => noLandmarks),
 		};
 
 		const result = mergeCrossBlockClusters([hub, s1, s2, s3], {});
@@ -415,7 +382,7 @@ describe('mergeCrossBlockClusters cohesion guard', () => {
 						'body>main>section.c-reports>ul.c-reports__list',
 					]),
 			),
-			memberLandmarkInstances: toInstances(Array.from({ length: 4 }, () => noLandmarks)),
+			memberLandmarkInstances: Array.from({ length: 4 }, () => noLandmarks),
 		};
 		const unit2: CrossBlockUnit = {
 			key: 'projects',
@@ -427,7 +394,7 @@ describe('mergeCrossBlockClusters cohesion guard', () => {
 						'body>main>section.c-projects>ul.c-projects__list',
 					]),
 			),
-			memberLandmarkInstances: toInstances(Array.from({ length: 4 }, () => noLandmarks)),
+			memberLandmarkInstances: Array.from({ length: 4 }, () => noLandmarks),
 		};
 		const result = mergeCrossBlockClusters([unit1, unit2], {});
 		expect(result.rootByKey.get('reports')).toBe(result.rootByKey.get('projects'));
@@ -457,7 +424,7 @@ describe('mergeCrossBlockClusters cohesion guard', () => {
 				{ length: 4 },
 				() => new Set([token, `${token}-extra`]),
 			),
-			memberLandmarkInstances: toInstances(Array.from({ length: 4 }, () => noLandmarks)),
+			memberLandmarkInstances: Array.from({ length: 4 }, () => noLandmarks),
 		}));
 
 		const result = mergeCrossBlockClusters(units, {});
@@ -478,7 +445,7 @@ describe('mergeCrossBlockClusters Stage-A separation guard', () => {
 			{ length: 12 },
 			(_, i) => new Set([`body>.padding>p${i}`, `body>.padding>q${i}`]),
 		),
-		memberLandmarkInstances: toInstances(Array.from({ length: 12 }, () => noLandmarks)),
+		memberLandmarkInstances: Array.from({ length: 12 }, () => noLandmarks),
 	};
 
 	/**
@@ -497,9 +464,7 @@ describe('mergeCrossBlockClusters Stage-A separation guard', () => {
 			key,
 			...(blockKey === undefined ? {} : { blockKey }),
 			memberTokenSets: Array.from({ length: pageCount }, () => new Set(tokens)),
-			memberLandmarkInstances: toInstances(
-				Array.from({ length: pageCount }, () => noLandmarks),
-			),
+			memberLandmarkInstances: Array.from({ length: pageCount }, () => noLandmarks),
 		};
 	}
 
@@ -619,8 +584,9 @@ describe('mergeCrossBlockClusters Stage-A separation guard', () => {
 		// (0.75), containment (0.88) and shape-Jaccard (0.88) all fall short,
 		// while the `main`-anchored L2 signature of the smaller unit is
 		// contained in the larger one and both share a header shell.
-		const header = landmarksWith({
-			header: ['<header><nav class="c-global-nav"><a>Home</a></nav></header>'],
+		// (a header with the global nav)
+		const header = instancesWith({
+			header: [['body>header>nav.c-global-nav>a']],
 		});
 		const common = Array.from({ length: 15 }, (_, i) => `body>.wrap>c${i}`);
 		/**
@@ -637,7 +603,7 @@ describe('mergeCrossBlockClusters Stage-A separation guard', () => {
 				key,
 				...(blockKey === undefined ? {} : { blockKey }),
 				memberTokenSets: Array.from({ length: 3 }, () => new Set([...common, ...own])),
-				memberLandmarkInstances: toInstances(Array.from({ length: 3 }, () => header)),
+				memberLandmarkInstances: Array.from({ length: 3 }, () => header),
 			};
 		}
 		const small = ['body>main>article>ul>li.x1>span', 'body>main>article>ul>li.x2>span'];

@@ -36,27 +36,4 @@ describe('formatBenchTable', () => {
 			].join('\n'),
 		);
 	});
-
-	it('marks analysis-only records and explains the mark once', () => {
-		const record = {
-			bench: 'template-classification',
-			input: { pages: 2, archiveBytes: 1_048_576 },
-			timeMs: 9.2,
-			peakRssBytes: 1_048_576,
-		};
-		const table = formatBenchTable([
-			{ ...record, case: 'full', metrics: {} },
-			{ ...record, case: 'breakdown', metrics: { analysisOnly: true } },
-		]);
-		expect(table).toBe(
-			[
-				...HEADER,
-				'| template-classification | full | 2 | 1.0 | 9.2 | 1.0 |',
-				'| template-classification | breakdown* | 2 | 1.0 | 9.2 | 1.0 |',
-				'',
-				'\\* Analysis run that re-drives internal stages to split their cost; its time is not the cost of the operation.',
-				'',
-			].join('\n'),
-		);
-	});
 });

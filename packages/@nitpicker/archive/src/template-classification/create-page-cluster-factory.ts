@@ -19,13 +19,13 @@ import { createContentRootHint } from './create-content-root-hint.js';
  * self-heal-affected row) — `page.getHtml()` returning falsy is only known
  * by actually calling it, not from any synchronous field.
  *
- * `resolvePageClusterKeys` calls the returned factory one or more times
- * (once for corpora at or below its inline threshold, twice above it — see
- * its own docs) to re-read the corpus. Whichever pages end up excluded
- * (empty HTML) must be excluded **identically** on every call, or the
- * pass-to-pass page sequence drifts and the library's same-order contract
- * breaks. Excluding by `isInternalPage()` is safe (synchronous,
- * deterministic per page). Excluding by empty `getHtml()` is also safe,
+ * `resolvePageClusterKeys` calls the returned factory several times to
+ * re-read the corpus: blocking signals first, then HTML, and above its
+ * in-memory threshold HTML once more to assign the pages outside the block
+ * samples (see its own docs). Whichever pages end up excluded (empty HTML)
+ * must be excluded **identically** on every call, or the pass-to-pass page
+ * sequence drifts and the engine's same-order contract breaks. Excluding
+ * by `isInternalPage()` is safe (synchronous, deterministic per page). Excluding by empty `getHtml()` is also safe,
  * but only because the archive is immutable for the duration of one
  * classification run — the same page's HTML never changes between calls.
  *
@@ -41,8 +41,8 @@ import { createContentRootHint } from './create-content-root-hint.js';
  * (that's what "reading the factory" means in its own docs), so by the time
  * `resolvePageClusterKeys` resolves, at least one full drain has already
  * happened and `getYieldedUrls()` reflects it — a dedicated probe pass would
- * only add a full corpus-wide decompression sweep beyond the library's own
- * 1-2, for no benefit. `classifyPageTemplates` still defends against a
+ * only add a full corpus-wide decompression sweep beyond the engine's own,
+ * for no benefit. `classifyPageTemplates` still defends against a
  * violated assumption here with a hard length check against
  * `resolvePageClusterKeys`'s result array.
  * @param pages - Candidate pages (as already loaded by

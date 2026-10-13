@@ -1,4 +1,4 @@
-import type { PerPageLandmarkInstance } from './per-page-landmark-signatures.js';
+import type { LandmarkInstanceTokens } from './types.js';
 
 import { autoCutThreshold } from './auto-cut-threshold.js';
 
@@ -81,7 +81,7 @@ const SHELL_QUORUM_FALLBACK_FRACTION = 0.8;
  * @param perPageInstances
  */
 export function shellQuorum(
-	perPageInstances: readonly (readonly PerPageLandmarkInstance[])[],
+	perPageInstances: readonly (readonly LandmarkInstanceTokens[])[],
 ): ReadonlySet<string> {
 	const pageCount = perPageInstances.length;
 	if (pageCount === 0) return new Set();

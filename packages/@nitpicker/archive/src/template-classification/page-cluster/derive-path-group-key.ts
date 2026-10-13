@@ -3,8 +3,8 @@
  * `paths` field of `@d-zero/shared/parse-url`'s `ExURL`), keeping only the
  * leading `depth` segments. This is a *blocking key* in the record-linkage
  * sense: a cheap, coarse partition applied before any expensive structural
- * comparison (`jaccardSimilarity`/`arrayEditDistance` on `tokenize()`
- * output), not a similarity score by itself. Real-data validation on a large
+ * comparison (Jaccard over the pages' structural token sets), not a
+ * similarity score by itself. Real-data validation on a large
  * multi-section site found that a single site-wide document-frequency
  * computation ({@link ./compute-document-frequency.js | computeDocumentFrequency})
  * fails when the site is actually a federation of independently-templated

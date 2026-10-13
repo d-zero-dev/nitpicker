@@ -17,16 +17,16 @@ function readDpValue(row: readonly number[], index: number): number {
 }
 
 /**
- * Element-wise Levenshtein distance between two `tokenize()` outputs, for
- * the small set of comparisons that need order/nesting to matter (refining
- * a merge distance between near-duplicate candidates, spot-checking cluster
- * quality) rather than the set-based similarity used for bulk narrowing.
- * Operates on whole array elements, not characters, so a single differing
- * path costs 1 edit regardless of its string length. This is the same
- * O(n*m) dynamic-programming shape as tree edit distance, but requires no
- * tree: run directly on the flat leaf-path arrays `tokenize()` already
- * produces, which is why it stays viable at the scale this comparison is
- * meant for (small numbers of already-narrowed candidates, not all-pairs).
+ * Element-wise Levenshtein distance between two pages' leaf-path token
+ * arrays, for the small set of comparisons that need order/nesting to
+ * matter (refining a merge distance between near-duplicate candidates,
+ * spot-checking cluster quality) rather than the set-based similarity used
+ * for bulk narrowing. Operates on whole array elements, not characters, so
+ * a single differing path costs 1 edit regardless of its string length.
+ * This is the same O(n*m) dynamic-programming shape as tree edit distance,
+ * but requires no tree: run directly on the flat leaf-path arrays, which is
+ * why it stays viable at the scale this comparison is meant for (small
+ * numbers of already-narrowed candidates, not all-pairs).
  * @param a
  * @param b
  * @example

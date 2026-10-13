@@ -8,7 +8,7 @@
  * parseBenchArguments(argv, { cases: BENCH_CASES['body-hash'] });
  */
 export const BENCH_CASES = Object.freeze({
-	'template-classification': ['full', 'breakdown'],
+	'template-classification': ['full'],
 	'url-natural-sort': ['rank-map', 'external-sort'],
 	'isolated-clusters': ['default'],
 	'alias-backfill': ['default'],
