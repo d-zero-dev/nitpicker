@@ -4,9 +4,35 @@
 //! `scripts/record-htmlparser2-events.mjs`, whose header defines the digest.
 //! A mismatch names the fixture; re-running that script's recording handler
 //! on it shows the events to compare.
+//!
+//! The fixtures live with the classifier's tests in `@nitpicker/archive`
+//! (read from the source tree; nothing is built against that package). A
+//! fixture added there fails here until the events are recorded again.
 
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Every `.html` file under `directory`, as paths relative to `root` with `/`.
+fn html_files(root: &Path, directory: &Path, files: &mut Vec<String>) {
+	for entry in std::fs::read_dir(directory).unwrap() {
+		let path: PathBuf = entry.unwrap().path();
+		if path.is_dir() {
+			html_files(root, &path, files);
+		} else if path
+			.extension()
+			.is_some_and(|extension| extension == "html")
+		{
+			let relative = path.strip_prefix(root).unwrap();
+			files.push(
+				relative
+					.components()
+					.map(|component| component.as_os_str().to_string_lossy())
+					.collect::<Vec<_>>()
+					.join("/"),
+			);
+		}
+	}
+}
 
 use nitpicker_html_parser::{AttributeValue, EventKind, parse};
 
@@ -72,11 +98,24 @@ fn record(html: &str) -> String {
 #[test]
 fn matches_htmlparser2_on_every_fixture() {
 	let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-	// The fixtures live with the classifier's tests in `@nitpicker/archive`.
 	let fixtures =
 		manifest.join("../../../archive/src/template-classification/page-cluster/__fixtures__");
 	let expected = std::fs::read_to_string(manifest.join("tests/htmlparser2-fixture-events.tsv"))
 		.expect("the recorded events are checked in");
+
+	let mut on_disk = Vec::new();
+	html_files(&fixtures, &fixtures, &mut on_disk);
+	on_disk.sort();
+	let mut recorded_files: Vec<String> = expected
+		.lines()
+		.map(|line| line.split('\t').next().unwrap().to_owned())
+		.collect();
+	recorded_files.dedup();
+	assert_eq!(
+		recorded_files, on_disk,
+		"the fixtures changed: record the events again (scripts/record-htmlparser2-events.mjs)"
+	);
+
 	let mut mismatches = Vec::new();
 	let mut rows = 0;
 	for line in expected.lines() {
