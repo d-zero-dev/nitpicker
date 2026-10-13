@@ -24,6 +24,13 @@
 		"packages/@nitpicker/archive/src/template-classification/golden/__golden__/**"
 	],
 	"words": [
+		// Rust: crate names, std methods, code points in the template classifier (#426)
+		"alnum",
+		"FEFF",
+		"FFFD",
+		"interner",
+		"rfind",
+		"rustc",
 		// Misra-Gries algorithm (DedupeCapTracker, issue #208)
 		"Misra",
 		"Gries",
