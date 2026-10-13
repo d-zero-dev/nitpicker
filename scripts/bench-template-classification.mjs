@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Baseline: crawl-end template classification (the page-cluster engine).
+ * Baseline: crawl-end template classification (the classifier in
+ * `@nitpicker/core`, driven by archive's `page-cluster/`).
  *
  * `full`: `classifyArchivePageTemplates` exactly as crawl / viewer-build run
  * it, including the write. `phasesMs` splits the wall clock at the progress
- * events the engine emits: `loadingPages` (page handles), `untilStageB`
- * (stylesheet references, HTML reads, Stage A of every block — in the native
- * addon — and on the streaming path the assignment of pages outside the
- * samples), `stageB` (cross-block merge, partition validation, cluster
- * reasons) and `writing`. `slowestBlockMs` is the longest gap between two
+ * events it emits: `loadingPages` (page handles), `untilStageB` (stylesheet
+ * references, the stored-HTML listing, Pass 0, HTML reads, Stage A of every
+ * block and, on the streaming path, the assignment of pages outside the
+ * samples), `stageB` (cross-block merge and cluster reasons) and `writing`. `slowestBlockMs` is the longest gap between two
  * consecutive blocks finishing.
  *
  * It runs on a throwaway extracted copy; the source archive is never
@@ -25,8 +25,7 @@
 /* eslint-disable import-x/no-extraneous-dependencies */
 
 import { classifyArchivePageTemplates } from '@nitpicker/archive/template-classification/classify-archive-page-templates';
-
-import { CORPUS_INLINE_THRESHOLD } from '../packages/@nitpicker/archive/lib/template-classification/page-cluster/resolve-page-cluster-keys.js';
+import { TEMPLATE_CORPUS_INLINE_THRESHOLD as CORPUS_INLINE_THRESHOLD } from '@nitpicker/core/template-corpus-inline-threshold';
 
 import { countInternalPages } from './bench-lib/count-internal-pages.mjs';
 import { measureMs } from './bench-lib/measure-ms.mjs';
