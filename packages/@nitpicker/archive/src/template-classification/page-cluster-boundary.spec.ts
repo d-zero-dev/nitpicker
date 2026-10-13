@@ -45,6 +45,7 @@ describe('page-cluster エンジンの境界', () => {
 			].toSorted(),
 		).toEqual([
 			'@d-zero/shared/hash',
+			'@nitpicker/core/create-template-classification-run',
 			'@nitpicker/core/create-template-stage-a-run',
 			'@nitpicker/core/template-block-sample-size',
 			'@nitpicker/core/types',
@@ -73,6 +74,7 @@ describe('page-cluster エンジンの境界', () => {
 			'template-classification/golden/classify-golden-corpus.ts',
 			'template-classification/golden/template-classification-golden.spec.ts',
 			'template-classification/golden/types.ts',
+			'template-classification/native-classification-parity.spec.ts',
 		]);
 	});
 
