@@ -12,6 +12,9 @@ use std::sync::{Arc, RwLock};
 
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
+/// 64 shards: several per core on the machines this runs on, so threads
+/// interning different strings rarely share a lock. Only contention depends
+/// on it; ids are compared for equality only, so no output does.
 const SHARD_BITS: u32 = 6;
 const SHARDS: usize = 1 << SHARD_BITS;
 

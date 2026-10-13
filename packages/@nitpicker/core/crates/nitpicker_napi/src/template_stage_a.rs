@@ -91,6 +91,8 @@ type ProgressCallback = ThreadsafeFunction<
 	true,
 >;
 
+/// A landmark type's code in `StageAUnit::instance_types`: its index in
+/// `@nitpicker/archive`'s `ALL_LANDMARK_TYPES`, which decodes it.
 fn landmark_code(kind: LandmarkType) -> u8 {
 	match kind {
 		LandmarkType::Header => 0,

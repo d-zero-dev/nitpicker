@@ -16,8 +16,14 @@ use crate::vocabulary::{Ids, ScratchVocabulary, Vocabulary};
 
 /// Pages per block a streaming run clusters; the rest of a larger block is
 /// assigned to the nearest of those clusters afterwards. Bounds what a run
-/// holds per block (and Stage B's input) whatever the corpus size.
+/// holds per block (and Stage B's input) whatever the corpus size. Which
+/// pages are sampled, and so every streamed archive's stored keys, depends
+/// on it: changing it reclassifies those archives.
 pub const BLOCK_SAMPLE_SIZE: usize = 100;
+
+/// Assigned pages between two [`Progress::Assigned`] events: often enough
+/// for a live count, rarely enough not to flood the caller.
+const ASSIGNED_PER_PROGRESS: usize = 1000;
 
 /// One page as the caller reads it.
 pub struct PageInput {
@@ -50,7 +56,8 @@ pub enum Progress {
 		/// All blocks.
 		total_blocks: usize,
 	},
-	/// Pages outside the samples were assigned.
+	/// Another [`ASSIGNED_PER_PROGRESS`] pages outside the samples were
+	/// assigned.
 	Assigned {
 		/// Assigned so far.
 		pages_assigned: usize,
@@ -160,6 +167,20 @@ enum Phase {
 /// sampled. Computed upfront from the block of every page — the sample does
 /// not depend on page content — so the first read prepares only the pages
 /// that stay sampled.
+///
+/// The TypeScript the stored samples came from (removed in #426; the PRNG
+/// and seed hash live on in `@nitpicker/archive`'s `reservoir-sample.ts`),
+/// per page in order — unlike `reservoirSample`, it keeps the slot order,
+/// which decides cluster labels:
+///
+/// ```text
+/// if (bucket.pages.length < size) bucket.pages.push(page);
+/// else {
+///   const j = Math.floor(bucket.prng() * (bucket.seen + 1));
+///   if (j < size) bucket.pages[j] = page;
+/// }
+/// bucket.seen++;
+/// ```
 fn sample_blocks(
 	block_keys: &[String],
 	block_of_page: &[u32],
@@ -733,7 +754,7 @@ impl Run {
 			self.output.key_of_page[page_index] = key;
 			let before = self.assigned;
 			self.assigned += 1;
-			if self.assigned / 1000 > before / 1000 {
+			if self.assigned / ASSIGNED_PER_PROGRESS > before / ASSIGNED_PER_PROGRESS {
 				(context.progress)(Progress::Assigned {
 					pages_assigned: self.assigned,
 					pages_to_assign: self.pending_count,
@@ -947,7 +968,9 @@ mod tests {
 
 	#[test]
 	fn samples_each_block_by_algorithm_r_seeded_by_its_key() {
-		// The JavaScript sampler gives these for a sample of 3.
+		// Pinned from the TypeScript streaming sampler in `sample_blocks`' doc.
+		// As sets they are also what `@nitpicker/archive`'s `reservoirSample`
+		// (same PRNG and seed hash) picks from each block's pages.
 		assert_eq!(
 			sample_blocks(
 				&["path:a".to_owned(), "css:b".to_owned()],

@@ -52,6 +52,10 @@ export interface NativeTemplateStageARun {
  * The element a crawler reported as a page's main content. Every given
  * field must match the same element; empty strings and lists count as not
  * given, and a hint with nothing given matches nothing.
+ * @example
+ * ```ts
+ * const hint: ContentRootHint = { tagName: 'DIV', id: 'content', classList: ['l-main'] };
+ * ```
  */
 export interface ContentRootHint {
 	/** Compared case-insensitively. */
@@ -62,7 +66,13 @@ export interface ContentRootHint {
 	readonly classList?: readonly string[];
 }
 
-/** One page handed to a {@link TemplateStageARun}. */
+/**
+ * One page handed to a {@link TemplateStageARun}.
+ * @example
+ * ```ts
+ * const page: StageAPage = { html: '<body><main>…</main></body>', contentRoot: { tagName: 'main' } };
+ * ```
+ */
 export interface StageAPage {
 	readonly html: string;
 	readonly contentRoot?: ContentRootHint;
@@ -72,6 +82,14 @@ export interface StageAPage {
  * Progress of a {@link TemplateStageARun}: a block's Stage A finished, or
  * (streaming runs) another thousand pages outside the samples were
  * assigned.
+ * @example
+ * ```ts
+ * const onProgress = (event: StageAProgress) => {
+ * 	if (event.phase === 'pass1-block-complete') {
+ * 		console.log(`${event.blocksProcessed}/${event.totalBlocks} blocks`);
+ * 	}
+ * };
+ * ```
  */
 export type StageAProgress =
 	| {
@@ -86,7 +104,14 @@ export type StageAProgress =
 			readonly pagesToAssign: number;
 	  };
 
-/** {@link StageAProgress} as the addon reports it, every field optional. */
+/**
+ * {@link StageAProgress} as the addon reports it, every field optional;
+ * `createTemplateStageARun` narrows it.
+ * @example
+ * ```ts
+ * const event: NativeStageAProgress = { phase: 'pass1b-assign', pagesAssigned: 1000, pagesToAssign: 4200 };
+ * ```
+ */
 export interface NativeStageAProgress {
 	readonly phase: string;
 	readonly blockKey?: string;
@@ -106,6 +131,12 @@ export interface NativeStageAProgress {
  * `aside`, `form`, `search`) and tokens
  * `instanceTokens[instanceTokenOffsets[i] .. instanceTokenOffsets[i + 1]]`.
  * Token values index {@link StageAOutput.tokens}.
+ * @example
+ * ```ts
+ * // The first member's compared tokens.
+ * const tokens = [...unit.memberTokens.subarray(unit.memberTokenOffsets[0], unit.memberTokenOffsets[1])]
+ * 	.map((token) => output.tokens[token]);
+ * ```
  */
 export interface StageAUnit {
 	/** Index into {@link StageAOutput.keys}. */
@@ -121,7 +152,14 @@ export interface StageAUnit {
 	readonly instanceTokens: Uint32Array;
 }
 
-/** What a {@link TemplateStageARun} produces. */
+/**
+ * What a {@link TemplateStageARun} produces.
+ * @example
+ * ```ts
+ * const { keys, keyOfPage } = await run.takeOutput();
+ * const keyOfFirstPage = keys[keyOfPage[0]!]; // '["path:news","cluster:0"]'
+ * ```
+ */
 export interface StageAOutput {
 	/** Every token the units mention, once each. */
 	readonly tokens: string[];
@@ -163,9 +201,9 @@ export interface TemplateStageARun {
 	 */
 	pageMask(): Uint8Array;
 	/**
-	 * Whether the run now expects the assignment read: true from the end of a
-	 * streaming first read that left pages outside the samples until that
-	 * read ends.
+	 * Whether the run now expects the assignment read: true once a streaming
+	 * first read has ended with pages outside the samples, until the
+	 * assignment read has ended; false otherwise.
 	 */
 	needsAssignment(): boolean;
 	/** Assigns the next pages of the second read, in corpus order. */
@@ -180,7 +218,18 @@ export interface TemplateStageARun {
 	cancel(): void;
 }
 
-/** Inputs to `createTemplateStageARun`. */
+/**
+ * Inputs to `createTemplateStageARun`.
+ * @example
+ * ```ts
+ * const options: CreateTemplateStageARunOptions = {
+ * 	blockKeys: ['path:news', 'path:about'],
+ * 	blockOfPage: Uint32Array.of(0, 0, 1),
+ * 	streaming: false,
+ * 	onProgress: (event) => console.log(event.phase),
+ * };
+ * ```
+ */
 export interface CreateTemplateStageARunOptions {
 	/** The Pass-0 block keys, in the order their blocks are clustered. */
 	readonly blockKeys: readonly string[];

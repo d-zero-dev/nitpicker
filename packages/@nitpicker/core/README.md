@@ -53,7 +53,10 @@ Rust ツールチェーンが必要です（バージョンはリポジトリル
 - Rust のコードは `crates/` 配下の Cargo workspace にあります。napi に依存するのは `nitpicker_napi`（公開関数だけの薄い層）だけで、計算本体の crate は `cargo test` だけでテストできます
 - `yarn test:rust` で Rust のテスト、`yarn lint` で rustfmt と clippy も実行します
 - body hash は既存アーカイブに保存済みの値と byte 単位で一致させています。`crates/nitpicker_html_scan/tests/fixtures/body-hash-golden.json` は `@nitpicker/archive` の `src/body-hash/` にある JavaScript 段階実装（parity テストの oracle）から生成した golden fixture です
-- テンプレート分類の Stage A（`crates/nitpicker_template_cluster`）も、既存アーカイブの `templateKey` と一致させています。HTML は htmlparser2 12.0.0 の挙動を移植した `crates/nitpicker_html_parser` で読みます（エンティティの表 `src/html_decode_tree.rs` は `scripts/generate-html-decode-tree.mjs` が `entities` パッケージから生成したもの。パーサーの比較基準 `tests/htmlparser2-fixture-events.tsv` は `scripts/record-htmlparser2-events.mjs` が htmlparser2 から記録したもの）。一致の確認は `@nitpicker/archive` の golden（`src/template-classification/golden/`）で行います
+- テンプレート分類の Stage A（`crates/nitpicker_template_cluster`）も、既存アーカイブの `templateKey` と一致させています。HTML は htmlparser2 12.0.0 の挙動を移植した `crates/nitpicker_html_parser` で読みます。一致の確認は `@nitpicker/archive` の golden（`src/template-classification/golden/`）で行います
+- `crates/nitpicker_html_parser` には生成した固定データが 2 つあります。どちらも、リポジトリが依存していない固定版のパッケージを scratch ディレクトリに入れ、そのディレクトリを引数に渡して生成します（手順と理由は各スクリプトの冒頭）
+  - エンティティの表 `src/html_decode_tree.rs`: `node scripts/generate-html-decode-tree.mjs <entities@8.0.0 のディレクトリ>`。デコードを意図して変えるときだけ再生成します
+  - パーサーの比較基準 `tests/htmlparser2-fixture-events.tsv`: `node scripts/record-htmlparser2-events.mjs <htmlparser2@12.0.0 のディレクトリ>`。`@nitpicker/archive` の `page-cluster/__fixtures__/` を変えたときに取り直します
 
 ## 関連リンク
 
