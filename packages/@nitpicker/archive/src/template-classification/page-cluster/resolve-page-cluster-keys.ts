@@ -13,6 +13,7 @@ import type {
 } from '@nitpicker/core/types';
 
 import { createTemplateStageARun } from '@nitpicker/core/create-template-stage-a-run';
+import { TEMPLATE_BLOCK_SAMPLE_SIZE } from '@nitpicker/core/template-block-sample-size';
 
 import { buildClusterReason } from './build-cluster-reason.js';
 import { filterFirstPartyStylesheetHrefs } from './filter-first-party-stylesheet-hrefs.js';
@@ -388,7 +389,7 @@ export const CORPUS_INLINE_THRESHOLD = 20_000;
 
 /**
  * Pages per block the streaming path clusters (the native Stage A's own
- * sample size, which this mirrors). Stage B then works on units of at most
+ * sample size, read from the addon). Stage B then works on units of at most
  * this many members, and caps merged groups at it too, so its cost stays
  * bounded across rounds whatever the corpus size.
  *
@@ -405,7 +406,7 @@ export const CORPUS_INLINE_THRESHOLD = 20_000;
  *   final key Stage B produces for their assigned cluster, without
  *   contributing to Stage B's own frequency computations.
  */
-export const BLOCK_SAMPLE_SIZE = 100;
+export const BLOCK_SAMPLE_SIZE: number = TEMPLATE_BLOCK_SAMPLE_SIZE;
 
 /**
  * Factory function returning an iterator over pages. Called once per pass —
@@ -442,42 +443,77 @@ const LANDMARK_TYPE_CODES: readonly LandmarkType[] = [
 ];
 
 /**
- * Reads `pages` once and hands them to `push` in batches. A batch is read
- * while the previous one is processed (the native run works off Node's main
- * thread); each push is awaited before the next one starts, as the run
- * requires.
+ * The error for a factory that yields a different corpus on a later read.
+ * @param pagesRead
+ * @param expected
+ */
+function factoryMismatch(pagesRead: number, expected: number): Error {
+	return new Error(
+		`resolvePageClusterKeys: a read of the page factory produced ${pagesRead} pages but Pass 0 saw ${expected} — the factory must produce the same pages in the same order on every call`,
+	);
+}
+
+/**
+ * Reads `pages` once and hands them to `push` in batches, the pages `mask`
+ * leaves out with empty HTML (the run does not read them, so their HTML is
+ * not copied to it). A batch is read while the previous one is processed
+ * (the native run works off Node's main thread); each push is awaited
+ * before the next one starts, as the run requires.
+ *
+ * Only the page count is checked against Pass 0: a factory yielding as many
+ * pages but different ones, or in another order, goes unnoticed.
  * @param pages
+ * @param mask The run's `pageMask()` for this read; its length is the page
+ *   count Pass 0 saw.
  * @param push
  */
 async function streamPages(
 	pages: PageFactory,
+	mask: Uint8Array,
 	push: (batch: StageAPage[]) => Promise<void>,
 ): Promise<void> {
 	let inFlight: Promise<void> = Promise.resolve();
 	let batch: StageAPage[] = [];
 	let batchLength = 0;
+	let pagesRead = 0;
 	const flush = async () => {
 		await inFlight;
 		inFlight = push(batch);
-		// Read on while it runs; a rejection surfaces at the next `await`.
+		// Read on while it runs; a rejection surfaces at the next `await`
+		// (this handler only keeps it from counting as unhandled meanwhile).
 		inFlight.catch(() => {});
 		batch = [];
 		batchLength = 0;
 	};
-	for await (const page of pages()) {
-		batch.push({
-			html: page.html,
-			...(page.contentRoot ? { contentRoot: page.contentRoot } : {}),
-		});
-		batchLength += page.html.length;
-		if (batch.length >= PAGES_PER_BATCH || batchLength >= HTML_PER_BATCH) {
-			await flush();
+	try {
+		for await (const page of pages()) {
+			if (pagesRead >= mask.length) {
+				throw factoryMismatch(pagesRead + 1, mask.length);
+			}
+			const html = mask[pagesRead] ? page.html : '';
+			pagesRead++;
+			batch.push({
+				html,
+				...(page.contentRoot ? { contentRoot: page.contentRoot } : {}),
+			});
+			batchLength += html.length;
+			if (batch.length >= PAGES_PER_BATCH || batchLength >= HTML_PER_BATCH) {
+				await flush();
+			}
 		}
+	} catch (error) {
+		// Let the running call settle before the caller cancels the run, so
+		// nothing is left working on a run that is being given up.
+		await inFlight.catch(() => {});
+		throw error;
 	}
 	if (batch.length > 0) {
 		await flush();
 	}
 	await inFlight;
+	if (pagesRead !== mask.length) {
+		throw factoryMismatch(pagesRead, mask.length);
+	}
 }
 
 /**
@@ -562,10 +598,10 @@ async function runStageA(
 		...(onProgress ? { onProgress } : {}),
 	});
 	try {
-		await streamPages(pages, (batch) => run.pushPages(batch));
+		await streamPages(pages, run.pageMask(), (batch) => run.pushPages(batch));
 		await run.finishPages();
 		if (run.needsAssignment()) {
-			await streamPages(pages, (batch) => run.pushAssignmentPages(batch));
+			await streamPages(pages, run.pageMask(), (batch) => run.pushAssignmentPages(batch));
 		}
 		return { output: await run.takeOutput(), blockKeyList };
 	} catch (error) {
@@ -645,11 +681,6 @@ export async function resolvePageClusterKeys(
 		streaming,
 		onProgress,
 	);
-	if (output.keyOfPage.length !== blockingSignals.length) {
-		throw new Error(
-			`resolvePageClusterKeys: Stage A keyed ${output.keyOfPage.length} pages but Pass 0 saw ${blockingSignals.length} — the factory must produce the same pages in the same order on every call`,
-		);
-	}
 	const finalKeys = Array.from(output.keyOfPage, (keyIndex) => output.keys[keyIndex]!);
 	const crossBlockUnits = output.units.map((unit) =>
 		toCrossBlockUnit(unit, output, blockKeyList),

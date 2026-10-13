@@ -46,6 +46,7 @@ describe('page-cluster エンジンの境界', () => {
 		).toEqual([
 			'@d-zero/shared/hash',
 			'@nitpicker/core/create-template-stage-a-run',
+			'@nitpicker/core/template-block-sample-size',
 			'@nitpicker/core/types',
 			'vitest',
 		]);

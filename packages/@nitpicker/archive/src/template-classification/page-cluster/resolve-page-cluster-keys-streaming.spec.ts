@@ -4,6 +4,7 @@ import type { PageClusterSignals, ProgressEvent } from './resolve-page-cluster-k
 import { describe, expect, test } from 'vitest';
 
 import {
+	BLOCK_SAMPLE_SIZE,
 	CORPUS_INLINE_THRESHOLD,
 	resolvePageClusterKeys,
 	resolvePageClusterKeysFromArray,
@@ -40,6 +41,13 @@ function buildTinyCorpus(): PageClusterSignals[] {
 	return pages;
 }
 
+const NEWS_KEY = '["css:9984f85c50cf6d72","cluster:0"]';
+const ABOUT_KEY = '["path:about","cluster:0"]';
+const CONTACT_KEY = '["path:contact","cluster:0"]';
+
+/** {@link buildTinyCorpus}'s keys: the news pages share a stylesheet block. */
+const TINY_KEYS = [NEWS_KEY, NEWS_KEY, NEWS_KEY, ABOUT_KEY, CONTACT_KEY];
+
 describe('resolvePageClusterKeys (async factory)', () => {
 	test('empty input returns empty result', async () => {
 		const keys = await resolvePageClusterKeys(() => []);
@@ -60,8 +68,42 @@ describe('resolvePageClusterKeys (async factory)', () => {
 			}
 		}
 		const streamed = await resolvePageClusterKeys(() => asyncPages());
-		const fromArray = await resolvePageClusterKeysFromArray(pages);
-		expect(streamed).toEqual(fromArray);
+		expect(streamed).toEqual(TINY_KEYS);
+	});
+
+	test('rejects a factory that yields fewer pages on a later read', async () => {
+		const pages = buildTinyCorpus();
+		let calls = 0;
+		await expect(
+			resolvePageClusterKeys(() => (++calls === 1 ? pages : pages.slice(0, 4))),
+		).rejects.toThrow(
+			'a read of the page factory produced 4 pages but Pass 0 saw 5 — the factory must produce the same pages in the same order on every call',
+		);
+	});
+
+	test('rejects with the error a factory throws midway through a later read', async () => {
+		const pages = buildTinyCorpus();
+		const failure = new Error('archive read failed');
+		let calls = 0;
+		/**
+		 * @yields {PageClusterSignals} The first two pages, then throws.
+		 */
+		function* failing(): Generator<PageClusterSignals> {
+			yield pages[0]!;
+			yield pages[1]!;
+			throw failure;
+		}
+		await expect(
+			resolvePageClusterKeys(() => (++calls === 1 ? pages : failing())),
+		).rejects.toBe(failure);
+	});
+
+	test('rejects a factory that yields more pages on a later read', async () => {
+		const pages = buildTinyCorpus();
+		let calls = 0;
+		await expect(
+			resolvePageClusterKeys(() => (++calls === 1 ? pages : [...pages, pages[0]!])),
+		).rejects.toThrow('a read of the page factory produced 6 pages but Pass 0 saw 5');
 	});
 
 	test('single-shot factory (small corpus stays under threshold, factory invoked twice)', async () => {
@@ -82,12 +124,15 @@ describe('resolvePageClusterKeys (async factory)', () => {
 	});
 });
 
+describe('BLOCK_SAMPLE_SIZE', () => {
+	test('is the native Stage A sample size', () => {
+		expect(BLOCK_SAMPLE_SIZE).toBe(100);
+	});
+});
+
 describe('resolvePageClusterKeysFromArray', () => {
-	test('produces the same result as resolvePageClusterKeys over a factory returning the same pages', async () => {
-		const pages = buildTinyCorpus();
-		const fromArray = await resolvePageClusterKeysFromArray(pages);
-		const fromFactory = await resolvePageClusterKeys(() => pages);
-		expect(fromArray).toEqual(fromFactory);
+	test('keys every page of the array', async () => {
+		expect(await resolvePageClusterKeysFromArray(buildTinyCorpus())).toEqual(TINY_KEYS);
 	});
 
 	test('empty input returns empty', async () => {
@@ -135,51 +180,62 @@ describe('resolvePageClusterKeys onProgress on small corpus', () => {
 		expect(pass1IndicesBeforeStageB).toBe(pass1Count);
 	});
 
-	test('result with onProgress is byte-for-byte identical to the result without it', async () => {
-		const pages = buildTinyCorpus();
-		const withProgress = await resolvePageClusterKeys(() => pages, {
+	test('keys are the same with onProgress as without it', async () => {
+		const withProgress = await resolvePageClusterKeys(() => buildTinyCorpus(), {
 			onProgress: () => {
 				// discard; only the return value matters here
 			},
 		});
-		const fromArray = await resolvePageClusterKeysFromArray(pages);
-		expect(withProgress).toEqual(fromArray);
+		expect(withProgress).toEqual(TINY_KEYS);
 	});
 });
 
 describe('resolvePageClusterKeys (onClusterReason)', () => {
-	test('small corpus with onClusterReason produces the same keys and reasons as resolvePageClusterKeysFromArray', async () => {
-		const pages = buildTinyCorpus();
-		const streamedReasons = new Map<string, ClusterReason>();
-		const streamed = await resolvePageClusterKeys(() => pages, {
-			onClusterReason: (key, reason) => streamedReasons.set(key, reason),
+	test('reports one reason per final cluster, built from its members', async () => {
+		const reasons = new Map<string, ClusterReason>();
+		const keys = await resolvePageClusterKeys(() => buildTinyCorpus(), {
+			onClusterReason: (key, reason) => reasons.set(key, reason),
 		});
-		const arrayReasons = new Map<string, ClusterReason>();
-		const fromArray = await resolvePageClusterKeysFromArray(pages, {
-			onClusterReason: (key, reason) => arrayReasons.set(key, reason),
+		expect(keys).toEqual(TINY_KEYS);
+		expect([...reasons.keys()]).toEqual([NEWS_KEY, ABOUT_KEY, CONTACT_KEY]);
+		expect(reasons.get(NEWS_KEY)).toEqual({
+			memberCount: 3,
+			blocking: [
+				{
+					blockKey: 'css:9984f85c50cf6d72',
+					reason: {
+						kind: 'css',
+						distinctiveStylesheetHrefs: ['https://x.example.com/news.css'],
+					},
+				},
+			],
+			structuralCoreTokens: ['body>article>h1', 'body>article>p'],
+			landmarks: {
+				footer: {
+					presenceRate: 1,
+					chromeRate: 1,
+					shellTokens: ['body>footer'],
+					memberCountWithInstance: 3,
+				},
+			},
+			siblingClusterKeys: [],
 		});
-		expect(streamed).toEqual(fromArray);
-		expect(streamedReasons).toEqual(arrayReasons);
-		expect(streamedReasons.size).toBeGreaterThan(0);
+		expect(reasons.get(CONTACT_KEY)?.structuralCoreTokens).toEqual([
+			'body>form>button',
+			'body>form>input',
+			'body>form>label',
+		]);
 	});
 
-	test('combined with onProgress on a small corpus, fires both onClusterReason and progress events, with matching reasons and keys to resolvePageClusterKeysFromArray', async () => {
-		const pages = buildTinyCorpus();
+	test('combined with onProgress, fires both the reasons and the progress events', async () => {
 		const events: ProgressEvent[] = [];
 		const reasons = new Map<string, ClusterReason>();
-		const result = await resolvePageClusterKeys(() => pages, {
+		const result = await resolvePageClusterKeys(() => buildTinyCorpus(), {
 			onClusterReason: (key, reason) => reasons.set(key, reason),
 			onProgress: (event) => events.push(event),
 		});
-
-		const arrayReasons = new Map<string, ClusterReason>();
-		const fromArray = await resolvePageClusterKeysFromArray(pages, {
-			onClusterReason: (key, reason) => arrayReasons.set(key, reason),
-		});
-		expect(result).toEqual(fromArray);
-		expect(reasons).toEqual(arrayReasons);
-		expect(reasons.size).toBeGreaterThan(0);
-
+		expect(result).toEqual(TINY_KEYS);
+		expect([...reasons.keys()]).toEqual([NEWS_KEY, ABOUT_KEY, CONTACT_KEY]);
 		expect(events.some((e) => e.phase === 'pass1-block-complete')).toBe(true);
 		expect(events.filter((e) => e.phase === 'stage-b-start')).toHaveLength(1);
 	});
@@ -300,12 +356,15 @@ describe('resolvePageClusterKeys (content root on the streaming path)', () => {
 		expect(new Set(keys).size).toBe(2);
 	}, 90_000);
 
+	/** The two templates of `generate(24)`, alternating. */
+	const ALTERNATING_KEYS = Array.from({ length: 24 }, (_, i) =>
+		i % 2 === 0 ? '["path:p","cluster:0"]' : '["path:p","cluster:1"]',
+	);
+
 	test('a corpus at or below the threshold keeps the hint when the factory is re-read', async () => {
-		const pages = [...generate(24)];
-		const fromArray = await resolvePageClusterKeysFromArray(pages);
-		const fromFactory = await resolvePageClusterKeys(() => generate(24));
-		expect(fromFactory).toStrictEqual(fromArray);
-		expect(new Set(fromArray).size).toBe(2);
+		expect(await resolvePageClusterKeys(() => generate(24))).toStrictEqual(
+			ALTERNATING_KEYS,
+		);
 	});
 
 	test('a corpus at or below the threshold keeps the hint when onProgress is given', async () => {
@@ -314,7 +373,6 @@ describe('resolvePageClusterKeys (content root on the streaming path)', () => {
 			onProgress: (event) => events.push(event.phase),
 		});
 		expect(events).toContain('stage-b-start');
-		expect(new Set(keys).size).toBe(2);
-		expect(keys).toStrictEqual(await resolvePageClusterKeysFromArray([...generate(24)]));
+		expect(keys).toStrictEqual(ALTERNATING_KEYS);
 	});
 });
