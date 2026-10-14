@@ -154,6 +154,29 @@ describe('page template classification at crawl end', () => {
 		expect(rerun.labels).toEqual(classified.labels);
 	}, 120_000);
 
+	it('--template-memory-budget 0 でも crawl 完了時に分類される', async () => {
+		const cwd = path.join(root, 'budget-zero');
+		const archivePath = await crawlInto(cwd, ['--template-memory-budget', '0']);
+
+		const tables = await readTemplateTables(archivePath, cwd);
+		expect(tables.pageTemplateCount).toBeGreaterThan(0);
+		expect(tables.clusterCount).toBeGreaterThan(0);
+	}, 90_000);
+
+	it('不正な --template-memory-budget は、viewer-build が分類に入る前に拒否し、既存の分類に触れない', async () => {
+		const cwd = path.join(root, 'budget-invalid');
+		const archivePath = await crawlInto(cwd, []);
+		const before = await readTemplateTables(archivePath, cwd);
+
+		const exitCode = await runCli(
+			['viewer-build', archivePath, '--template-memory-budget=-1'],
+			cwd,
+		);
+
+		expect(exitCode).not.toBe(0);
+		expect(await readTemplateTables(archivePath, cwd)).toEqual(before);
+	}, 120_000);
+
 	it('viewer-build --skip-templates は既存の分類に触れない', async () => {
 		const cwd = path.join(root, 'keep');
 		const archivePath = await crawlInto(cwd, []);
