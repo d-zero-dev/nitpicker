@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 indexmap = { workspace = true }
+lz4_flex = { workspace = true }
 nitpicker_html_parser = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
