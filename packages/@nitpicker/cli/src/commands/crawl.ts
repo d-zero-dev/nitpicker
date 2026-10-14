@@ -24,6 +24,7 @@ import {
 	RETRY_FAILED_SETUP_PHASES,
 } from '@nitpicker/crawler';
 
+import { assertTemplateMemoryBudget } from '../crawl/assert-template-memory-budget.js';
 import { attachCrawlDisplay } from '../crawl/attach-crawl-display.js';
 import { createCrawlConsole } from '../crawl/create-crawl-console.js';
 import { createSetupTaskList } from '../crawl/create-setup-task-list.js';
@@ -561,6 +562,7 @@ async function finishCrawlMode(
 			silent: !!flags.silent,
 			skipTechnologyJsScan: !!flags.skipTechnologyJsScan,
 			skipTemplates: !!flags.skipTemplates,
+			templateMemoryBudget: flags.templateMemoryBudget,
 		});
 	} catch (error) {
 		errStack.push(toError(unwrapTaskListStepError(error)));
@@ -984,6 +986,12 @@ export async function crawl(args: string[], rawFlags: RawCrawlFlags) {
 		...rawFlags,
 		requestHeaders: await resolveRequestHeaders(rawFlags),
 	};
+
+	// Classification runs last, after the crawl, so a bad budget is refused
+	// before anything is crawled.
+	if (!flags.skipTemplates) {
+		assertTemplateMemoryBudget(flags.templateMemoryBudget);
+	}
 
 	const hasAppendFlag = !!flags.append && flags.append.length > 0;
 	const hasInventoryFlag = !!flags.inventory;

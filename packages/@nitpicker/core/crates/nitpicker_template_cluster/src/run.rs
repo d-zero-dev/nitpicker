@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 
+use crate::choose_sampled_blocks::SampleReason;
 use crate::content_root::ContentRoot;
 use crate::extract_landmarks::LandmarkType;
 use crate::jaccard::{jaccard, sorted_set};
@@ -14,11 +15,11 @@ use crate::seeded_random::SeededRandom;
 use crate::stage_a::{BlockMember, StageAResult, stage_a};
 use crate::vocabulary::{Ids, ScratchVocabulary, Vocabulary};
 
-/// Pages per block a streaming run clusters; the rest of a larger block is
+/// Pages per block a sampled block clusters; the rest of the block is
 /// assigned to the nearest of those clusters afterwards. Bounds what a run
-/// holds per block (and Stage B's input) whatever the corpus size. Which
-/// pages are sampled, and so every streamed archive's stored keys, depends
-/// on it: changing it reclassifies those archives.
+/// holds for such a block (and Stage B's input) whatever its size. Which
+/// pages are sampled, and so the stored keys of every archive with a
+/// sampled block, depends on it: changing it reclassifies those archives.
 pub const BLOCK_SAMPLE_SIZE: usize = 100;
 
 /// Assigned pages between two [`Progress::Assigned`] events: often enough
@@ -32,16 +33,6 @@ pub struct PageInput {
 	pub html: String,
 	/// The crawler's content-root hint, when it detected one.
 	pub content_root: Option<ContentRoot>,
-}
-
-/// How a run reads its pages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode {
-	/// Keep every page and discover local chrome across the whole corpus.
-	InMemory,
-	/// Keep a sample per block; chrome is discovered per sampled block, and
-	/// pages outside the samples are assigned in a second read.
-	Streaming,
 }
 
 /// A progress event.
@@ -63,6 +54,22 @@ pub enum Progress {
 		pages_assigned: usize,
 		/// To assign in all.
 		pages_to_assign: usize,
+	},
+	/// A block is clustered from a sample of its pages — its similarity table
+	/// would exceed the memory budget, or the blocks clustered whole would
+	/// hold too many pages — and its other pages are assigned to the
+	/// nearest sampled cluster in a second read.
+	BlockSampled {
+		/// Its key.
+		block_key: String,
+		/// Its pages.
+		page_count: usize,
+		/// Bytes its Stage A similarity table would take.
+		pair_bytes: u64,
+		/// The budget it was judged against.
+		budget: u64,
+		/// Why it is sampled.
+		reason: SampleReason,
 	},
 	/// Stage B began merging Stage A's clusters across blocks (it reports no
 	/// further progress of its own).
@@ -118,7 +125,7 @@ pub struct Unit {
 	pub key: u32,
 	/// Index of its block in the run's block keys.
 	pub block: u32,
-	/// Its members (all of them, or the sampled ones when streaming).
+	/// Its members (all of them, or the sampled ones for a sampled block).
 	pub members: Vec<UnitMember>,
 }
 
@@ -129,16 +136,19 @@ pub struct Output {
 	pub keys: Vec<String>,
 	/// Each page's key, as an index into [`Output::keys`].
 	pub key_of_page: Vec<u32>,
-	/// The units, in block order (streaming: in the order blocks completed).
+	/// The units: those of sampled blocks first, in the order the blocks
+	/// completed, then those of the other blocks in block order.
 	pub units: Vec<Unit>,
+	/// Per block, whether Stage A clustered only a sample of its pages.
+	pub sampled_blocks: Vec<bool>,
 }
 
 /// Marks a page no key was written for, which [`Run::into_output`] turns
 /// into an error.
 const NO_KEY: u32 = u32::MAX;
 
-/// Marks a page outside every sample (streaming), or one with nothing to
-/// assign it to.
+/// Marks a page outside its sampled block's sample (or in a block that is
+/// not sampled), or one with nothing to assign it to.
 const NONE: u32 = u32::MAX;
 
 /// What a sampled block keeps for assigning its other pages.
@@ -189,6 +199,7 @@ enum Phase {
 fn sample_blocks(
 	block_keys: &[String],
 	block_of_page: &[u32],
+	sampled_blocks: &[bool],
 	sample_size: usize,
 ) -> Vec<Vec<u32>> {
 	let mut randoms: Vec<Option<SeededRandom>> = block_keys.iter().map(|_| None).collect();
@@ -196,6 +207,9 @@ fn sample_blocks(
 	let mut samples: Vec<Vec<u32>> = vec![Vec::new(); block_keys.len()];
 	for (page_index, &block) in block_of_page.iter().enumerate() {
 		let block = block as usize;
+		if !sampled_blocks[block] {
+			continue;
+		}
 		let page_index = u32::try_from(page_index).expect("fewer than 2^32 pages");
 		let sample = &mut samples[block];
 		if sample.len() < sample_size {
@@ -246,19 +260,22 @@ pub struct Run {
 	block_keys: Vec<String>,
 	block_of_page: Vec<u32>,
 	block_sizes: Vec<usize>,
-	mode: Mode,
+	/// Per block, whether only a sample of its pages is clustered.
+	sampled_blocks: Vec<bool>,
 	sample_size: usize,
 	phase: Phase,
 	next_page: usize,
 	output: Output,
-	/// In memory: every page, until its block's Stage A.
-	pages: Vec<Option<PreparedPage>>,
-	/// Streaming: each unfinished block's sample.
+	/// The pages of blocks clustered whole, until their block's Stage A.
+	exact_pages: Vec<Option<PreparedPage>>,
+	/// Each of `exact_pages`' index among the run's pages.
+	exact_page_indices: Vec<u32>,
+	/// Each unfinished sampled block's sample ([`None`] for other blocks).
 	samples: Vec<Option<Sample>>,
-	/// Streaming: each page's slot in its block's sample, or [`NONE`].
+	/// Each page's slot in its sampled block's sample, or [`NONE`].
 	slot_of_page: Vec<u32>,
 	blocks_completed: usize,
-	/// Streaming: the block a page outside the samples is assigned in, or
+	/// The block a page outside its sampled block's sample is assigned in, or
 	/// [`NONE`].
 	pending_block_of_page: Vec<u32>,
 	pending_count: usize,
@@ -267,29 +284,48 @@ pub struct Run {
 	assigned: usize,
 }
 
+/// One page's preparation, with what places it.
+struct ReadPage {
+	page_index: usize,
+	block: usize,
+	prepared: PreparedPage,
+}
+
 impl Run {
 	/// Starts a run over pages whose blocks are already known.
 	///
+	/// `sampled_blocks` says per block whether only a sample of its pages is
+	/// clustered (the others are assigned to the nearest sampled cluster in a
+	/// second read) or all of them.
+	///
 	/// # Errors
 	///
-	/// [`RunError::Protocol`] when a page's block index is out of range or a
-	/// block has no pages.
+	/// [`RunError::Protocol`] when a page's block index is out of range, a
+	/// block has no pages or `sampled_blocks` does not have one entry per
+	/// block.
 	pub fn new(
 		block_keys: Vec<String>,
 		block_of_page: Vec<u32>,
-		mode: Mode,
+		sampled_blocks: Vec<bool>,
 	) -> Result<Self, RunError> {
-		Self::with_sample_size(block_keys, block_of_page, mode, BLOCK_SAMPLE_SIZE)
+		Self::with_sample_size(block_keys, block_of_page, sampled_blocks, BLOCK_SAMPLE_SIZE)
 	}
 
-	/// [`Run::new`] with another sample size, so tests can stream small
-	/// corpora.
+	/// [`Run::new`] with another sample size, so tests can sample small
+	/// blocks.
 	pub(crate) fn with_sample_size(
 		block_keys: Vec<String>,
 		block_of_page: Vec<u32>,
-		mode: Mode,
+		sampled_blocks: Vec<bool>,
 		sample_size: usize,
 	) -> Result<Self, RunError> {
+		if sampled_blocks.len() != block_keys.len() {
+			return Err(RunError::Protocol(format!(
+				"{} blocks but {} sampling flags",
+				block_keys.len(),
+				sampled_blocks.len()
+			)));
+		}
 		let mut block_sizes = vec![0usize; block_keys.len()];
 		for &block in &block_of_page {
 			*block_sizes.get_mut(block as usize).ok_or_else(|| {
@@ -302,39 +338,44 @@ impl Run {
 		let page_count = block_of_page.len();
 		let block_count = block_keys.len();
 
-		let mut samples = Vec::new();
-		let mut slot_of_page = Vec::new();
-		let mut pending_block_of_page = Vec::new();
-		let mut pending_count = 0;
-		if mode == Mode::Streaming {
-			slot_of_page = vec![NONE; page_count];
-			for pages in sample_blocks(&block_keys, &block_of_page, sample_size) {
-				for (slot, &page) in pages.iter().enumerate() {
-					slot_of_page[page as usize] = u32::try_from(slot).expect("slot fits");
-				}
-				samples.push(Some(Sample {
-					prepared: pages.iter().map(|_| None).collect(),
-					pages,
-					seen: 0,
-				}));
+		let mut samples: Vec<Option<Sample>> = (0..block_count).map(|_| None).collect();
+		let mut slot_of_page = vec![NONE; page_count];
+		let sampled_pages =
+			sample_blocks(&block_keys, &block_of_page, &sampled_blocks, sample_size);
+		for (block, pages) in sampled_pages.into_iter().enumerate() {
+			if !sampled_blocks[block] {
+				continue;
 			}
-			pending_block_of_page = slot_of_page
-				.iter()
-				.zip(&block_of_page)
-				.map(|(&slot, &block)| if slot == NONE { block } else { NONE })
-				.collect();
-			pending_count = pending_block_of_page
-				.iter()
-				.filter(|&&block| block != NONE)
-				.count();
+			for (slot, &page) in pages.iter().enumerate() {
+				slot_of_page[page as usize] = u32::try_from(slot).expect("slot fits");
+			}
+			samples[block] = Some(Sample {
+				prepared: pages.iter().map(|_| None).collect(),
+				pages,
+				seen: 0,
+			});
 		}
+		let pending_block_of_page: Vec<u32> = slot_of_page
+			.iter()
+			.zip(&block_of_page)
+			.map(|(&slot, &block)| {
+				if sampled_blocks[block as usize] && slot == NONE {
+					block
+				} else {
+					NONE
+				}
+			})
+			.collect();
+		let pending_count = pending_block_of_page
+			.iter()
+			.filter(|&&block| block != NONE)
+			.count();
 
 		Ok(Self {
 			vocabulary: Vocabulary::default(),
 			block_keys,
 			block_of_page,
 			block_sizes,
-			mode,
 			sample_size,
 			phase: Phase::First,
 			next_page: 0,
@@ -342,8 +383,11 @@ impl Run {
 				keys: Vec::new(),
 				key_of_page: vec![NO_KEY; page_count],
 				units: Vec::new(),
+				sampled_blocks: sampled_blocks.clone(),
 			},
-			pages: Vec::new(),
+			sampled_blocks,
+			exact_pages: Vec::new(),
+			exact_page_indices: Vec::new(),
 			samples,
 			slot_of_page,
 			blocks_completed: 0,
@@ -363,23 +407,25 @@ impl Run {
 		}
 	}
 
-	/// Which pages the current read uses (`true`) — every page in memory,
-	/// the sampled ones on a streaming first read, the others on the
-	/// assignment read; none once both are done. A caller may send the
-	/// others with empty HTML.
+	/// Which pages the current read uses (`true`) — on the first read every
+	/// page of a block clustered whole and the sampled pages of a sampled
+	/// block, on the assignment read the other pages of the sampled blocks;
+	/// none once both are done. A caller may send the others with empty HTML.
 	#[must_use]
 	pub fn page_mask(&self) -> Vec<bool> {
-		match (self.phase, self.mode) {
-			(Phase::First, Mode::InMemory) => vec![true; self.block_of_page.len()],
-			(Phase::First, Mode::Streaming) => {
-				self.slot_of_page.iter().map(|&slot| slot != NONE).collect()
-			}
-			(Phase::Assignment, _) => self
+		match self.phase {
+			Phase::First => self
+				.block_of_page
+				.iter()
+				.zip(&self.slot_of_page)
+				.map(|(&block, &slot)| !self.sampled_blocks[block as usize] || slot != NONE)
+				.collect(),
+			Phase::Assignment => self
 				.pending_block_of_page
 				.iter()
 				.map(|&block| block != NONE)
 				.collect(),
-			(Phase::Done, _) => vec![false; self.block_of_page.len()],
+			Phase::Done => vec![false; self.block_of_page.len()],
 		}
 	}
 
@@ -389,6 +435,11 @@ impl Run {
 	///
 	/// [`RunError::Cancelled`], or [`RunError::Protocol`] past the last page
 	/// or after the first read ended.
+	///
+	/// # Panics
+	///
+	/// Never: a sampled block's sample lives until its last page was read,
+	/// which the page count check establishes.
 	pub fn push_pages(&mut self, pages: Vec<PageInput>, context: &Context) -> Result<(), RunError> {
 		context.check()?;
 		if self.phase != Phase::First {
@@ -405,85 +456,66 @@ impl Run {
 			)));
 		}
 		self.next_page += pages.len();
-		match self.mode {
-			Mode::InMemory => self.push_in_memory(first, pages, context),
-			Mode::Streaming => self.push_streaming(first, pages, context),
-		}
-	}
 
-	fn push_in_memory(
-		&mut self,
-		first: usize,
-		pages: Vec<PageInput>,
-		context: &Context,
-	) -> Result<(), RunError> {
-		let vocabulary = &self.vocabulary;
-		let block_of_page = &self.block_of_page;
-		let block_sizes = &self.block_sizes;
-		let prepared: Vec<Option<PreparedPage>> = pages
-			.into_par_iter()
-			.enumerate()
-			.map(|(offset, page)| {
-				if context.cancelled.load(Ordering::Relaxed) {
-					return None;
-				}
-				let block = block_of_page[first + offset] as usize;
-				Some(prepare_page(
-					&page.html,
-					page.content_root.as_ref(),
-					Self::preparation(block_sizes[block]),
-					&mut Ids::Shared(vocabulary),
-				))
-			})
-			.collect();
-		context.check()?;
-		self.pages.extend(prepared);
-		Ok(())
-	}
-
-	fn push_streaming(
-		&mut self,
-		first: usize,
-		pages: Vec<PageInput>,
-		context: &Context,
-	) -> Result<(), RunError> {
 		let page_count = pages.len();
 		let block_of_page = &self.block_of_page;
 		let block_sizes = &self.block_sizes;
+		let sampled_blocks = &self.sampled_blocks;
 		let slot_of_page = &self.slot_of_page;
 		let sample_size = self.sample_size;
 		let vocabulary = &self.vocabulary;
-		let read: Vec<(usize, usize, PreparedPage)> = pages
+		let read: Vec<ReadPage> = pages
 			.into_par_iter()
 			.enumerate()
 			.filter_map(|(offset, page)| {
 				let page_index = first + offset;
-				let slot = slot_of_page[page_index];
-				if slot == NONE || context.cancelled.load(Ordering::Relaxed) {
+				let block = block_of_page[page_index] as usize;
+				let pool_size = if sampled_blocks[block] {
+					if slot_of_page[page_index] == NONE {
+						return None;
+					}
+					block_sizes[block].min(sample_size)
+				} else {
+					block_sizes[block]
+				};
+				if context.cancelled.load(Ordering::Relaxed) {
 					return None;
 				}
-				let block = block_of_page[page_index] as usize;
 				let prepared = prepare_page(
 					&page.html,
 					page.content_root.as_ref(),
-					Self::preparation(block_sizes[block].min(sample_size)),
+					Self::preparation(pool_size),
 					&mut Ids::Shared(vocabulary),
 				);
-				Some((block, slot as usize, prepared))
+				Some(ReadPage {
+					page_index,
+					block,
+					prepared,
+				})
 			})
 			.collect();
 		context.check()?;
-		for (block, slot, prepared) in read {
-			let sample = self.samples[block]
-				.as_mut()
-				.expect("a block being read is unfinished");
-			sample.prepared[slot] = Some(prepared);
+		for page in read {
+			if self.sampled_blocks[page.block] {
+				let slot = self.slot_of_page[page.page_index] as usize;
+				let sample = self.samples[page.block]
+					.as_mut()
+					.expect("a block being read is unfinished");
+				sample.prepared[slot] = Some(page.prepared);
+			} else {
+				self.exact_pages.push(Some(page.prepared));
+				self.exact_page_indices
+					.push(u32::try_from(page.page_index).expect("fewer than 2^32 pages"));
+			}
 		}
 
-		// Blocks complete in the order their last pages come.
+		// Sampled blocks complete in the order their last pages come.
 		let mut completed: Vec<usize> = Vec::new();
 		for page_index in first..first + page_count {
 			let block = self.block_of_page[page_index] as usize;
+			if !self.sampled_blocks[block] {
+				continue;
+			}
 			let sample = self.samples[block]
 				.as_mut()
 				.expect("a block with pages left is unfinished");
@@ -592,8 +624,8 @@ impl Run {
 		}
 	}
 
-	/// Ends the first read: an in-memory run clusters every block now; a
-	/// streaming run has clustered each block as it completed.
+	/// Ends the first read: the blocks clustered whole are clustered here,
+	/// the sampled blocks were clustered as each completed.
 	///
 	/// # Errors
 	///
@@ -617,18 +649,24 @@ impl Run {
 				self.block_of_page.len()
 			)));
 		}
-		if self.mode == Mode::Streaming {
-			// Every block's last page was read, so every block completed.
-			debug_assert!(self.samples.iter().all(Option::is_none));
-			self.phase = if self.pending_count > 0 {
-				Phase::Assignment
-			} else {
-				Phase::Done
-			};
+		// Every sampled block's last page was read, so every one completed.
+		debug_assert!(self.samples.iter().all(Option::is_none));
+		self.cluster_whole_blocks(context)?;
+		self.phase = if self.pending_count > 0 {
+			Phase::Assignment
+		} else {
+			Phase::Done
+		};
+		Ok(())
+	}
+
+	/// Stage A over every block that is clustered whole, in block order, with
+	/// local chrome discovered across all their pages together.
+	fn cluster_whole_blocks(&mut self, context: &Context) -> Result<(), RunError> {
+		if self.exact_pages.is_empty() {
 			return Ok(());
 		}
-
-		let mut pages = std::mem::take(&mut self.pages);
+		let mut pages = std::mem::take(&mut self.exact_pages);
 		let chrome = {
 			let instances: Vec<&[LandmarkInstance]> = pages
 				.iter()
@@ -641,36 +679,39 @@ impl Run {
 				.collect();
 			compute_local_chrome(&instances)
 		};
-		let mut members_of_block: Vec<Vec<u32>> = vec![Vec::new(); self.block_keys.len()];
-		for (page_index, &block) in self.block_of_page.iter().enumerate() {
-			members_of_block[block as usize]
-				.push(u32::try_from(page_index).expect("fewer than 2^32 pages"));
+		// Each block's pages, as positions among the whole blocks' pages.
+		let mut positions_of_block: Vec<Vec<usize>> = vec![Vec::new(); self.block_keys.len()];
+		for (position, &page_index) in self.exact_page_indices.iter().enumerate() {
+			positions_of_block[self.block_of_page[page_index as usize] as usize].push(position);
 		}
-		for (block, page_indices) in members_of_block.iter().enumerate() {
+		for (block, positions) in positions_of_block.iter().enumerate() {
+			if positions.is_empty() {
+				continue;
+			}
 			context.check()?;
 			{
-				let block_pages: Vec<&PreparedPage> = page_indices
+				let page_indices: Vec<u32> = positions
 					.iter()
-					.map(|&index| {
-						pages[index as usize]
-							.as_ref()
-							.expect("a page is clustered once")
-					})
+					.map(|&position| self.exact_page_indices[position])
 					.collect();
-				let members: Vec<BlockMember> = page_indices
+				let block_pages: Vec<&PreparedPage> = positions
+					.iter()
+					.map(|&position| pages[position].as_ref().expect("a page is clustered once"))
+					.collect();
+				let members: Vec<BlockMember> = positions
 					.iter()
 					.zip(&block_pages)
-					.map(|(&index, page)| BlockMember {
+					.map(|(&position, page)| BlockMember {
 						page,
-						local_tokens: &chrome.tokens_by_page[index as usize],
+						local_tokens: &chrome.tokens_by_page[position],
 					})
 					.collect();
 				let result = stage_a(&self.block_keys[block], &members, &self.vocabulary);
-				self.record_block(block, page_indices, &block_pages, &result);
+				self.record_block(block, &page_indices, &block_pages, &result);
 			}
 			// A block's pages are not needed past its own Stage A.
-			for &index in page_indices {
-				pages[index as usize] = None;
+			for &position in positions {
+				pages[position] = None;
 			}
 			self.blocks_completed += 1;
 			(context.progress)(Progress::BlockComplete {
@@ -679,12 +720,12 @@ impl Run {
 				total_blocks: self.block_keys.len(),
 			});
 		}
-		self.phase = Phase::Done;
 		Ok(())
 	}
 
-	/// Whether the run now expects the assignment read: a streaming run whose
-	/// first read ended with pages outside the samples, until that read ends.
+	/// Whether the run expects the assignment read: a run whose first
+	/// read ended with pages outside the samples of its sampled blocks, until
+	/// that read ends.
 	#[must_use]
 	pub fn needs_assignment(&self) -> bool {
 		self.phase == Phase::Assignment
@@ -798,9 +839,7 @@ mod tests {
 	use std::sync::Mutex;
 	use std::sync::atomic::{AtomicBool, Ordering};
 
-	use super::{
-		Context, Mode, PageInput, Progress, Run, RunError, nearest_cluster, sample_blocks,
-	};
+	use super::{Context, PageInput, Progress, Run, RunError, nearest_cluster, sample_blocks};
 	use crate::extract_landmarks::LandmarkType;
 
 	/// A member as its tokens read: `(page index, tokens, instances)`.
@@ -930,10 +969,9 @@ mod tests {
 			.collect()
 	}
 
-	/// Runs `html_list` through a streaming run with pages outside the
-	/// samples, the first read in batches of the given sizes and the
-	/// assignment read in one, blanking every page a read leaves out of its
-	/// mask.
+	/// Runs `html_list` through a run whose blocks are all sampled, the first
+	/// read in batches of the given sizes and the assignment read in one,
+	/// blanking every page a read leaves out of its mask.
 	fn stream(
 		block_keys: &[&str],
 		block_of_page: &[u32],
@@ -945,7 +983,7 @@ mod tests {
 		let mut run = Run::with_sample_size(
 			block_keys.iter().map(|key| (*key).to_owned()).collect(),
 			block_of_page.to_vec(),
-			Mode::Streaming,
+			vec![true; block_keys.len()],
 			sample_size,
 		)
 		.unwrap();
@@ -973,13 +1011,14 @@ mod tests {
 
 	#[test]
 	fn samples_each_block_by_algorithm_r_seeded_by_its_key() {
-		// Pinned from the TypeScript streaming sampler in `sample_blocks`' doc.
+		// Pinned from the TypeScript sampler in `sample_blocks`' doc.
 		// As sets they are also what `reservoir_sample_positions` (same PRNG
 		// and seed hash, sorted) picks from each block's pages.
 		assert_eq!(
 			sample_blocks(
 				&["path:a".to_owned(), "css:b".to_owned()],
 				&BLOCK_OF_PAGE,
+				&[true, true],
 				3
 			),
 			vec![vec![9, 7, 6], vec![1, 4, 8]]
@@ -997,7 +1036,7 @@ mod tests {
 		let mut run = Run::with_sample_size(
 			vec!["path:a".to_owned(), "css:b".to_owned()],
 			BLOCK_OF_PAGE.to_vec(),
-			Mode::Streaming,
+			vec![true, true],
 			3,
 		)
 		.unwrap();
@@ -1026,9 +1065,106 @@ mod tests {
 	}
 
 	#[test]
+	fn clusters_a_block_whole_beside_a_sampled_one() {
+		// Block 0 is sampled (3 of its 9 pages), block 1 (3 pages) clustered whole.
+		let harness = Harness::new();
+		let html_list = corpus(12);
+		let mut run = Run::with_sample_size(
+			vec!["path:a".to_owned(), "css:b".to_owned()],
+			BLOCK_OF_PAGE.to_vec(),
+			vec![true, false],
+			3,
+		)
+		.unwrap();
+		let mask = run.page_mask();
+		for (page, &used) in mask.iter().enumerate() {
+			let sampled_block = BLOCK_OF_PAGE[page] == 0;
+			// Every page of the whole block is read; only 3 of block 0's.
+			assert!(used || sampled_block, "page {page} of the whole block");
+		}
+		assert_eq!(mask.iter().filter(|&&used| used).count(), 3 + 3);
+		harness
+			.with(|context| run.push_pages(inputs(&blank_unused(&html_list, mask)), context))
+			.unwrap();
+		harness.with(|context| run.finish_pages(context)).unwrap();
+		assert!(run.needs_assignment());
+		let assignment_mask = run.page_mask();
+		assert_eq!(assignment_mask.iter().filter(|&&used| used).count(), 6);
+		assert!(
+			assignment_mask
+				.iter()
+				.zip(&BLOCK_OF_PAGE)
+				.all(|(&used, &block)| !used || block == 0)
+		);
+		harness
+			.with(|context| {
+				run.push_assignment_pages(
+					inputs(&blank_unused(&html_list, assignment_mask)),
+					context,
+				)
+			})
+			.unwrap();
+		let (output, _) = run.into_output().unwrap();
+		assert_eq!(output.sampled_blocks, vec![true, false]);
+		assert!(output.key_of_page.iter().all(|&key| key != super::NO_KEY));
+		// The sampled block completed first; the whole block's units follow.
+		let blocks_of_units: Vec<u32> = output.units.iter().map(|unit| unit.block).collect();
+		let first_whole = blocks_of_units
+			.iter()
+			.position(|&block| block == 1)
+			.unwrap();
+		assert!(
+			blocks_of_units[..first_whole]
+				.iter()
+				.all(|&block| block == 0)
+		);
+		assert!(
+			blocks_of_units[first_whole..]
+				.iter()
+				.all(|&block| block == 1)
+		);
+	}
+
+	/// Runs `BLOCK_OF_PAGE` with block 0 sampled (3 of its 9 pages) and block 1
+	/// whole, the first read in batches of the given sizes.
+	fn mixed(batches: &[usize]) -> Resolved {
+		let harness = Harness::new();
+		let html_list = corpus(12);
+		let mut run = Run::with_sample_size(
+			vec!["path:a".to_owned(), "css:b".to_owned()],
+			BLOCK_OF_PAGE.to_vec(),
+			vec![true, false],
+			3,
+		)
+		.unwrap();
+		let first = blank_unused(&html_list, run.page_mask());
+		let mut start = 0;
+		for &size in batches {
+			let batch = inputs(&first[start..start + size]);
+			harness
+				.with(|context| run.push_pages(batch, context))
+				.unwrap();
+			start += size;
+		}
+		harness.with(|context| run.finish_pages(context)).unwrap();
+		let second = inputs(&blank_unused(&html_list, run.page_mask()));
+		harness
+			.with(|context| run.push_assignment_pages(second, context))
+			.unwrap();
+		resolve(run)
+	}
+
+	#[test]
+	fn clusters_a_mixed_run_the_same_however_the_pages_are_batched() {
+		let at_once = mixed(&[12]);
+		assert_eq!(mixed(&[5, 4, 3]), at_once);
+		assert_eq!(mixed(&[1; 12]), at_once);
+	}
+
+	#[test]
 	fn masks_every_page_of_an_in_memory_run_until_its_read_ends() {
 		let harness = Harness::new();
-		let mut run = Run::new(vec!["path:a".to_owned()], vec![0, 0, 0], Mode::InMemory).unwrap();
+		let mut run = Run::new(vec!["path:a".to_owned()], vec![0, 0, 0], vec![false]).unwrap();
 		assert_eq!(run.page_mask(), vec![true, true, true]);
 		harness
 			.with(|context| run.push_pages(inputs(&corpus(3)), context))
@@ -1044,7 +1180,7 @@ mod tests {
 		let mut run = Run::with_sample_size(
 			vec!["path:a".to_owned(), "css:b".to_owned()],
 			BLOCK_OF_PAGE.to_vec(),
-			Mode::Streaming,
+			vec![true, true],
 			3,
 		)
 		.unwrap();
@@ -1072,7 +1208,7 @@ mod tests {
 		let mut run = Run::with_sample_size(
 			vec!["path:a".to_owned(), "css:b".to_owned()],
 			vec![0, 0, 1],
-			Mode::Streaming,
+			vec![true, true],
 			3,
 		)
 		.unwrap();
@@ -1104,7 +1240,7 @@ mod tests {
 		let mut run = Run::with_sample_size(
 			vec!["path:a".to_owned(), "css:b".to_owned()],
 			BLOCK_OF_PAGE.to_vec(),
-			Mode::Streaming,
+			vec![true, true],
 			3,
 		)
 		.unwrap();
@@ -1219,8 +1355,7 @@ mod tests {
 	fn assigns_without_interning_the_assigned_pages_tokens() {
 		let harness = Harness::new();
 		let mut run =
-			Run::with_sample_size(vec!["path:a".to_owned()], vec![0; 5], Mode::Streaming, 4)
-				.unwrap();
+			Run::with_sample_size(vec!["path:a".to_owned()], vec![0; 5], vec![true], 4).unwrap();
 		let outside = run.page_mask().iter().position(|&used| !used).unwrap();
 		let mut html_list = corpus(5);
 		html_list[outside] =
@@ -1268,14 +1403,14 @@ mod tests {
 	#[test]
 	fn rejects_blocks_out_of_range_or_without_pages() {
 		assert_eq!(
-			protocol(Run::new(vec!["a".to_owned()], vec![1], Mode::InMemory)),
+			protocol(Run::new(vec!["a".to_owned()], vec![1], vec![false])),
 			"page block 1 is out of range"
 		);
 		assert_eq!(
 			protocol(Run::new(
 				vec!["a".to_owned(), "b".to_owned()],
 				vec![0],
-				Mode::Streaming
+				vec![true, true]
 			)),
 			"block 1 has no pages"
 		);
@@ -1285,7 +1420,7 @@ mod tests {
 	fn rejects_calls_out_of_order() {
 		let harness = Harness::new();
 		let html_list = corpus(3);
-		let mut run = Run::new(vec!["a".to_owned()], vec![0; 3], Mode::InMemory).unwrap();
+		let mut run = Run::new(vec!["a".to_owned()], vec![0; 3], vec![false]).unwrap();
 		assert_eq!(
 			protocol(
 				harness.with(|context| run.push_assignment_pages(inputs(&html_list), context))
@@ -1323,14 +1458,14 @@ mod tests {
 
 	#[test]
 	fn rejects_an_output_with_unread_pages() {
-		let run = Run::new(vec!["a".to_owned()], vec![0; 2], Mode::InMemory).unwrap();
+		let run = Run::new(vec!["a".to_owned()], vec![0; 2], vec![false]).unwrap();
 		assert_eq!(protocol(run.into_output()), "page 0 was never clustered");
 	}
 
 	#[test]
 	fn stops_once_cancelled() {
 		let harness = Harness::new();
-		let mut run = Run::new(vec!["a".to_owned()], vec![0; 3], Mode::InMemory).unwrap();
+		let mut run = Run::new(vec!["a".to_owned()], vec![0; 3], vec![false]).unwrap();
 		harness.cancelled.store(true, Ordering::Relaxed);
 		assert_eq!(
 			harness.with(|context| run.push_pages(inputs(&corpus(3)), context)),
@@ -1339,14 +1474,14 @@ mod tests {
 	}
 
 	#[test]
-	fn stops_streaming_at_the_next_block_once_cancelled() {
+	fn stops_a_sampled_block_run_at_the_next_block_once_cancelled() {
 		// Cancelled by the first block's event: the second block, completing in
 		// the same batch, is not clustered.
 		let harness = Harness::cancelling_after(1);
 		let mut run = Run::with_sample_size(
 			vec!["path:a".to_owned(), "css:b".to_owned()],
 			BLOCK_OF_PAGE.to_vec(),
-			Mode::Streaming,
+			vec![true, true],
 			3,
 		)
 		.unwrap();
@@ -1370,7 +1505,7 @@ mod tests {
 		let mut run = Run::new(
 			vec!["path:a".to_owned(), "css:b".to_owned()],
 			vec![0, 1, 0, 1],
-			Mode::InMemory,
+			vec![false, false],
 		)
 		.unwrap();
 		harness
@@ -1391,7 +1526,7 @@ mod tests {
 		let mut run = Run::with_sample_size(
 			vec!["path:a".to_owned(), "css:b".to_owned()],
 			BLOCK_OF_PAGE.to_vec(),
-			Mode::Streaming,
+			vec![true, true],
 			3,
 		)
 		.unwrap();

@@ -3868,10 +3868,11 @@ export interface TemplateClusterLandmarkSummary {
 export interface TemplateClusterReasonSummary {
 	/**
 	 * The member count page-cluster used to derive this reason.
-	 * **Not the same as `TemplateClusterSummary.pageCount`** — on an archive
-	 * whose page count exceeded page-cluster's inline-processing
-	 * threshold, this is a per-block sample size, not the cluster's true
-	 * page count. Never display this as a page count.
+	 * **Not the same as `TemplateClusterSummary.pageCount`** — for a cluster
+	 * of a block the classifier clustered from a sample (its similarity table
+	 * exceeded the memory budget, or the blocks clustered whole would hold
+	 * too many pages), this counts the sampled members, not the cluster's
+	 * true page count. Never display this as a page count.
 	 */
 	clusteredMemberCount: number;
 	blocking: TemplateClusterBlockingEvidence[];

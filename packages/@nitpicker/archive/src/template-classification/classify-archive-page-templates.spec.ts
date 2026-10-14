@@ -101,7 +101,11 @@ describe('classifyArchivePageTemplates', () => {
 	it('全ページを分類してpage_templates / page_template_clusters / page_template_labelsに書き込む', async () => {
 		const result = await classifyArchivePageTemplates(archive);
 
-		expect(result).toEqual({ classifiedPageCount: 3, templateCount: 2 });
+		expect(result).toEqual({
+			classifiedPageCount: 3,
+			templateCount: 2,
+			sampledBlocks: [],
+		});
 		const knex = archive.getKnex();
 		expect(await knex('page_templates').count({ n: '*' }).first()).toEqual({ n: 3 });
 		expect(await knex('page_template_clusters').count({ n: '*' }).first()).toEqual({
@@ -195,7 +199,11 @@ describe('classifyArchivePageTemplates', () => {
 
 			const result = await classifyArchivePageTemplates(emptyArchive);
 
-			expect(result).toEqual({ classifiedPageCount: 0, templateCount: 0 });
+			expect(result).toEqual({
+				classifiedPageCount: 0,
+				templateCount: 0,
+				sampledBlocks: [],
+			});
 			const rows = await emptyArchive
 				.getKnex()('page_templates')
 				.select('template_key as templateKey');

@@ -13,8 +13,14 @@ const LIST = '<body><main><ul><li><a>x</a></li><li><a>y</a></li></ul></main></bo
 const DETAIL =
 	'<body><main><article><h1>t</h1><p>p</p><figure><img></figure></article></main></body>';
 
-/** Above it a run streams (the addon's `CORPUS_INLINE_THRESHOLD`). */
-const STREAMING_PAGE_COUNT = 20_001;
+/** Pages of the block the sampling tests cluster from a sample. */
+const SAMPLED_PAGE_COUNT = 2001;
+
+/** Bytes of Stage A's similarity table over 2,001 pages: 2,001 * 2,000 / 2 * 8. */
+const SAMPLED_PAIR_BYTES = 16_008_000;
+
+/** Bytes of the table over 1,000 pages: a block of 1,000 fits, 2,001 does not. */
+const SAMPLING_BUDGET = 3_996_000;
 
 /**
  * `count` pages of one URL section, without stylesheets: one block.
@@ -167,28 +173,29 @@ describe('createTemplateClassificationRun', () => {
 		expect(output.reasons.size).toBe(0);
 	});
 
-	it('streams a corpus above 20,000 pages: a sample per block, the others assigned', async () => {
-		const pages = Array.from({ length: STREAMING_PAGE_COUNT }, (_, index) => ({
+	it('clusters a block over the memory budget from a sample and assigns the others', async () => {
+		const pages = Array.from({ length: SAMPLED_PAGE_COUNT }, (_, index) => ({
 			html: index % 2 === 0 ? LIST : DETAIL,
 		}));
 		const events: TemplateClassificationProgress[] = [];
 		const run = createTemplateClassificationRun({
+			memoryBudget: SAMPLING_BUDGET,
 			onProgress: (event) => events.push(event),
 		});
-		run.pushSignals(newsSignals(STREAMING_PAGE_COUNT));
+		run.pushSignals(newsSignals(SAMPLED_PAGE_COUNT));
 		await run.block();
 		const firstMask = run.pageMask();
 		expect(firstMask.reduce((sum, used) => sum + used, 0)).toBe(100);
 		const blankUnused = (mask: Uint8Array) =>
 			pages.map((page, index) => (mask[index] ? page : { html: '' }));
-		for (let start = 0; start < pages.length; start += 5000) {
-			await run.pushPages(blankUnused(firstMask).slice(start, start + 5000));
+		for (let start = 0; start < pages.length; start += 500) {
+			await run.pushPages(blankUnused(firstMask).slice(start, start + 500));
 		}
 		await run.finishPages();
 		expect(run.needsAssignment()).toBe(true);
 		const secondMask = run.pageMask();
 		expect(secondMask.reduce((sum, used) => sum + used, 0)).toBe(
-			STREAMING_PAGE_COUNT - 100,
+			SAMPLED_PAGE_COUNT - 100,
 		);
 		expect(firstMask.every((used, index) => used !== secondMask[index])).toBe(true);
 		await run.pushAssignmentPages(blankUnused(secondMask));
@@ -202,21 +209,87 @@ describe('createTemplateClassificationRun', () => {
 		expect(detailKeys.size).toBe(1);
 		expect(listKeys).not.toEqual(detailKeys);
 
-		// 20,001 pages less the 100 sampled are assigned, an event for every
-		// 1,000 of them: the last is the 19th, at 19,000.
+		expect(output.sampledBlocks).toEqual([
+			{
+				blockKey: 'path:news',
+				pageCount: SAMPLED_PAGE_COUNT,
+				pairBytes: SAMPLED_PAIR_BYTES,
+				reason: 'table-over-budget',
+			},
+		]);
+		expect(events[0]).toEqual({
+			phase: 'block-sampled',
+			blockKey: 'path:news',
+			pageCount: SAMPLED_PAGE_COUNT,
+			pairBytes: SAMPLED_PAIR_BYTES,
+			budget: SAMPLING_BUDGET,
+			reason: 'table-over-budget',
+		});
+		// 2,001 pages less the 100 sampled are assigned, an event for every
+		// 1,000 of them: the only one is at 1,000.
 		const assignEvents = events.filter((event) => event.phase === 'pass1b-assign');
-		expect(assignEvents).toHaveLength(19);
-		expect(assignEvents[0]).toEqual({
-			phase: 'pass1b-assign',
-			pagesAssigned: 1000,
-			pagesToAssign: 19_901,
-		});
-		expect(assignEvents.at(-1)).toEqual({
-			phase: 'pass1b-assign',
-			pagesAssigned: 19_000,
-			pagesToAssign: 19_901,
-		});
+		expect(assignEvents).toEqual([
+			{ phase: 'pass1b-assign', pagesAssigned: 1000, pagesToAssign: 1901 },
+		]);
 	});
+
+	it('clusters every page of a block whole when its table fits the budget', async () => {
+		const pages = Array.from({ length: SAMPLED_PAGE_COUNT }, (_, index) => ({
+			html: index % 2 === 0 ? LIST : DETAIL,
+		}));
+		const run = createTemplateClassificationRun({
+			memoryBudget: SAMPLED_PAIR_BYTES,
+		});
+		run.pushSignals(newsSignals(SAMPLED_PAGE_COUNT));
+		await run.block();
+		expect(run.pageMask().every((used) => used === 1)).toBe(true);
+		await run.pushPages(pages);
+		await run.finishPages();
+		expect(run.needsAssignment()).toBe(false);
+		const output = await run.takeOutput();
+		expect(output.sampledBlocks).toEqual([]);
+		const [reason] = [...output.reasons.values()];
+		expect(reason?.memberCount).toBe(1001);
+	});
+
+	it('samples every block larger than a sample under a budget of zero', async () => {
+		const run = createTemplateClassificationRun({ memoryBudget: 0 });
+		run.pushSignals(newsSignals(101));
+		await run.block();
+		expect(run.pageMask().reduce((sum, used) => sum + used, 0)).toBe(100);
+		await run.pushPages(Array.from({ length: 101 }, () => ({ html: LIST })));
+		await run.finishPages();
+		expect(run.needsAssignment()).toBe(true);
+		await run.pushAssignmentPages(Array.from({ length: 101 }, () => ({ html: LIST })));
+		const { sampledBlocks } = await run.takeOutput();
+		expect(sampledBlocks).toEqual([
+			{
+				blockKey: 'path:news',
+				pageCount: 101,
+				pairBytes: 40_400,
+				reason: 'table-over-budget',
+			},
+		]);
+	});
+
+	it('does not report a block no larger than a sample, even under a budget of zero', async () => {
+		const run = createTemplateClassificationRun({ memoryBudget: 0 });
+		run.pushSignals(newsSignals(1));
+		await run.block();
+		await run.pushPages([{ html: LIST }]);
+		await run.finishPages();
+		const { sampledBlocks } = await run.takeOutput();
+		expect(sampledBlocks).toEqual([]);
+	});
+
+	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'rejects a memoryBudget of %s instead of sampling every block',
+		(memoryBudget) => {
+			expect(() => createTemplateClassificationRun({ memoryBudget })).toThrow(
+				/memoryBudget must be a non-negative number of bytes/,
+			);
+		},
+	);
 
 	it('delivers every progress event of a call before the call resolves', async () => {
 		const events: TemplateClassificationProgress[] = [];

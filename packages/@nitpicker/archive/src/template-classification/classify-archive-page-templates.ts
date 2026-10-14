@@ -56,7 +56,7 @@ export async function classifyArchivePageTemplates(
 	archive: Archive,
 	options: ClassifyArchivePageTemplatesOptions = {},
 ): Promise<ClassifyArchivePageTemplatesResult> {
-	const { onProgress } = options;
+	const { memoryBudget, onProgress } = options;
 	const pages: Page[] = [];
 
 	onProgress?.({ phase: 'loading-pages-start' });
@@ -81,6 +81,7 @@ export async function classifyArchivePageTemplates(
 	const classification = await classifyPageTemplates({
 		archive,
 		pages,
+		...(memoryBudget === undefined ? {} : { memoryBudget }),
 		onProgress,
 	});
 
@@ -98,5 +99,6 @@ export async function classifyArchivePageTemplates(
 	return {
 		classifiedPageCount: classification.templateKeysByUrl.size,
 		templateCount: new Set(classification.templateKeysByUrl.values()).size,
+		sampledBlocks: classification.sampledBlocks,
 	};
 }

@@ -28,9 +28,13 @@
 			"import": "./lib/create-template-classification-run.js",
 			"types": "./lib/create-template-classification-run.d.ts"
 		},
-		"./template-corpus-inline-threshold": {
-			"import": "./lib/template-corpus-inline-threshold.js",
-			"types": "./lib/template-corpus-inline-threshold.d.ts"
+		"./template-exact-page-limit": {
+			"import": "./lib/template-exact-page-limit.js",
+			"types": "./lib/template-exact-page-limit.d.ts"
+		},
+		"./template-memory-budget": {
+			"import": "./lib/template-memory-budget.js",
+			"types": "./lib/template-memory-budget.d.ts"
 		},
 		"./template-block-sample-size": {
 			"import": "./lib/template-block-sample-size.js",

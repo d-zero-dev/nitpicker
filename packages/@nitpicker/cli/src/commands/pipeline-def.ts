@@ -189,6 +189,12 @@ export const commandDef = {
 			group: 'Crawl options',
 			desc: 'Skip the page template classification (DOM-structure clustering into per-site templates) that otherwise runs at the end of the crawl; run it later with `viewer-build`',
 		},
+		templateMemoryBudget: {
+			type: 'number',
+			valueName: 'MiB',
+			group: 'Crawl options',
+			desc: 'Bytes a page-template block similarity table may take before the block is clustered from a sample instead of whole, in MiB (default 512; 0 samples every block; also NITPICKER_TEMPLATE_MEMORY_BUDGET; an invalid value is refused before any work starts). A table takes n*(n-1)/2*8 bytes for a block of n pages. Separately, when the blocks clustered whole would hold more than 20,000 pages, the largest are sampled too (a fixed limit)',
+		},
 		// report flags
 		all: {
 			type: 'boolean',

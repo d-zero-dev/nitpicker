@@ -224,10 +224,10 @@ describe('viewerBuild command', () => {
 		const archive = await mockArchiveOpen();
 		await viewerBuild(['/tmp/existing.nitpicker'], {} as never);
 
-		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(
-			archive,
-			expect.any(Function),
-		);
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(archive, {
+			onProgress: expect.any(Function),
+			templateMemoryBudget: undefined,
+		});
 		const output = renderedOutput();
 		expect(output.indexOf('Classify page templates')).toBeGreaterThan(
 			output.indexOf('Extract archive'),
@@ -239,6 +239,40 @@ describe('viewerBuild command', () => {
 		mockClassifyTemplatesQuietly.mockClear();
 		await viewerBuild(['/tmp/existing.nitpicker'], { force: true } as never);
 		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledOnce();
+	});
+
+	it('passes --template-memory-budget to the classification', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+		const archive = await mockArchiveOpen();
+		await viewerBuild(['/tmp/existing.nitpicker'], {
+			templateMemoryBudget: 512,
+		} as never);
+
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(archive, {
+			onProgress: expect.any(Function),
+			templateMemoryBudget: 512,
+		});
+	});
+
+	it('rejects an invalid --template-memory-budget before touching the archive', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+
+		await expect(
+			viewerBuild(['/tmp/existing.nitpicker'], { templateMemoryBudget: -1 } as never),
+		).rejects.toThrow('Invalid template memory budget (--template-memory-budget -1)');
+
+		expect(mockClassifyTemplatesQuietly).not.toHaveBeenCalled();
+	});
+
+	it('does not check the budget when --skip-templates means no classification runs', async () => {
+		const { viewerBuild } = await import('./viewer-build.js');
+
+		await expect(
+			viewerBuild(['/tmp/existing.nitpicker'], {
+				skipTemplates: true,
+				templateMemoryBudget: -1,
+			} as never),
+		).resolves.toBeUndefined();
 	});
 
 	it('skips the Classify page templates row when --skip-templates is passed', async () => {

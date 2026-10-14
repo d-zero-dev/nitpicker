@@ -47,6 +47,13 @@ export function formatTemplateClassificationProgress(
 		case 'pass0-signals': {
 			return `reading pages (${event.pagesSeen.toLocaleString()})`;
 		}
+		case 'block-sampled': {
+			const mib = (bytes: number) => Math.round(bytes / (1024 * 1024)).toLocaleString();
+			const pages = event.pageCount.toLocaleString();
+			return event.reason === 'table-over-budget'
+				? `sampling block of ${pages} pages (${mib(event.pairBytes)} MiB table over the ${mib(event.budget)} MiB budget)`
+				: `sampling block of ${pages} pages (too many pages to cluster whole)`;
+		}
 		case 'pass1-block-complete': {
 			return formatProgressCount(event.blocksProcessed, event.totalBlocks, 'blocks');
 		}

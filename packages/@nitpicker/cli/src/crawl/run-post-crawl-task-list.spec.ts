@@ -117,10 +117,10 @@ describe('runPostCrawlTaskList', () => {
 			orchestrator.archive,
 			expect.any(Function),
 		);
-		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(
-			orchestrator.archive,
-			expect.any(Function),
-		);
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(orchestrator.archive, {
+			onProgress: expect.any(Function),
+			templateMemoryBudget: undefined,
+		});
 		expect(mockBuildViewerReadModelInWorker).toHaveBeenCalledOnce();
 		expect(mockEnsureViewerReadModelQuietly).not.toHaveBeenCalled();
 		expect(orchestrator.write).toHaveBeenCalledOnce();
@@ -140,6 +140,42 @@ describe('runPostCrawlTaskList', () => {
 		expect(rendered).toContain('Write archive');
 		expect(rendered).toContain('Checkpointing database');
 		expect(rendered).toContain('50/100 MB');
+	});
+
+	it('passes the template memory budget to the classification, with and without a display', async () => {
+		mockScanJsResourcesQuietly.mockResolvedValue();
+		mockBuildViewerReadModelInWorker.mockImplementation(async (_archive, options) => {
+			await driveOnPhase(options, VIEWER_READ_MODEL_FULL_BUILD_PHASES);
+		});
+		const { runPostCrawlTaskList } = await import('./run-post-crawl-task-list.js');
+		const displayed = createFakeOrchestrator();
+		const { stream } = createCapturingStream();
+
+		await runPostCrawlTaskList(displayed as never, {
+			verbose: false,
+			silent: false,
+			skipTechnologyJsScan: true,
+			skipTemplates: false,
+			templateMemoryBudget: 512,
+			stream,
+		});
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(displayed.archive, {
+			onProgress: expect.any(Function),
+			templateMemoryBudget: 512,
+		});
+
+		mockClassifyTemplatesQuietly.mockClear();
+		const silent = createFakeOrchestrator();
+		await runPostCrawlTaskList(silent as never, {
+			verbose: false,
+			silent: true,
+			skipTechnologyJsScan: true,
+			skipTemplates: false,
+			templateMemoryBudget: 512,
+		});
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(silent.archive, {
+			templateMemoryBudget: 512,
+		});
 	});
 
 	it('reports a read-model failure on its row and still writes the archive (issue #294)', async () => {
@@ -244,7 +280,9 @@ describe('runPostCrawlTaskList', () => {
 		});
 
 		expect(mockScanJsResourcesQuietly).toHaveBeenCalledWith(orchestrator.archive);
-		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(orchestrator.archive);
+		expect(mockClassifyTemplatesQuietly).toHaveBeenCalledWith(orchestrator.archive, {
+			templateMemoryBudget: undefined,
+		});
 		expect(mockEnsureViewerReadModelQuietly).toHaveBeenCalledWith(orchestrator.archive);
 		expect(mockBuildViewerReadModelInWorker).not.toHaveBeenCalled();
 		expect(orchestrator.write).toHaveBeenCalledOnce();

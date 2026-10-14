@@ -35,7 +35,7 @@ const MAIN_CSS = `https://${HOST}/assets/main.css`;
  *   names, comments, `<script>` / `<style>` / `<svg>` / `<noscript>`
  *
  * `scale` multiplies every section except the one-off pages, so a large
- * scale reproduces the same site shape above the streaming threshold.
+ * scale reproduces the same site shape with blocks of thousands of pages.
  * @param options - See {@link SyntheticSiteOptions}.
  * @returns The corpus in a fixed order.
  * @example

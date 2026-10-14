@@ -16,6 +16,7 @@ import { TRANSFER_POST_PHASES } from '@nitpicker/archive/transfer/transfer-post-
 import { buildViewerReadModelInWorker } from '@nitpicker/query';
 
 import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';
+import { assertTemplateMemoryBudget } from '../crawl/assert-template-memory-budget.js';
 import { classifyTemplatesQuietly } from '../crawl/classify-templates-quietly.js';
 import { createVerboseTimestampStream } from '../crawl/create-verbose-timestamp-stream.js';
 import { dedupeProgressMessage } from '../dedupe-progress-message.js';
@@ -81,6 +82,9 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 	let scopeUrls: string[];
 	let outputPath: string;
 	try {
+		if (!flags.skipTemplates) {
+			assertTemplateMemoryBudget(flags.templateMemoryBudget);
+		}
 		const [archivePath, ...urlArgs] = args;
 		if (!archivePath) {
 			throw new Error('split requires an archive path');
@@ -169,8 +173,11 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 				async (destination: ArchiveType, ctx: StepContext<ArchiveType>) => {
 					state.templateClassificationError = await classifyTemplatesQuietly(
 						destination,
-						(message) => {
-							ctx.progress(message);
+						{
+							onProgress: (message) => {
+								ctx.progress(message);
+							},
+							templateMemoryBudget: flags.templateMemoryBudget,
 						},
 					);
 					return destination;

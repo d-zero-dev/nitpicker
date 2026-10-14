@@ -7,9 +7,15 @@
  * it, including the write. `phasesMs` splits the wall clock at the progress
  * events it emits: `loadingPages` (page handles), `untilStageB` (stylesheet
  * references, the stored-HTML listing, Pass 0, HTML reads, Stage A of every
- * block and, on the streaming path, the assignment of pages outside the
- * samples), `stageB` (cross-block merge and cluster reasons) and `writing`. `slowestBlockMs` is the longest gap between two
- * consecutive blocks finishing.
+ * block and, for sampled blocks, the assignment of pages outside the
+ * samples), `stageB` (cross-block merge and cluster reasons) and `writing`.
+ * `slowestBlockMs` is the longest gap between two consecutive blocks
+ * finishing. `sampledBlocks` and `sampledPages` count the blocks clustered
+ * from a sample because their similarity table exceeded the memory budget,
+ * and their pages.
+ *
+ * `NITPICKER_TEMPLATE_MEMORY_BUDGET` (MiB) sets the budget as it does for
+ * the CLI; `0` samples every block.
  *
  * It runs on a throwaway extracted copy; the source archive is never
  * modified. Block keys are never printed: they carry the crawled site's
@@ -25,7 +31,6 @@
 /* eslint-disable import-x/no-extraneous-dependencies */
 
 import { classifyArchivePageTemplates } from '@nitpicker/archive/template-classification/classify-archive-page-templates';
-import { TEMPLATE_CORPUS_INLINE_THRESHOLD as CORPUS_INLINE_THRESHOLD } from '@nitpicker/core/template-corpus-inline-threshold';
 
 import { countInternalPages } from './bench-lib/count-internal-pages.mjs';
 import { measureMs } from './bench-lib/measure-ms.mjs';
@@ -34,6 +39,20 @@ import { reportBenchResult } from './bench-lib/report-bench-result.mjs';
 import { withWritableArchiveCopy } from './bench-lib/with-writable-archive-copy.mjs';
 
 const { archive, caseName, json } = readBenchArguments('template-classification');
+
+// Parsed here, not through the CLI's `resolveTemplateMemoryBudget`: a script
+// cannot import the CLI's source, and `@nitpicker/cli` exports no such
+// module. Keep the two readings (MiB, blank means default) in step.
+const budgetMiB = process.env.NITPICKER_TEMPLATE_MEMORY_BUDGET;
+const memoryBudget =
+	budgetMiB === undefined || budgetMiB.trim() === ''
+		? undefined
+		: Math.floor(Number(budgetMiB) * 1024 * 1024);
+if (memoryBudget !== undefined && !(memoryBudget >= 0)) {
+	throw new Error(
+		`NITPICKER_TEMPLATE_MEMORY_BUDGET="${budgetMiB}" is not a non-negative number of MiB`,
+	);
+}
 
 /**
  * Runs the production classification and splits it at its progress events.
@@ -47,6 +66,7 @@ async function runFull(writable) {
 	let slowestBlockMs = 0;
 	const { ms, value: result } = await measureMs(() =>
 		classifyArchivePageTemplates(writable, {
+			...(memoryBudget === undefined ? {} : { memoryBudget }),
 			onProgress: (event) => {
 				const now = performance.now();
 				if (!marks.has(event.phase)) {
@@ -77,8 +97,8 @@ async function runFull(writable) {
 			classifiedPages: result.classifiedPageCount,
 			templates: result.templateCount,
 			blocks: totalBlocks,
-			path:
-				result.classifiedPageCount > CORPUS_INLINE_THRESHOLD ? 'streaming' : 'in-memory',
+			sampledBlocks: result.sampledBlocks.length,
+			sampledPages: result.sampledBlocks.reduce((sum, block) => sum + block.pageCount, 0),
 			phasesMs: {
 				loadingPages: span('loading-pages-start', 'collecting-stylesheets'),
 				untilStageB: span('collecting-stylesheets', 'stage-b-start'),

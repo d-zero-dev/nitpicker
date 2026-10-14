@@ -22,6 +22,11 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Skip the page template classification (DOM-structure clustering into per-site templates) that otherwise runs before the read model build',
 		},
+		templateMemoryBudget: {
+			type: 'number',
+			valueName: 'MiB',
+			desc: 'Bytes a page-template block similarity table may take before the block is clustered from a sample instead of whole, in MiB (default 512; 0 samples every block; also NITPICKER_TEMPLATE_MEMORY_BUDGET; an invalid value is refused before any work starts). A table takes n*(n-1)/2*8 bytes for a block of n pages. Separately, when the blocks clustered whole would hold more than 20,000 pages, the largest are sampled too (a fixed limit)',
+		},
 		verbose: {
 			type: 'boolean',
 			desc: 'Append each progress/phase line with an ISO 8601 timestamp instead of overwriting a single line — for timing which step of a slow build is the bottleneck (issue #294)',

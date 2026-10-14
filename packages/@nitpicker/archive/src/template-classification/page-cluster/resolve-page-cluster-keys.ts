@@ -204,11 +204,13 @@ async function pushSignals(read: SignalsRead): Promise<void> {
  *   with a max-gap cut splits the block.
  * - **Stage B** merges clusters across blocks and explains each final one.
  *
- * At or below `TEMPLATE_CORPUS_INLINE_THRESHOLD` (20,000) pages every page
- * is clustered and chrome is judged across the corpus. Above it — the
- * streaming path — each block is clustered on a sample and a further read
- * assigns the rest. The factory is read twice (signals, HTML) or, streaming
- * with pages outside the samples, three times; each page's HTML is read
+ * A block is clustered whole unless its Stage A similarity table
+ * (`n * (n - 1) / 2 * 8` bytes for `n` pages) exceeds `options.memoryBudget`,
+ * or the blocks clustered whole would hold more than
+ * `TEMPLATE_EXACT_PAGE_LIMIT` pages together (the largest are then sampled
+ * until they fit); a sampled block is clustered on a sample and a further
+ * read assigns its other pages. The factory is read twice (signals, HTML)
+ * or, with a sampled block that has pages outside its sample, three times; each page's HTML is read
  * once, and JavaScript never holds the whole corpus's HTML.
  * @param pages
  * @param options
@@ -228,7 +230,11 @@ export async function resolvePageClusterKeys(
 	options?: Partial<ResolvePageClusterKeysOptions>,
 ): Promise<PageClusterKeys> {
 	const onProgress = options?.onProgress;
-	const run = createTemplateClassificationRun(onProgress ? { onProgress } : {});
+	const memoryBudget = options?.memoryBudget;
+	const run = createTemplateClassificationRun({
+		...(memoryBudget === undefined ? {} : { memoryBudget }),
+		...(onProgress ? { onProgress } : {}),
+	});
 	try {
 		await pushSignals({ pages, run, onProgress });
 		await run.block();
@@ -249,6 +255,7 @@ export async function resolvePageClusterKeys(
 		return {
 			keys: Array.from(output.keyOfPage, (key) => output.keys[key]!),
 			reasons: output.reasons,
+			sampledBlocks: output.sampledBlocks,
 		};
 	} catch (error) {
 		run.cancel();

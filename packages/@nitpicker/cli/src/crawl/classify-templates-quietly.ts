@@ -1,3 +1,4 @@
+import type { ClassifyTemplatesQuietlyOptions } from './types.js';
 import type Archive from '@nitpicker/archive/archive';
 
 import { classifyArchivePageTemplates } from '@nitpicker/archive/template-classification/classify-archive-page-templates';
@@ -5,6 +6,7 @@ import { classifyArchivePageTemplates } from '@nitpicker/archive/template-classi
 import { dedupeProgressMessage } from '../dedupe-progress-message.js';
 
 import { formatTemplateClassificationProgress } from './format-template-classification-progress.js';
+import { resolveTemplateMemoryBudget } from './resolve-template-memory-budget.js';
 
 /**
  * Runs the DOM-structure template classification against an archive that is
@@ -29,36 +31,58 @@ import { formatTemplateClassificationProgress } from './format-template-classifi
  *
  * The caller owns display: `onProgress` receives only the message fragment,
  * never a label or animation marker, since the task-list row carries both.
+ * The memory budget (blocks over it are clustered from a sample) comes from
+ * `--template-memory-budget`, else `NITPICKER_TEMPLATE_MEMORY_BUDGET`; an
+ * invalid value is a failure like any other, reported without stopping the
+ * archive from being written.
  * @param archive - A writable `Archive`.
- * @param onProgress - Called with the rendered progress / summary message
- *   whenever it changes. Omit for no progress reporting (a failure still goes
- *   to `console.error`).
+ * @param options - See {@link ClassifyTemplatesQuietlyOptions}; every field
+ *   may be omitted (without `onProgress` a failure still goes to `console.error`).
  * @returns `null` on success, or the failure message — `concat` / `split`
  *   surface it as an exit-code-bearing notice; the other callers ignore it.
  * @example
  * ```ts
- * const error = await classifyTemplatesQuietly(archive, (message) => {
- *   ctx.progress(message);
+ * const error = await classifyTemplatesQuietly(archive, {
+ *   onProgress: (message) => ctx.progress(message),
+ *   templateMemoryBudget: flags.templateMemoryBudget,
  * });
  * ```
  */
 export async function classifyTemplatesQuietly(
 	archive: Archive,
-	onProgress?: (message: string) => void,
+	options: Partial<ClassifyTemplatesQuietlyOptions> = {},
 ): Promise<string | null> {
+	const { onProgress, templateMemoryBudget } = options;
 	const reportProgress = dedupeProgressMessage((message) => {
 		onProgress?.(message);
 	});
 	try {
+		const memoryBudget = resolveTemplateMemoryBudget({
+			flag: templateMemoryBudget,
+			env: process.env.NITPICKER_TEMPLATE_MEMORY_BUDGET,
+		});
 		const result = await classifyArchivePageTemplates(archive, {
+			...(memoryBudget === undefined ? {} : { memoryBudget }),
 			onProgress: (event) => {
 				reportProgress(formatTemplateClassificationProgress(event));
 			},
 		});
+		const overBudget = result.sampledBlocks.filter(
+			(block) => block.reason === 'table-over-budget',
+		).length;
+		const overLimit = result.sampledBlocks.length - overBudget;
+		const reasons = [
+			overBudget > 0 && `${overBudget.toLocaleString()} over the memory budget`,
+			overLimit > 0 && `${overLimit.toLocaleString()} over the page limit`,
+		].filter(Boolean);
+		const sampled =
+			reasons.length > 0
+				? `, ${result.sampledBlocks.length.toLocaleString()} block(s) sampled (${reasons.join(', ')})`
+				: '';
 		const message =
 			result.classifiedPageCount === 0
 				? 'No pages to classify'
-				: `${result.classifiedPageCount.toLocaleString()} page(s) in ${result.templateCount.toLocaleString()} template(s)`;
+				: `${result.classifiedPageCount.toLocaleString()} page(s) in ${result.templateCount.toLocaleString()} template(s)${sampled}`;
 		onProgress?.(message);
 		return null;
 	} catch (error) {

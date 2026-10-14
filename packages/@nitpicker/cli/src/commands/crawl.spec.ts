@@ -523,6 +523,29 @@ describe('startCrawl', () => {
 		);
 	});
 
+	it('--template-memory-budget を runPostCrawlTaskList に templateMemoryBudget として渡す', async () => {
+		const fake = setupFakeOrchestrator();
+		const { startCrawl } = await import('./crawl.js');
+
+		await startCrawl(['https://example.com'], createFlags({ templateMemoryBudget: 512 }));
+
+		expect(mockRunPostCrawlTaskList).toHaveBeenCalledWith(
+			fake,
+			expect.objectContaining({ templateMemoryBudget: 512 }),
+		);
+	});
+
+	it('不正な --template-memory-budget は、クロールを始める前に拒否する', async () => {
+		setupFakeOrchestrator();
+		const { crawl } = await import('./crawl.js');
+
+		await expect(
+			crawl(['https://example.com'], createFlags({ templateMemoryBudget: -1 })),
+		).rejects.toThrow('Invalid template memory budget (--template-memory-budget -1)');
+
+		expect(mockRunPostCrawlTaskList).not.toHaveBeenCalled();
+	});
+
 	it('runPostCrawlTaskList が TaskListStepError で reject すると、元の cause を含む CrawlAggregateError になる（dealer のラップ文言を露出しない、issue #294 code review）', async () => {
 		setupFakeOrchestrator();
 		const cause = new Error('disk full');

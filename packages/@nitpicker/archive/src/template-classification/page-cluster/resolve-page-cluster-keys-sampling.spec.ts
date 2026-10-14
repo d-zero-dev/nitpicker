@@ -2,10 +2,18 @@ import type { PageClusterPage, ProgressEvent } from './types.js';
 import type { TemplateClusterReason } from '@nitpicker/core/types';
 
 import { TEMPLATE_BLOCK_SAMPLE_SIZE } from '@nitpicker/core/template-block-sample-size';
-import { TEMPLATE_CORPUS_INLINE_THRESHOLD as CORPUS_INLINE_THRESHOLD } from '@nitpicker/core/template-corpus-inline-threshold';
 import { describe, expect, test } from 'vitest';
 
 import { resolvePageClusterKeys } from './resolve-page-cluster-keys.js';
+
+/** Pages of the one-block corpora below: more than `SAMPLING_BUDGET` takes whole. */
+const SAMPLED_COUNT = 2001;
+
+/** A budget a block of 1,000 pages fits (3,996,000 bytes) and `SAMPLED_COUNT` pages exceed. */
+const SAMPLING_BUDGET = 3_996_000;
+
+/** Bytes of the table over `SAMPLED_COUNT` pages: 2,001 * 2,000 / 2 * 8. */
+const SAMPLED_PAIR_BYTES = 16_008_000;
 
 /** A page as the fixtures write it: its HTML inline instead of behind `getHtml()`. */
 type InlinePage = Omit<PageClusterPage, 'getHtml'> & { readonly html: string };
@@ -22,7 +30,7 @@ function toPage({ html, ...rest }: InlinePage): PageClusterPage {
 /**
  * Builds a small `PageClusterPage[]` fixture with three visible template
  * families and a section split so the returned cluster keys will actually
- * vary. Small enough to stay under `CORPUS_INLINE_THRESHOLD`.
+ * vary. Small enough to be clustered whole under the default budget.
  */
 function buildTinyCorpus(): PageClusterPage[] {
 	const pages: InlinePage[] = [];
@@ -64,7 +72,7 @@ describe('resolvePageClusterKeys (async factory)', () => {
 			calls++;
 			return [];
 		});
-		expect(result).toEqual({ keys: [], reasons: new Map() });
+		expect(result).toEqual({ keys: [], reasons: new Map(), sampledBlocks: [] });
 		expect(result.reasons.size).toBe(0);
 		expect(calls).toBe(2);
 	});
@@ -187,7 +195,7 @@ describe('TEMPLATE_BLOCK_SAMPLE_SIZE', () => {
 });
 
 describe('resolvePageClusterKeys (getHtml calls)', () => {
-	test('on an in-memory corpus each page getHtml is called exactly once', async () => {
+	test('on a corpus clustered whole each page getHtml is called exactly once', async () => {
 		const calls = [0, 0, 0, 0, 0];
 		const pages = buildTinyCorpus().map((page, i) => {
 			const html = page.getHtml();
@@ -204,8 +212,8 @@ describe('resolvePageClusterKeys (getHtml calls)', () => {
 		expect(calls).toEqual([1, 1, 1, 1, 1]);
 	});
 
-	test('on a streaming corpus each page getHtml is called exactly once in total', async () => {
-		const count = CORPUS_INLINE_THRESHOLD + 1;
+	test('on a corpus whose block is sampled each page getHtml is called exactly once in total', async () => {
+		const count = SAMPLED_COUNT;
 		const calls = Array.from({ length: count }, () => 0);
 		const pages: PageClusterPage[] = calls.map((_, i) => ({
 			paths: ['p', String(i)],
@@ -215,10 +223,12 @@ describe('resolvePageClusterKeys (getHtml calls)', () => {
 				return '<body><article>x</article></body>';
 			},
 		}));
-		const { keys } = await resolvePageClusterKeys(() => pages);
-		expect(keys).toHaveLength(20_001);
+		const { keys } = await resolvePageClusterKeys(() => pages, {
+			memoryBudget: SAMPLING_BUDGET,
+		});
+		expect(keys).toHaveLength(2001);
 		expect(calls.filter((n) => n !== 1)).toEqual([]);
-		expect(calls.reduce((sum, n) => sum + n, 0)).toBe(20_001);
+		expect(calls.reduce((sum, n) => sum + n, 0)).toBe(2001);
 	}, 60_000);
 });
 
@@ -232,7 +242,7 @@ describe('resolvePageClusterKeys onProgress on small corpus', () => {
 
 		// `buildTinyCorpus()` yields three distinct blocking groups (`news`,
 		// `about`, `contact` — each has its own stylesheet host / path shape),
-		// so the streaming resolver processes exactly three blocks and
+		// so the resolver processes exactly three blocks and
 		// emits `pass1-block-complete` three times with `blocksProcessed`
 		// values 1, 2, 3 in order and `totalBlocks` constant at 3. Hardcoded
 		// literals (instead of `map((_, i) => i + 1)`) so a regression that
@@ -317,11 +327,11 @@ describe('resolvePageClusterKeys (reasons)', () => {
 		expect(events.filter((e) => e.phase === 'stage-b-start')).toHaveLength(1);
 	});
 
-	test('a corpus above CORPUS_INLINE_THRESHOLD completes on the streaming path and returns one reason per final cluster, without throwing', async () => {
+	test('a block over the memory budget completes on the sampled path and returns one reason per final cluster, without throwing', async () => {
 		// A reason is sized by cluster count, not page count, so it has no
-		// page-count ceiling — this test proves that by actually crossing the
-		// threshold instead of asserting a thrown error.
-		const bigCount = CORPUS_INLINE_THRESHOLD + 1;
+		// page-count ceiling — this test proves that by actually exceeding the
+		// budget instead of asserting a thrown error.
+		const bigCount = SAMPLED_COUNT;
 		/**
 		 * @yields {PageClusterPage} A minimal page, `bigCount` times.
 		 */
@@ -334,15 +344,17 @@ describe('resolvePageClusterKeys (reasons)', () => {
 				});
 			}
 		}
-		const { keys, reasons } = await resolvePageClusterKeys(() => generate());
-		expect(keys).toHaveLength(20_001);
+		const { keys, reasons } = await resolvePageClusterKeys(() => generate(), {
+			memoryBudget: SAMPLING_BUDGET,
+		});
+		expect(keys).toHaveLength(2001);
 		const distinctKeys = new Set(keys);
 		expect(reasons.size).toBe(distinctKeys.size);
 		for (const key of distinctKeys) expect(reasons.has(key)).toBe(true);
 	}, 30_000);
 
-	test('a streaming corpus builds each reason from the block samples, so its memberCount counts the sample, not every page', async () => {
-		const bigCount = CORPUS_INLINE_THRESHOLD + 1;
+	test('a sampled block builds its reason from the sample, so its memberCount counts the sample, not every page', async () => {
+		const bigCount = SAMPLED_COUNT;
 		/**
 		 * @yields {PageClusterPage} A minimal page, `bigCount` times.
 		 */
@@ -355,7 +367,9 @@ describe('resolvePageClusterKeys (reasons)', () => {
 				});
 			}
 		}
-		const { reasons } = await resolvePageClusterKeys(() => generate());
+		const { reasons } = await resolvePageClusterKeys(() => generate(), {
+			memoryBudget: SAMPLING_BUDGET,
+		});
 		const memberCounts = [...reasons.values()].map(
 			(reason: TemplateClusterReason) => reason.memberCount,
 		);
@@ -368,10 +382,10 @@ describe('resolvePageClusterKeys (reasons)', () => {
 		// differs from every other page's (Jaccard 0 against every sample
 		// member). The 100-page reservoir sample sees each label once, learns
 		// `wrap` / `listing` as the recurring classes and strips the labels;
-		// the ~19,900 non-sample pages are only assigned correctly if Pass 1b
+		// the ~1,900 non-sample pages are only assigned correctly if Pass 1b
 		// applies that same set — tokenized without it they would all tie at
 		// score 0 and fall into whichever cluster is iterated first.
-		const bigCount = CORPUS_INLINE_THRESHOLD + 1;
+		const bigCount = SAMPLED_COUNT;
 		/**
 		 * @yields {PageClusterPage} Two templates alternating by index, `bigCount` times.
 		 */
@@ -388,8 +402,10 @@ describe('resolvePageClusterKeys (reasons)', () => {
 				});
 			}
 		}
-		const { keys } = await resolvePageClusterKeys(() => generate());
-		expect(keys).toHaveLength(20_001);
+		const { keys } = await resolvePageClusterKeys(() => generate(), {
+			memoryBudget: SAMPLING_BUDGET,
+		});
+		expect(keys).toHaveLength(2001);
 		const articleKeys = new Set(keys.filter((_, i) => i % 2 === 0));
 		const listingKeys = new Set(keys.filter((_, i) => i % 2 === 1));
 		expect(articleKeys.size).toBe(1);
@@ -398,7 +414,7 @@ describe('resolvePageClusterKeys (reasons)', () => {
 	}, 60_000);
 });
 
-describe('resolvePageClusterKeys (content root on the streaming path)', () => {
+describe('resolvePageClusterKeys (content root on the sampled path)', () => {
 	const tags = [
 		'em',
 		'strong',
@@ -442,14 +458,16 @@ describe('resolvePageClusterKeys (content root on the streaming path)', () => {
 
 	test('Pass 1b caps non-sample pages with their own hint at the depth learned from the sample', async () => {
 		// The 100-page reservoir sample learns the cap depth (3) with the hint
-		// and holds the capped tokens of both templates. The ~19,900 non-sample
+		// and holds the capped tokens of both templates. The ~1,900 non-sample
 		// pages are only assigned to the right template if Pass 1b caps them the
 		// same way: uncapped they share no token with any capped sample member,
 		// every similarity is 0, and they would all fall into whichever cluster
 		// is compared first.
-		const count = CORPUS_INLINE_THRESHOLD + 1;
-		const { keys } = await resolvePageClusterKeys(() => generate(count));
-		expect(keys).toHaveLength(20_001);
+		const count = SAMPLED_COUNT;
+		const { keys } = await resolvePageClusterKeys(() => generate(count), {
+			memoryBudget: SAMPLING_BUDGET,
+		});
+		expect(keys).toHaveLength(2001);
 		expect(new Set(keys.filter((_, i) => i % 2 === 0)).size).toBe(1);
 		expect(new Set(keys.filter((_, i) => i % 2 === 1)).size).toBe(1);
 		expect(new Set(keys).size).toBe(2);
@@ -483,12 +501,12 @@ describe('resolvePageClusterKeys (content root on the streaming path)', () => {
 		'["path:p","cluster:1"]',
 	];
 
-	test('a corpus at or below the threshold keeps the hint when the factory is re-read', async () => {
+	test('a corpus clustered whole keeps the hint when the factory is re-read', async () => {
 		const { keys } = await resolvePageClusterKeys(() => generate(24));
 		expect(keys).toStrictEqual(ALTERNATING_KEYS);
 	});
 
-	test('a corpus at or below the threshold keeps the hint when onProgress is given', async () => {
+	test('a corpus clustered whole keeps the hint when onProgress is given', async () => {
 		const events: string[] = [];
 		const { keys } = await resolvePageClusterKeys(() => generate(24), {
 			onProgress: (event) => events.push(event.phase),
@@ -496,4 +514,63 @@ describe('resolvePageClusterKeys (content root on the streaming path)', () => {
 		expect(events).toContain('stage-b-start');
 		expect(keys).toStrictEqual(ALTERNATING_KEYS);
 	});
+});
+
+describe('resolvePageClusterKeys (memory budget)', () => {
+	/**
+	 * @param count
+	 * @yields {PageClusterPage} `count` pages of one section sharing one template.
+	 */
+	function* generate(count: number): Generator<PageClusterPage> {
+		for (let i = 0; i < count; i++) {
+			yield toPage({
+				paths: ['p', String(i)],
+				stylesheetHrefs: [],
+				html: '<body><article>x</article></body>',
+			});
+		}
+	}
+
+	test('a block whose table exceeds the budget is reported before any page is read and listed in the result', async () => {
+		const events: ProgressEvent[] = [];
+		const { sampledBlocks } = await resolvePageClusterKeys(
+			() => generate(SAMPLED_COUNT),
+			{
+				memoryBudget: SAMPLING_BUDGET,
+				onProgress: (event) => events.push(event),
+			},
+		);
+
+		const expected = {
+			blockKey: 'path:p',
+			pageCount: 2001,
+			pairBytes: SAMPLED_PAIR_BYTES,
+			reason: 'table-over-budget',
+		};
+		expect(sampledBlocks).toEqual([expected]);
+		const sampledEvents = events.filter((event) => event.phase === 'block-sampled');
+		expect(sampledEvents).toEqual([
+			{ phase: 'block-sampled', ...expected, budget: SAMPLING_BUDGET },
+		]);
+		const phases = events.map((event) => event.phase);
+		expect(phases.indexOf('block-sampled')).toBeLessThan(
+			phases.indexOf('pass1-block-complete'),
+		);
+	}, 30_000);
+
+	test('a budget the block fits samples nothing, however many pages it has', async () => {
+		const events: ProgressEvent[] = [];
+		const { sampledBlocks, reasons } = await resolvePageClusterKeys(
+			() => generate(SAMPLED_COUNT),
+			{
+				memoryBudget: SAMPLED_PAIR_BYTES,
+				onProgress: (event) => events.push(event),
+			},
+		);
+
+		expect(sampledBlocks).toEqual([]);
+		expect(events.some((event) => event.phase === 'block-sampled')).toBe(false);
+		expect(events.some((event) => event.phase === 'pass1b-assign')).toBe(false);
+		expect([...reasons.values()].map((reason) => reason.memberCount)).toEqual([2001]);
+	}, 30_000);
 });

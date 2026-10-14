@@ -11,6 +11,7 @@ import type {
 	TemplateClusterReason,
 	TemplateLandmarkProfile,
 	TemplateLandmarkType,
+	TemplateSampleReason,
 } from './types.js';
 
 import { nativeBinding } from './native-binding.js';
@@ -101,6 +102,19 @@ function createProgressCallback(
 }
 
 /**
+ * Narrows a sampling reason the addon reports.
+ * @param reason - As the addon reports it.
+ * @returns The typed reason.
+ * @throws {Error} On a reason the wrapper does not know.
+ */
+function toSampleReason(reason: string): TemplateSampleReason {
+	if (reason === 'table-over-budget' || reason === 'pages-over-limit') {
+		return reason;
+	}
+	throw new Error(`unknown template classification sample reason "${reason}"`);
+}
+
+/**
  * Narrows the addon's flat progress record to
  * {@link TemplateClassificationProgress}.
  * @param event - As the addon reports it.
@@ -114,6 +128,16 @@ function toProgress(
 ): TemplateClassificationProgress {
 	const context = `progress phase "${event.phase}"`;
 	switch (event.phase) {
+		case 'block-sampled': {
+			return {
+				phase: 'block-sampled',
+				blockKey: required({ from: event, field: 'blockKey', context }),
+				pageCount: required({ from: event, field: 'pageCount', context }),
+				pairBytes: required({ from: event, field: 'pairBytes', context }),
+				budget: required({ from: event, field: 'budget', context }),
+				reason: toSampleReason(required({ from: event, field: 'reason', context })),
+			};
+		}
 		case 'pass1b-assign': {
 			return {
 				phase: 'pass1b-assign',
@@ -254,16 +278,23 @@ function toReasons(
  * reasons are the ones stored in existing archives, byte for byte
  * (`@nitpicker/archive`'s golden records pin them).
  *
- * Up to 20,000 pages, every page is kept until its block is clustered and
- * landmark chrome is judged across the whole corpus. Above that the run
- * streams: each block keeps a deterministic sample of
- * `TEMPLATE_BLOCK_SAMPLE_SIZE` pages, chrome is judged per sampled block,
- * and the second read assigns every other page to the nearest sampled
- * cluster. Every read pushes every page in corpus order; `pageMask()` tells
- * which ones the read uses, so the others can go with empty HTML (and need
- * not be read at all).
+ * Every block is clustered whole — every page kept until its block is
+ * clustered, landmark chrome judged across all of those blocks' pages —
+ * unless its Stage A similarity table (`n * (n - 1) / 2 * 8` bytes for `n`
+ * pages) would exceed `memoryBudget`, or unless the blocks clustered whole
+ * would hold more than `TEMPLATE_EXACT_PAGE_LIMIT` pages together (the
+ * largest blocks of more than `TEMPLATE_BLOCK_SAMPLE_SIZE` pages are then
+ * sampled until they fit, or none is left). Such a block keeps a deterministic
+ * sample of `TEMPLATE_BLOCK_SAMPLE_SIZE` pages instead, chrome is judged
+ * within the sample, and the second read assigns every other page of the
+ * block to the nearest sampled cluster; `block()` reports each one as a
+ * `block-sampled` event and `takeOutput()` lists them in `sampledBlocks`.
+ * Every read pushes every page in corpus order; `pageMask()` tells which
+ * ones the read uses, so the others can go with empty HTML (and need not be
+ * read at all).
  * @param options - See {@link CreateTemplateClassificationRunOptions}.
  * @returns The run.
+ * @throws {RangeError} When `memoryBudget` is negative or not a finite number.
  * @example
  * ```ts
  * const run = createTemplateClassificationRun();
@@ -284,7 +315,17 @@ function toReasons(
 export function createTemplateClassificationRun(
 	options: Partial<CreateTemplateClassificationRunOptions> = {},
 ): TemplateClassificationRun {
-	const { onProgress } = options;
+	const { onProgress, memoryBudget } = options;
+	// A NaN or negative budget would reach the addon as 0 and silently
+	// sample every block, which stores different keys.
+	if (
+		memoryBudget !== undefined &&
+		!(Number.isFinite(memoryBudget) && memoryBudget >= 0)
+	) {
+		throw new RangeError(
+			`createTemplateClassificationRun: memoryBudget must be a non-negative number of bytes, got ${memoryBudget}`,
+		);
+	}
 	const state: TemplateClassificationProgressState = {
 		delivered: 0,
 		expected: 0,
@@ -298,6 +339,7 @@ export function createTemplateClassificationRun(
 	const native: NativeTemplateClassificationRun =
 		new nativeBinding.TemplateClassificationRun(
 			onProgress ? createProgressCallback(state, onProgress) : undefined,
+			memoryBudget,
 		);
 	// The callback first runs after the constructor returns.
 	state.nativeRef = new WeakRef(native);
@@ -386,6 +428,10 @@ export function createTemplateClassificationRun(
 				keys: output.keys,
 				keyOfPage: output.keyOfPage,
 				reasons: toReasons(output.reasons),
+				sampledBlocks: output.sampledBlocks.map((block) => ({
+					...block,
+					reason: toSampleReason(block.reason),
+				})),
 			};
 		},
 		cancel: () => {

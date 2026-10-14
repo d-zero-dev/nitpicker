@@ -42,7 +42,7 @@ import { resolvePageClusterKeys } from './page-cluster/resolve-page-cluster-keys
 export async function classifyPageTemplates(
 	options: ClassifyPageTemplatesOptions,
 ): Promise<PageTemplateClassification> {
-	const { archive, pages, onProgress } = options;
+	const { archive, pages, memoryBudget, onProgress } = options;
 
 	onProgress?.({ phase: 'collecting-stylesheets' });
 	const stylesheetsByUrl = await collectPageStylesheetUrls(archive);
@@ -54,10 +54,10 @@ export async function classifyPageTemplates(
 		pageIdsWithHtml,
 	});
 
-	const { keys, reasons } = await resolvePageClusterKeys(
-		factory,
-		onProgress ? { onProgress } : {},
-	);
+	const { keys, reasons, sampledBlocks } = await resolvePageClusterKeys(factory, {
+		...(memoryBudget === undefined ? {} : { memoryBudget }),
+		...(onProgress ? { onProgress } : {}),
+	});
 	if (keys.length !== urls.length) {
 		// Would silently mis-map template keys to the wrong URLs if allowed
 		// through; the driver returns one key per page read, so this guards a
@@ -73,5 +73,5 @@ export async function classifyPageTemplates(
 	}
 	const clusterReasonsByTemplateKey: ReadonlyMap<string, TemplateClusterReason> = reasons;
 
-	return { templateKeysByUrl, clusterReasonsByTemplateKey };
+	return { templateKeysByUrl, clusterReasonsByTemplateKey, sampledBlocks };
 }
