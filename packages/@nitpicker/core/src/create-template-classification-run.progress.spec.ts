@@ -13,6 +13,7 @@ const EMPTY_OUTPUT: NativeTemplateClassificationOutput = {
 	keys: [],
 	keyOfPage: new Uint32Array(0),
 	reasons: [],
+	sampledBlocks: [],
 };
 
 /**
@@ -150,6 +151,7 @@ describe('createTemplateClassificationRun progress delivery', () => {
 			keys: [],
 			keyOfPage: new Uint32Array(0),
 			reasons: new Map(),
+			sampledBlocks: [],
 		});
 		expect(events).toEqual([{ phase: 'stage-b-start', unitCount: 3 }]);
 	});
@@ -177,6 +179,95 @@ describe('createTemplateClassificationRun progress delivery', () => {
 		await call;
 		expect(events).toEqual([
 			{ phase: 'pass1b-assign', pagesAssigned: 1000, pagesToAssign: 19_900 },
+		]);
+	});
+
+	it('delivers a block-sampled event with the block, its size and the budget', async () => {
+		const events: TemplateClassificationProgress[] = [];
+		const { run, native } = start((event) => events.push(event));
+		const call = run.block();
+		native.emit({
+			phase: 'block-sampled',
+			blockKey: 'path:a',
+			pageCount: 30_000,
+			pairBytes: 3_599_940_000,
+			budget: 2_147_483_648,
+			reason: 'table-over-budget',
+		});
+		native.calls[0]!.resolve(1);
+		await call;
+		expect(events).toEqual([
+			{
+				phase: 'block-sampled',
+				blockKey: 'path:a',
+				pageCount: 30_000,
+				pairBytes: 3_599_940_000,
+				budget: 2_147_483_648,
+				reason: 'table-over-budget',
+			},
+		]);
+	});
+
+	it('fails the run when a block-sampled event lacks the budget', async () => {
+		const { run, native } = start();
+		const call = run.block();
+		native.emit({
+			phase: 'block-sampled',
+			blockKey: 'path:a',
+			pageCount: 3,
+			pairBytes: 24,
+		});
+		native.calls[0]!.reject(new Error('template classification was cancelled'));
+		await expect(call).rejects.toThrow(
+			'template classification progress phase "block-sampled" is missing "budget"',
+		);
+	});
+
+	it('fails the run when a block-sampled event names an unknown reason', async () => {
+		const { run, native } = start();
+		const call = run.block();
+		native.emit({
+			phase: 'block-sampled',
+			blockKey: 'path:a',
+			pageCount: 3,
+			pairBytes: 24,
+			budget: 8,
+			reason: 'because',
+		});
+		native.calls[0]!.reject(new Error('template classification was cancelled'));
+		await expect(call).rejects.toThrow(
+			'unknown template classification sample reason "because"',
+		);
+	});
+
+	it('fails the output on a sampled block with an unknown reason', async () => {
+		const { run, native } = start();
+		native.output = {
+			...EMPTY_OUTPUT,
+			sampledBlocks: [
+				{ blockKey: 'path:a', pageCount: 3, pairBytes: 24, reason: 'because' },
+			],
+		};
+		const call = run.takeOutput();
+		native.calls[0]!.resolve(0);
+		await expect(call).rejects.toThrow(
+			'unknown template classification sample reason "because"',
+		);
+	});
+
+	it('hands over the blocks the addon sampled with the output', async () => {
+		const { run, native } = start();
+		native.output = {
+			...EMPTY_OUTPUT,
+			sampledBlocks: [
+				{ blockKey: 'path:a', pageCount: 3, pairBytes: 24, reason: 'pages-over-limit' },
+			],
+		};
+		const call = run.takeOutput();
+		native.calls[0]!.resolve(0);
+		const { sampledBlocks } = await call;
+		expect(sampledBlocks).toEqual([
+			{ blockKey: 'path:a', pageCount: 3, pairBytes: 24, reason: 'pages-over-limit' },
 		]);
 	});
 
@@ -322,6 +413,7 @@ describe('createTemplateClassificationRun progress delivery', () => {
 			presenceRate: 1,
 		});
 		native.output = {
+			sampledBlocks: [],
 			keys: ['k'],
 			keyOfPage: new Uint32Array([0]),
 			reasons: [

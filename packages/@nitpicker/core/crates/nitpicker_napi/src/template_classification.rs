@@ -23,7 +23,7 @@ use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use nitpicker_template_cluster::{
 	BlockingReason, Classification, ClassificationOutput, ContentRoot, Context, LandmarkType,
-	PageInput, PageSignals, Progress, RunError,
+	PageInput, PageSignals, Progress, RunError, SampleReason, TEMPLATE_MEMORY_BUDGET,
 };
 
 /// One page's blocking signals.
@@ -52,8 +52,8 @@ pub struct PageHtmlInput {
 	pub content_root: Option<ContentRootInput>,
 }
 
-/// A progress event (`phase` is `pass1-block-complete`, `pass1b-assign` or
-/// `stage-b-start`).
+/// A progress event (`phase` is `block-sampled`, `pass1-block-complete`,
+/// `pass1b-assign` or `stage-b-start`).
 #[napi(object)]
 pub struct ClassificationProgress {
 	pub phase: String,
@@ -63,6 +63,23 @@ pub struct ClassificationProgress {
 	pub pages_assigned: Option<u32>,
 	pub pages_to_assign: Option<u32>,
 	pub unit_count: Option<u32>,
+	pub page_count: Option<u32>,
+	pub pair_bytes: Option<f64>,
+	pub budget: Option<f64>,
+	/// `table-over-budget` or `pages-over-limit` (`block-sampled` only).
+	pub reason: Option<String>,
+}
+
+/// A block clustered from a sample of its pages: its similarity table
+/// exceeded the memory budget, or the blocks clustered whole would hold too
+/// many pages.
+#[napi(object)]
+pub struct SampledBlockOutput {
+	pub block_key: String,
+	pub page_count: u32,
+	pub pair_bytes: f64,
+	/// `table-over-budget` or `pages-over-limit`.
+	pub reason: String,
 }
 
 /// A block's blocking evidence, flattened: `distinctiveStylesheetHrefs` for
@@ -106,6 +123,8 @@ pub struct TemplateClassificationOutput {
 	pub key_of_page: Uint32Array,
 	/// One reason per final cluster.
 	pub reasons: Vec<ClusterReasonOutput>,
+	/// The blocks clustered from a sample, in block order.
+	pub sampled_blocks: Vec<SampledBlockOutput>,
 }
 
 type ProgressCallback = ThreadsafeFunction<
@@ -119,6 +138,20 @@ type ProgressCallback = ThreadsafeFunction<
 
 fn to_u32(value: usize) -> u32 {
 	u32::try_from(value).expect("fewer than 2^32 entries")
+}
+
+/// Byte counts reach JS as numbers; 2^53 bytes (8 PiB) is far past any
+/// similarity table, so the cast loses nothing.
+#[allow(clippy::cast_precision_loss)]
+fn to_f64(value: u64) -> f64 {
+	value as f64
+}
+
+fn reason_name(reason: SampleReason) -> &'static str {
+	match reason {
+		SampleReason::TableOverBudget => "table-over-budget",
+		SampleReason::PagesOverLimit => "pages-over-limit",
+	}
 }
 
 fn landmark_name(kind: LandmarkType) -> &'static str {
@@ -185,6 +218,16 @@ fn to_js_output(output: ClassificationOutput) -> TemplateClassificationOutput {
 					})
 					.collect(),
 				sibling_cluster_keys: reason.sibling_cluster_keys,
+			})
+			.collect(),
+		sampled_blocks: output
+			.sampled_blocks
+			.into_iter()
+			.map(|block| SampledBlockOutput {
+				block_key: block.block_key,
+				page_count: to_u32(block.page_count),
+				pair_bytes: to_f64(block.pair_bytes),
+				reason: reason_name(block.reason).to_owned(),
 			})
 			.collect(),
 	}
@@ -278,13 +321,19 @@ impl Drop for BusyGuard {
 
 #[napi]
 impl TemplateClassificationRun {
-	/// Starts a run, which first collects the pages' signals.
+	/// Starts a run, which first collects the pages' signals. A block whose
+	/// Stage A similarity table would take more than `memory_budget` bytes
+	/// (default [`TEMPLATE_MEMORY_BUDGET`]) is clustered from a sample.
 	#[napi(constructor)]
 	#[must_use]
-	pub fn new(on_progress: Option<ProgressCallback>) -> Self {
+	// A negative or fractional budget the caller passes saturates or truncates,
+	// which is as good a budget as any.
+	#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+	pub fn new(on_progress: Option<ProgressCallback>, memory_budget: Option<f64>) -> Self {
+		let memory_budget = memory_budget.map_or(TEMPLATE_MEMORY_BUDGET, |bytes| bytes as u64);
 		Self {
 			shared: Arc::new(Shared {
-				run: Mutex::new(Some(Classification::new())),
+				run: Mutex::new(Some(Classification::new(memory_budget))),
 				cancelled: AtomicBool::new(false),
 				busy: AtomicBool::new(false),
 				progress: Mutex::new(on_progress),
@@ -407,8 +456,8 @@ impl TemplateClassificationRun {
 		)
 	}
 
-	/// Ends the first read of the HTML (an in-memory run clusters every block
-	/// here). Resolves with the number of progress events sent.
+	/// Ends the first read of the HTML (the blocks clustered whole are
+	/// clustered here). Resolves with the number of progress events sent.
 	#[napi(ts_return_type = "Promise<number>")]
 	pub fn finish_pages<'env>(&self, env: &'env Env) -> Result<Object<'env>> {
 		self.spawn(
@@ -435,8 +484,8 @@ impl TemplateClassificationRun {
 			.into())
 	}
 
-	/// Whether a streaming run needs a second read to assign the pages
-	/// outside its samples.
+	/// Whether the run needs a second read to assign the pages outside the
+	/// samples of its sampled blocks.
 	#[napi]
 	pub fn needs_assignment(&self) -> Result<bool> {
 		Ok(self
@@ -505,8 +554,26 @@ fn to_js_progress(progress: Progress) -> ClassificationProgress {
 		pages_assigned: None,
 		pages_to_assign: None,
 		unit_count: None,
+		page_count: None,
+		pair_bytes: None,
+		budget: None,
+		reason: None,
 	};
 	match progress {
+		Progress::BlockSampled {
+			block_key,
+			page_count,
+			pair_bytes,
+			budget,
+			reason,
+		} => ClassificationProgress {
+			block_key: Some(block_key),
+			page_count: Some(to_u32(page_count)),
+			pair_bytes: Some(to_f64(pair_bytes)),
+			budget: Some(to_f64(budget)),
+			reason: Some(reason_name(reason).to_owned()),
+			..event("block-sampled")
+		},
 		Progress::BlockComplete {
 			block_key,
 			blocks_processed,

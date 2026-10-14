@@ -3,35 +3,47 @@
 //!
 //! The caller reads the corpus: the signals once, then the HTML once or
 //! twice (see [`Run`]). Only the signals are held for the whole corpus; HTML
-//! is held per block, or per sample when streaming.
+//! is held per block, or per sample for a block over the memory budget.
 
 use indexmap::IndexMap;
 
 use crate::blocking_reason::BlockingReason;
 use crate::build_cluster_reason::LandmarkClusterProfile;
+use crate::choose_sampled_blocks::{SampleReason, choose_sampled_blocks, pair_bytes};
 use crate::extract_landmarks::LandmarkType;
 use crate::page_signals::PageSignals;
 use crate::pass0::resolve_block_keys;
-use crate::run::{Context, Mode, PageInput, Progress, Run, RunError};
+use crate::run::{BLOCK_SAMPLE_SIZE, Context, PageInput, Progress, Run, RunError};
 use crate::stage_b::stage_b;
 
-/// Corpus size at or below which every page is kept until its block is
-/// clustered and landmark chrome is judged across the whole corpus. Above it
-/// a run streams: it keeps a sample per block, judges chrome per sampled
-/// block, and assigns every other page to the nearest sampled cluster in a
-/// second read.
-///
-/// Holding every page until its block is clustered is what a ~176,000-page
-/// crawl could not afford; the corpora the classifier was validated on (302,
-/// 1,416, 8,936 and 89 pages) sit well below 20,000, with room for sites
-/// twice the largest. Which side of it a corpus falls on decides its stored
-/// keys, so changing it reclassifies the archives it moves.
-pub const CORPUS_INLINE_THRESHOLD: usize = 20_000;
+/// Bytes a block's Stage A similarity table takes before the block is
+/// clustered from a sample instead: the table is an upper triangle of `f64`,
+/// `n * (n - 1) / 2 * 8` bytes for `n` pages, and the largest allocation of
+/// a run. Blocks are clustered one at a time, so this bounds that table
+/// whatever the corpus size; 512 MiB takes a block of about 11,500 pages
+/// whole. The page limit ([`crate::EXACT_PAGE_LIMIT`]) samples the largest
+/// blocks of a big corpus first, so a larger budget rarely changes which
+/// blocks are sampled but raises the peak. Which blocks fall over it decides their stored keys, so changing it
+/// reclassifies the archives it moves. A budget of 0 samples every block.
+pub const TEMPLATE_MEMORY_BUDGET: u64 = 512 * 1024 * 1024;
+
+/// A block clustered from a sample of its pages.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SampledBlock {
+	/// Its key.
+	pub block_key: String,
+	/// Its pages.
+	pub page_count: usize,
+	/// Bytes its similarity table would have taken.
+	pub pair_bytes: u64,
+	/// Why it was sampled.
+	pub reason: SampleReason,
+}
 
 /// A final cluster's reason, with the evidence of each block it came from.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reason {
-	/// Its member pages (the sampled ones, when streaming).
+	/// Its member pages (the sampled ones, for a sampled block).
 	pub member_count: usize,
 	/// Each block it came from, with the reason Pass 0 formed the block.
 	pub blocking: Vec<(String, BlockingReason)>,
@@ -52,6 +64,8 @@ pub struct ClassificationOutput {
 	pub key_of_page: Vec<u32>,
 	/// One reason per final cluster key, in the order Stage B emits them.
 	pub reasons: Vec<(String, Reason)>,
+	/// The blocks clustered from a sample, in block order.
+	pub sampled_blocks: Vec<SampledBlock>,
 }
 
 /// Where a classification stands.
@@ -63,7 +77,7 @@ enum State {
 		run: Box<Run>,
 		block_keys: Vec<String>,
 		reasons: IndexMap<String, BlockingReason>,
-		mode: Mode,
+		sampled_blocks: Vec<SampledBlock>,
 	},
 	/// An empty corpus, nothing to read.
 	Empty,
@@ -72,11 +86,12 @@ enum State {
 /// A classification in progress.
 pub struct Classification {
 	state: State,
+	memory_budget: u64,
 }
 
 impl Default for Classification {
 	fn default() -> Self {
-		Self::new()
+		Self::new(TEMPLATE_MEMORY_BUDGET)
 	}
 }
 
@@ -89,11 +104,14 @@ fn not_blocked() -> RunError {
 }
 
 impl Classification {
-	/// Starts collecting the signals.
+	/// Starts collecting the signals. A block whose Stage A similarity table
+	/// would take more than `memory_budget` bytes is clustered from a sample
+	/// of its pages (see [`TEMPLATE_MEMORY_BUDGET`]).
 	#[must_use]
-	pub fn new() -> Self {
+	pub fn new(memory_budget: u64) -> Self {
 		Self {
 			state: State::Signals(Vec::new()),
+			memory_budget,
 		}
 	}
 
@@ -145,11 +163,6 @@ impl Classification {
 			self.state = State::Empty;
 			return Ok(());
 		}
-		let mode = if signals.len() > CORPUS_INLINE_THRESHOLD {
-			Mode::Streaming
-		} else {
-			Mode::InMemory
-		};
 		let blocked = resolve_block_keys(&signals);
 		drop(signals);
 
@@ -163,12 +176,44 @@ impl Classification {
 			})
 			.collect();
 		let block_keys: Vec<String> = block_of_key.into_keys().collect();
-		let run = Box::new(Run::new(block_keys.clone(), block_of_page, mode)?);
+		let mut page_counts = vec![0usize; block_keys.len()];
+		for &block in &block_of_page {
+			page_counts[block as usize] += 1;
+		}
+		let budget = self.memory_budget;
+		let chosen = choose_sampled_blocks(&page_counts, budget);
+		let mut sampled_blocks = Vec::new();
+		for (block, reason) in chosen.iter().enumerate() {
+			let page_count = page_counts[block];
+			// Only a block larger than its sample has pages left out of it; a
+			// smaller one is clustered from all its pages either way, so
+			// reporting it would be noise.
+			let Some(reason) = reason else { continue };
+			if page_count <= BLOCK_SAMPLE_SIZE {
+				continue;
+			}
+			let bytes = pair_bytes(page_count);
+			(context.progress)(Progress::BlockSampled {
+				block_key: block_keys[block].clone(),
+				page_count,
+				pair_bytes: bytes,
+				budget,
+				reason: *reason,
+			});
+			sampled_blocks.push(SampledBlock {
+				block_key: block_keys[block].clone(),
+				page_count,
+				pair_bytes: bytes,
+				reason: *reason,
+			});
+		}
+		let sampled: Vec<bool> = chosen.iter().map(Option::is_some).collect();
+		let run = Box::new(Run::new(block_keys.clone(), block_of_page, sampled)?);
 		self.state = State::Reading {
 			run,
 			block_keys,
 			reasons: blocked.reasons.into_iter().collect(),
-			mode,
+			sampled_blocks,
 		};
 		Ok(())
 	}
@@ -253,22 +298,22 @@ impl Classification {
 	/// When a final cluster carries a block key Pass 0 gave no reason for;
 	/// Pass 0 gives every block key one.
 	pub fn into_output(self, context: &Context) -> Result<ClassificationOutput, RunError> {
-		let (run, block_keys, blocking_reasons, mode) = match self.state {
+		let (run, block_keys, blocking_reasons, sampled_blocks) = match self.state {
 			State::Signals(_) => return Err(not_blocked()),
 			State::Empty => return Ok(ClassificationOutput::default()),
 			State::Reading {
 				run,
 				block_keys,
 				reasons,
-				mode,
-			} => (run, block_keys, reasons, mode),
+				sampled_blocks,
+			} => (run, block_keys, reasons, sampled_blocks),
 		};
 		let (output, vocabulary) = (*run).into_output()?;
 		context.check()?;
 		(context.progress)(Progress::StageBStart {
 			unit_count: output.units.len(),
 		});
-		let result = stage_b(&output, &block_keys, &vocabulary, mode == Mode::Streaming);
+		let result = stage_b(&output, &block_keys, &vocabulary);
 
 		let reasons = result
 			.reasons
@@ -301,6 +346,7 @@ impl Classification {
 			keys: output.keys,
 			key_of_page: result.final_key_of_page,
 			reasons,
+			sampled_blocks,
 		})
 	}
 }
@@ -310,8 +356,9 @@ mod tests {
 	use std::sync::Mutex;
 	use std::sync::atomic::AtomicBool;
 
-	use super::{Classification, ClassificationOutput};
+	use super::{Classification, ClassificationOutput, SampledBlock};
 	use crate::blocking_reason::BlockingReason;
+	use crate::choose_sampled_blocks::{SampleReason, pair_bytes};
 	use crate::page_signals::test_page;
 	use crate::run::{Context, PageInput, Progress, RunError};
 
@@ -340,10 +387,10 @@ mod tests {
 	}
 
 	/// Classifies pages of the given sections (one path segment each, no
-	/// stylesheets) and HTML, in memory.
+	/// stylesheets) and HTML, under the default memory budget.
 	fn classify(sections: &[&str], html_list: &[&str]) -> (ClassificationOutput, Vec<Progress>) {
 		let events = Mutex::new(Vec::new());
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		classification
 			.push_signals(
 				sections
@@ -445,7 +492,7 @@ mod tests {
 	#[test]
 	fn classifies_an_empty_corpus_to_nothing() {
 		let events = Mutex::new(Vec::new());
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		let output = with_context(&events, |context| {
 			classification.block(context).unwrap();
 			assert_eq!(classification.page_mask(), Ok(Vec::new()));
@@ -461,7 +508,7 @@ mod tests {
 	#[test]
 	fn rejects_pages_for_an_empty_corpus() {
 		let events = Mutex::new(Vec::new());
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		with_context(&events, |context| {
 			classification.block(context).unwrap();
 			assert_eq!(
@@ -474,7 +521,7 @@ mod tests {
 	#[test]
 	fn rejects_reading_html_before_blocking() {
 		let events = Mutex::new(Vec::new());
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		classification
 			.push_signals(vec![test_page(&["news"], &[], None)])
 			.unwrap();
@@ -491,7 +538,7 @@ mod tests {
 	#[test]
 	fn rejects_signals_after_blocking_and_blocking_twice() {
 		let events = Mutex::new(Vec::new());
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		let already = Err(RunError::Protocol(
 			"the signals were already blocked".to_owned(),
 		));
@@ -507,7 +554,7 @@ mod tests {
 
 	#[test]
 	fn rejects_signals_whose_hosts_do_not_pair_up_with_their_hrefs() {
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		classification
 			.push_signals(vec![test_page(&["news"], &[], None)])
 			.unwrap();
@@ -521,16 +568,20 @@ mod tests {
 		);
 	}
 
+	// One scenario read end to end: the events, the masks, the keys and the
+	// reported blocks are asserted together because they describe one run.
 	#[test]
-	fn streams_a_corpus_above_the_inline_threshold_and_assigns_the_unsampled_pages() {
-		// 20,200 pages of two sections, alternating, each its own template.
-		// Each block keeps a sample of 100 pages, so 20,000 pages are assigned
-		// in the second read: a whole number of progress steps.
+	#[allow(clippy::too_many_lines)]
+	fn samples_a_block_over_the_budget_and_assigns_its_unsampled_pages() {
+		// 2,200 pages of two sections, alternating, each its own template. Each
+		// block's table (1,100 pages) is over the budget of 1,000 pages', so
+		// each keeps a sample of 100 pages and 2,000 pages are assigned in the
+		// second read: a whole number of progress steps.
 		let events = Mutex::new(Vec::new());
-		let mut classification = Classification::new();
+		let mut classification = Classification::new(pair_bytes(1000));
 		classification
 			.push_signals(
-				(0..20_200)
+				(0..2_200)
 					.map(|index| {
 						let section = ["a", "b"][index % 2];
 						test_page(&[section, "1"], &[], None)
@@ -575,48 +626,128 @@ mod tests {
 		assert!(!needed_after_assignment);
 
 		let keys = keys_of(&output);
-		assert_eq!(keys.len(), 20_200);
+		assert_eq!(keys.len(), 2_200);
 		assert_eq!(
 			keys.iter()
 				.filter(|key| **key == "[\"path:a\",\"cluster:0\"]")
 				.count(),
-			10_100
+			1_100
 		);
 		assert_eq!(
 			keys.iter()
 				.filter(|key| **key == "[\"path:b\",\"cluster:0\"]")
 				.count(),
-			10_100
+			1_100
 		);
 		assert_eq!(keys[0], "[\"path:a\",\"cluster:0\"]");
 		assert_eq!(keys[1], "[\"path:b\",\"cluster:0\"]");
 
+		assert_eq!(
+			output.sampled_blocks,
+			vec![
+				SampledBlock {
+					block_key: "path:a".to_owned(),
+					page_count: 1_100,
+					pair_bytes: pair_bytes(1_100),
+					reason: SampleReason::TableOverBudget,
+				},
+				SampledBlock {
+					block_key: "path:b".to_owned(),
+					page_count: 1_100,
+					pair_bytes: pair_bytes(1_100),
+					reason: SampleReason::TableOverBudget,
+				},
+			]
+		);
 		let events = events.into_inner().unwrap();
+		assert!(events.contains(&Progress::BlockSampled {
+			block_key: "path:a".to_owned(),
+			page_count: 1_100,
+			pair_bytes: pair_bytes(1_100),
+			budget: pair_bytes(1_000),
+			reason: SampleReason::TableOverBudget,
+		}));
 		let assigned: Vec<&Progress> = events
 			.iter()
 			.filter(|event| matches!(event, Progress::Assigned { .. }))
 			.collect();
-		assert_eq!(assigned.len(), 20);
+		assert_eq!(assigned.len(), 2);
 		assert_eq!(
 			assigned[0],
 			&Progress::Assigned {
 				pages_assigned: 1000,
-				pages_to_assign: 20_000,
+				pages_to_assign: 2_000,
 			}
 		);
 		assert_eq!(
-			assigned[19],
+			assigned[1],
 			&Progress::Assigned {
-				pages_assigned: 20_000,
-				pages_to_assign: 20_000,
+				pages_assigned: 2_000,
+				pages_to_assign: 2_000,
 			}
+		);
+	}
+
+	/// The blocks reported as sampled, with why, when classifying one section
+	/// per entry of `pages` (that many pages each) under `budget`.
+	fn sampled_under(budget: u64, pages: &[usize]) -> Vec<(String, SampleReason)> {
+		let mut classification = Classification::new(budget);
+		let signals = pages
+			.iter()
+			.enumerate()
+			.flat_map(|(section, &count)| {
+				(0..count).map(move |_| test_page(&[&format!("s{section}"), "1"], &[], None))
+			})
+			.collect();
+		classification.push_signals(signals).unwrap();
+		let events = Mutex::new(Vec::new());
+		with_context(&events, |context| classification.block(context).unwrap());
+		events
+			.into_inner()
+			.unwrap()
+			.into_iter()
+			.filter_map(|event| match event {
+				Progress::BlockSampled {
+					block_key, reason, ..
+				} => Some((block_key, reason)),
+				_ => None,
+			})
+			.collect()
+	}
+
+	#[test]
+	fn reports_a_block_over_the_budget_with_its_table() {
+		assert_eq!(
+			sampled_under(40_399, &[101, 50]),
+			vec![("path:s0".to_owned(), SampleReason::TableOverBudget)]
+		);
+		assert_eq!(sampled_under(40_400, &[101, 50]), vec![]);
+	}
+
+	#[test]
+	fn reports_the_largest_block_when_the_pages_exceed_the_limit() {
+		// 12,000 + 8,001 pages: over the limit by 1, so the larger goes.
+		assert_eq!(
+			sampled_under(u64::MAX, &[8_001, 12_000]),
+			vec![("path:s1".to_owned(), SampleReason::PagesOverLimit)]
+		);
+	}
+
+	#[test]
+	fn a_block_no_larger_than_a_sample_is_never_reported_as_sampled() {
+		// Nothing is left out of its sample, whatever the budget.
+		assert_eq!(sampled_under(0, &[100]), vec![]);
+		assert_eq!(sampled_under(0, &[3]), vec![]);
+		assert_eq!(
+			sampled_under(0, &[101]),
+			vec![("path:s0".to_owned(), SampleReason::TableOverBudget)]
 		);
 	}
 
 	#[test]
 	fn rejects_the_result_before_blocking() {
 		let events = Mutex::new(Vec::new());
-		let classification = Classification::new();
+		let classification = Classification::default();
 		with_context(&events, |context| {
 			assert_eq!(
 				classification.into_output(context),
@@ -630,7 +761,7 @@ mod tests {
 	#[test]
 	fn rejects_assignment_pages_for_an_empty_corpus() {
 		let events = Mutex::new(Vec::new());
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		with_context(&events, |context| {
 			classification.block(context).unwrap();
 			assert_eq!(
@@ -643,7 +774,7 @@ mod tests {
 	#[test]
 	fn stops_the_result_when_cancelled() {
 		let events = Mutex::new(Vec::new());
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		classification
 			.push_signals(vec![test_page(&["news", "1"], &[], None)])
 			.unwrap();
@@ -667,7 +798,7 @@ mod tests {
 	fn stops_blocking_when_cancelled() {
 		let cancelled = AtomicBool::new(true);
 		let report = |_: Progress| {};
-		let mut classification = Classification::new();
+		let mut classification = Classification::default();
 		assert_eq!(
 			classification.block(&Context {
 				cancelled: &cancelled,

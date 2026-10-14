@@ -87,11 +87,14 @@ pub struct MergeInput<'a> {
 	pub keys: &'a [String],
 	/// Each unit's block, numbered so equal numbers mean equal block keys.
 	pub blocks: &'a [u32],
-	/// The most members a merged group keeps, sampled back down after every
-	/// merge so a chain of merges cannot balloon past the cap Stage A applied
-	/// when it created the unit. Set on the streaming path only; the in-memory
-	/// path keeps full membership.
-	pub cap_members: Option<usize>,
+	/// Per unit, whether Stage A clustered only a sample of its block. Empty
+	/// when every block was clustered whole.
+	pub sampled_units: &'a [bool],
+	/// The most members a merged group holding a sampled unit keeps, sampled
+	/// back down after every merge so a chain of merges cannot balloon past
+	/// the cap Stage A applied when it created the unit. A group of whole
+	/// blocks only keeps full membership.
+	pub cap_members: usize,
 }
 
 /// Stage B's result.
@@ -189,6 +192,8 @@ fn group_shell(members: &[&UnitMember]) -> Vec<u32> {
 /// The groups as the merge rounds change them.
 struct State<'a> {
 	groups: Vec<Option<Vec<&'a UnitMember>>>,
+	/// Per group, whether it holds a sampled unit, so its members are capped.
+	capped: Vec<bool>,
 	lineage: Vec<Vec<LineageEntry>>,
 	root_of_unit: Vec<usize>,
 }
@@ -226,9 +231,9 @@ impl<'a> State<'a> {
 				.as_mut()
 				.expect("the root is still a group");
 			root_members.extend(absorbed_members);
-			if let Some(cap) = input.cap_members
-				&& root_members.len() > cap
-			{
+			self.capped[root] |= self.capped[absorbed];
+			let cap = input.cap_members;
+			if self.capped[root] && root_members.len() > cap {
 				let seed = &input.keys[input.units[root].key as usize];
 				let kept: Vec<&UnitMember> =
 					reservoir_sample_positions(root_members.len(), cap, seed)
@@ -534,6 +539,9 @@ pub fn merge_cross_block_clusters<'a>(
 			.iter()
 			.map(|unit| Some(unit.members.iter().collect()))
 			.collect(),
+		capped: (0..units.len())
+			.map(|index| input.sampled_units.get(index).copied().unwrap_or(false))
+			.collect(),
 		lineage: units
 			.iter()
 			.enumerate()
@@ -654,7 +662,8 @@ mod tests {
 				units: &units,
 				keys: &keys,
 				blocks: &blocks,
-				cap_members: None,
+				sampled_units: &[],
+				cap_members: crate::run::BLOCK_SAMPLE_SIZE,
 			},
 			&mut view,
 		);

@@ -10,20 +10,27 @@ mod template_classification;
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 
-/// Pages per block a streaming template classification run clusters (see
+/// Pages per sampled block a template classification run clusters (see
 /// `template_classification`).
 #[napi]
 // A small constant (100); the cast cannot truncate.
 #[allow(clippy::cast_possible_truncation)]
 pub const TEMPLATE_BLOCK_SAMPLE_SIZE: u32 = nitpicker_template_cluster::BLOCK_SAMPLE_SIZE as u32;
 
-/// Corpus size above which a template classification run streams (see
-/// `template_classification`).
+/// Pages of blocks clustered whole a template classification run holds at
+/// once, at most (see `template_classification`).
 #[napi]
 // A small constant (20,000); the cast cannot truncate.
 #[allow(clippy::cast_possible_truncation)]
-pub const TEMPLATE_CORPUS_INLINE_THRESHOLD: u32 =
-	nitpicker_template_cluster::CORPUS_INLINE_THRESHOLD as u32;
+pub const TEMPLATE_EXACT_PAGE_LIMIT: u32 = nitpicker_template_cluster::EXACT_PAGE_LIMIT as u32;
+
+/// Default bytes a block's similarity table may take before a template
+/// classification run clusters the block from a sample (see
+/// `template_classification`).
+#[napi]
+// 512 MiB, far below 2^53; the cast is exact.
+#[allow(clippy::cast_precision_loss)]
+pub const TEMPLATE_MEMORY_BUDGET: f64 = nitpicker_template_cluster::TEMPLATE_MEMORY_BUDGET as f64;
 
 /// Computes `page_meta.body_hash` for one HTML document.
 ///

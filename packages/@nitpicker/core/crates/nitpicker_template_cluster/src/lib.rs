@@ -24,6 +24,7 @@ mod assign_contained_clusters;
 mod auto_cut_threshold;
 mod blocking_reason;
 mod build_cluster_reason;
+mod choose_sampled_blocks;
 mod classification;
 mod collect_deep_spans;
 mod complete_linkage_dendrogram;
@@ -73,11 +74,14 @@ mod vocabulary;
 
 pub use blocking_reason::BlockingReason;
 pub use build_cluster_reason::LandmarkClusterProfile;
-pub use classification::{CORPUS_INLINE_THRESHOLD, Classification, ClassificationOutput, Reason};
+pub use choose_sampled_blocks::{EXACT_PAGE_LIMIT, SampleReason, pair_bytes};
+pub use classification::{
+	Classification, ClassificationOutput, Reason, SampledBlock, TEMPLATE_MEMORY_BUDGET,
+};
 pub use content_root::ContentRoot;
 pub use extract_landmarks::LandmarkType;
 pub use page_signals::PageSignals;
 pub use run::{
-	BLOCK_SAMPLE_SIZE, Context, Mode, Output, PageInput, Progress, Run, RunError, Unit, UnitMember,
+	BLOCK_SAMPLE_SIZE, Context, Output, PageInput, Progress, Run, RunError, Unit, UnitMember,
 };
 pub use vocabulary::Vocabulary;

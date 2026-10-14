@@ -8,8 +8,8 @@ use crate::seeded_random::SeededRandom;
 /// kept items stay in input order and parallel arrays sampled at the same
 /// positions stay parallel.
 ///
-/// Deterministic for a given seed and length: the stored keys of a streamed
-/// archive depend on which members a merged group kept, so the sequence is
+/// Deterministic for a given seed and length: the stored keys of an archive with a
+/// sampled block depend on which members a merged group kept, so the sequence is
 /// the stored one, number for number (`SeededRandom`).
 ///
 /// A `sample_size` of 0 or an empty input keeps nothing; one at least `len`

@@ -35,10 +35,11 @@ pub struct StageBResult {
 ///
 /// `block_keys` are the run's Pass-0 block keys, indexed by [`crate::Unit::block`];
 /// two equal keys are one block. `vocabulary` resolves the token ids of the
-/// units. `streaming` is the run's mode: when set, merged groups are capped
-/// at [`BLOCK_SAMPLE_SIZE`] members (the cap Stage A sampled the blocks with),
-/// so Stage B's cost stays bounded across rounds whatever the corpus size;
-/// otherwise every member is kept.
+/// units. A merged group holding a unit of a sampled block
+/// ([`Output::sampled_blocks`]) is capped at [`BLOCK_SAMPLE_SIZE`] members
+/// (the cap Stage A sampled the block with), so Stage B's cost stays bounded
+/// across rounds whatever the block's size; a group of whole blocks keeps
+/// every member.
 ///
 /// Every unit's key is distinct, as Stage A hands them out.
 ///
@@ -51,13 +52,22 @@ pub struct StageBResult {
 /// Sibling clusters are the final clusters of every unit sharing a block with
 /// one of the cluster's units, other than the cluster itself.
 #[must_use]
-pub fn stage_b(
-	output: &Output,
-	block_keys: &[String],
-	vocabulary: &Vocabulary,
-	streaming: bool,
-) -> StageBResult {
+pub fn stage_b(output: &Output, block_keys: &[String], vocabulary: &Vocabulary) -> StageBResult {
 	let units = &output.units;
+	debug_assert!(
+		output.sampled_blocks.is_empty() || output.sampled_blocks.len() == block_keys.len(),
+		"one sampling flag per block"
+	);
+	let sampled_units: Vec<bool> = units
+		.iter()
+		.map(|unit| {
+			output
+				.sampled_blocks
+				.get(unit.block as usize)
+				.copied()
+				.unwrap_or(false)
+		})
+		.collect();
 
 	// Two block numbers with equal keys are one block.
 	let mut canonical_of_key: FxHashMap<&str, u32> = FxHashMap::default();
@@ -81,7 +91,8 @@ pub fn stage_b(
 			units,
 			keys: &output.keys,
 			blocks: &unit_blocks,
-			cap_members: streaming.then_some(BLOCK_SAMPLE_SIZE),
+			sampled_units: &sampled_units,
+			cap_members: BLOCK_SAMPLE_SIZE,
 		},
 		&mut view,
 	);
@@ -231,7 +242,13 @@ mod tests {
 		}
 	}
 
-	fn run_with(units: &[TestUnit], streaming: bool) -> Run {
+	fn run_with(units: &[TestUnit], sampled: bool) -> Run {
+		run_sampling(units, |_| sampled)
+	}
+
+	/// [`run_with`] where `is_sampled` says per block key whether the block
+	/// was clustered from a sample.
+	fn run_sampling(units: &[TestUnit], is_sampled: impl Fn(&str) -> bool) -> Run {
 		let vocabulary = Vocabulary::default();
 		let mut block_keys: Vec<String> = Vec::new();
 		let mut output = Output::default();
@@ -267,7 +284,8 @@ mod tests {
 			// One page per unit, carrying the unit's key.
 			output.key_of_page.push(u32::try_from(index).unwrap());
 		}
-		let result = stage_b(&output, &block_keys, &vocabulary, streaming);
+		output.sampled_blocks = block_keys.iter().map(|key| is_sampled(key)).collect();
+		let result = stage_b(&output, &block_keys, &vocabulary);
 		let roots = result
 			.final_key_of_page
 			.iter()
@@ -955,8 +973,9 @@ mod tests {
 					instances: Vec::new(),
 				}],
 			}],
+			sampled_blocks: Vec::new(),
 		};
-		let result = stage_b(&output, &["path:a".to_owned()], &vocabulary, false);
+		let result = stage_b(&output, &["path:a".to_owned()], &vocabulary);
 		assert_eq!(result.final_key_of_page, vec![0, 1]);
 	}
 
@@ -1001,20 +1020,21 @@ mod tests {
 						.collect(),
 				},
 			],
+			sampled_blocks: Vec::new(),
 		};
 		let blocks = [
 			"path:news".to_owned(),
 			"path:news".to_owned(),
 			"path:x".to_owned(),
 		];
-		let result = stage_b(&output, &blocks, &vocabulary, false);
+		let result = stage_b(&output, &blocks, &vocabulary);
 		assert_eq!(result.final_key_of_page, vec![0, 1, 2]);
 	}
 
-	// -------- the streaming cap --------
+	// -------- the cap on groups holding a sampled unit --------
 
 	#[test]
-	fn streaming_caps_a_merged_group_at_the_block_sample_size() {
+	fn a_sampled_block_caps_a_merged_group_at_the_block_sample_size() {
 		// The pooled group lists k1's 60 members then k2's 60. The member at
 		// position `p` carries one instance of landmark type `p % 6` (header,
 		// footer, nav, aside, form, search), so the number of members with an
@@ -1042,9 +1062,9 @@ mod tests {
 				members: members(60),
 			},
 		];
-		let streamed = run_with(&units, true);
-		assert_eq!(streamed.root(0), streamed.root(1));
-		let reason = streamed.reason("k1");
+		let capped = run_with(&units, true);
+		assert_eq!(capped.root(0), capped.root(1));
+		let reason = capped.reason("k1");
 		assert_eq!(reason.member_count, 100);
 
 		// The positions the group is cut back to (seeded by the root's key),
@@ -1078,7 +1098,57 @@ mod tests {
 	}
 
 	#[test]
-	fn a_group_within_the_cap_keeps_every_member_when_streaming() {
+	fn the_cap_only_binds_a_group_holding_a_unit_of_a_sampled_block() {
+		let tokens = ["body>main>.card", "body>main>.title", "body>main>.body"];
+		let members = || -> Vec<(Vec<&str>, Instances)> {
+			(0..60).map(|_| (tokens.to_vec(), Vec::new())).collect()
+		};
+		let units = [
+			TestUnit {
+				key: "k1",
+				block: Some("path:a"),
+				members: members(),
+			},
+			TestUnit {
+				key: "k2",
+				block: Some("path:b"),
+				members: members(),
+			},
+		];
+		let one_sampled = run_sampling(&units, |block| block == "path:b");
+		assert_eq!(one_sampled.root(0), one_sampled.root(1));
+		assert_eq!(one_sampled.reason("k1").member_count, 100);
+
+		let none_sampled = run_sampling(&units, |_| false);
+		assert_eq!(none_sampled.reason("k1").member_count, 120);
+	}
+
+	#[test]
+	fn a_sampled_unit_that_is_the_root_caps_the_group_it_absorbs_into() {
+		let tokens = ["body>main>.card", "body>main>.title", "body>main>.body"];
+		let members = || -> Vec<(Vec<&str>, Instances)> {
+			(0..60).map(|_| (tokens.to_vec(), Vec::new())).collect()
+		};
+		let units = [
+			TestUnit {
+				key: "k1",
+				block: Some("path:a"),
+				members: members(),
+			},
+			TestUnit {
+				key: "k2",
+				block: Some("path:b"),
+				members: members(),
+			},
+		];
+		// k1, the first unit, is the root the merged group is named after.
+		let sampled_root = run_sampling(&units, |block| block == "path:a");
+		assert_eq!(sampled_root.root(0), sampled_root.root(1));
+		assert_eq!(sampled_root.reason("k1").member_count, 100);
+	}
+
+	#[test]
+	fn a_group_within_the_cap_keeps_every_member_when_sampled() {
 		let tokens = ["body>main>.card", "body>main>.title"];
 		let run = run_with(
 			&[

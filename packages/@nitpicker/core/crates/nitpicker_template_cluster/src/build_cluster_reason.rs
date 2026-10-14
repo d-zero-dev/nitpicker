@@ -44,8 +44,8 @@ pub struct LandmarkClusterProfile {
 /// context and the localisation needs this engine does not.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClusterReason {
-	/// Number of pages the cluster holds (the retained members when
-	/// streaming).
+	/// Number of pages the cluster holds (the retained members for a
+	/// sampled block).
 	pub member_count: usize,
 	/// The distinct Pass-0 block keys that fed the cluster, in the order the
 	/// cluster's units were produced. More than one means Stage B merged pages

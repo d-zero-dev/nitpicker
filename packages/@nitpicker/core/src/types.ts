@@ -10,11 +10,14 @@ export interface NativeBinding {
 	/** See `create-template-classification-run.ts`. */
 	TemplateClassificationRun: new (
 		onProgress?: (event: NativeTemplateClassificationProgress) => void,
+		memoryBudget?: number,
 	) => NativeTemplateClassificationRun;
 	/** See `template-block-sample-size.ts`. */
 	TEMPLATE_BLOCK_SAMPLE_SIZE: number;
-	/** See `template-corpus-inline-threshold.ts`. */
-	TEMPLATE_CORPUS_INLINE_THRESHOLD: number;
+	/** See `template-memory-budget.ts`. */
+	TEMPLATE_MEMORY_BUDGET: number;
+	/** See `template-exact-page-limit.ts`. */
+	TEMPLATE_EXACT_PAGE_LIMIT: number;
 }
 
 /**
@@ -93,6 +96,10 @@ export interface NativeTemplateClassificationProgress {
 	readonly pagesAssigned?: number;
 	readonly pagesToAssign?: number;
 	readonly unitCount?: number;
+	readonly pageCount?: number;
+	readonly pairBytes?: number;
+	readonly budget?: number;
+	readonly reason?: string;
 }
 
 /**
@@ -121,6 +128,12 @@ export interface NativeTemplateClassificationOutput {
 			readonly type: string;
 		} & TemplateLandmarkProfile)[];
 		readonly siblingClusterKeys: readonly string[];
+	}[];
+	readonly sampledBlocks: readonly {
+		readonly blockKey: string;
+		readonly pageCount: number;
+		readonly pairBytes: number;
+		readonly reason: string;
 	}[];
 }
 
@@ -189,9 +202,11 @@ export interface TemplatePageHtml {
 }
 
 /**
- * Progress of a {@link TemplateClassificationRun}: a block's clusters are
- * done, (streaming runs) another thousand pages outside the samples were
- * assigned, or the merge across blocks began.
+ * Progress of a {@link TemplateClassificationRun}: a block will be clustered
+ * from a sample (over the memory budget, or among the largest when the
+ * blocks clustered whole would hold too many pages), a block's clusters are done,
+ * another thousand pages outside the samples were assigned, or the merge
+ * across blocks began.
  * @example
  * ```ts
  * const onProgress = (event: TemplateClassificationProgress) => {
@@ -202,6 +217,14 @@ export interface TemplatePageHtml {
  * ```
  */
 export type TemplateClassificationProgress =
+	| {
+			readonly phase: 'block-sampled';
+			readonly blockKey: string;
+			readonly pageCount: number;
+			readonly pairBytes: number;
+			readonly budget: number;
+			readonly reason: TemplateSampleReason;
+	  }
 	| {
 			readonly phase: 'pass1-block-complete';
 			readonly blockKey: string;
@@ -317,7 +340,7 @@ export interface TemplateLandmarkProfile {
  * ```
  */
 export interface TemplateClusterReason {
-	/** Its member pages (the sampled ones, on a streaming run). */
+	/** Its member pages (the sampled ones, for a block clustered from a sample). */
 	readonly memberCount: number;
 	/** Each Pass-0 block it came from, with the reason the block was formed. */
 	readonly blocking: readonly {
@@ -332,6 +355,43 @@ export interface TemplateClusterReason {
 	};
 	/** The other final clusters of its blocks, in UTF-16 order. */
 	readonly siblingClusterKeys: readonly string[];
+}
+
+/**
+ * Why a block is clustered from a sample of its pages: its Stage A
+ * similarity table would exceed the memory budget (`table-over-budget`), or
+ * the blocks clustered whole would hold more than
+ * `TEMPLATE_EXACT_PAGE_LIMIT` pages and this one is among the largest
+ * (`pages-over-limit`).
+ * @example
+ * ```ts
+ * const reason: TemplateSampleReason = 'pages-over-limit';
+ * ```
+ */
+export type TemplateSampleReason = 'table-over-budget' | 'pages-over-limit';
+
+/**
+ * A block clustered from a sample of its pages; see
+ * {@link TemplateSampleReason} for why.
+ * @example
+ * ```ts
+ * const block: TemplateSampledBlock = {
+ * 	blockKey: 'path:news',
+ * 	pageCount: 30_000,
+ * 	pairBytes: 3_599_880_000,
+ * 	reason: 'table-over-budget',
+ * };
+ * ```
+ */
+export interface TemplateSampledBlock {
+	/** The block's key. */
+	readonly blockKey: string;
+	/** Its pages. */
+	readonly pageCount: number;
+	/** Bytes its similarity table would have taken. */
+	readonly pairBytes: number;
+	/** Why it was sampled. */
+	readonly reason: TemplateSampleReason;
 }
 
 /**
@@ -350,6 +410,8 @@ export interface TemplateClassificationOutput {
 	readonly keyOfPage: Uint32Array;
 	/** Each final cluster's reason, by key. */
 	readonly reasons: ReadonlyMap<string, TemplateClusterReason>;
+	/** The blocks clustered from a sample, in block order; empty when none was. */
+	readonly sampledBlocks: readonly TemplateSampledBlock[];
 }
 
 /**
@@ -382,19 +444,19 @@ export interface TemplateClassificationRun {
 	block(): Promise<void>;
 	/** Reads the next pages' HTML, in corpus order. */
 	pushPages(pages: readonly TemplatePageHtml[]): Promise<void>;
-	/** Ends the first read; an in-memory run clusters every block here. */
+	/** Ends the first read; the blocks clustered whole are clustered here. */
 	finishPages(): Promise<void>;
 	/**
-	 * Which pages the current read uses (`1`): all of them in memory, the
-	 * sampled ones on a streaming first read, the others on the assignment
-	 * read. Every page must still be pushed, in order; the others may carry
-	 * empty HTML.
+	 * Which pages the current read uses (`1`): on the first read every page of
+	 * a block clustered whole and the sampled pages of a sampled block, on the
+	 * assignment read the other pages of the sampled blocks. Every page must
+	 * still be pushed, in order; the others may carry empty HTML.
 	 */
 	pageMask(): Uint8Array;
 	/**
-	 * Whether the run now expects the assignment read: true once a streaming
-	 * first read has ended with pages outside the samples, until the
-	 * assignment read has ended; false otherwise.
+	 * Whether the run expects the assignment read: true once the first
+	 * read has ended with pages outside the samples of a sampled block, until
+	 * the assignment read has ended; false otherwise.
 	 */
 	needsAssignment(): boolean;
 	/** Assigns the next pages of the second read, in corpus order. */
@@ -419,6 +481,12 @@ export interface TemplateClassificationRun {
  * ```
  */
 export interface CreateTemplateClassificationRunOptions {
+	/**
+	 * Bytes a block's Stage A similarity table (`n * (n - 1) / 2 * 8` for `n`
+	 * pages) may take before the block is clustered from a sample instead.
+	 * Defaults to `TEMPLATE_MEMORY_BUDGET`; `0` samples every block.
+	 */
+	readonly memoryBudget?: number;
 	/** Receives progress events. */
 	readonly onProgress?: (event: TemplateClassificationProgress) => void;
 }
