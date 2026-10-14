@@ -50,7 +50,7 @@ keys[keyOfPage[0]!]; // '["path:news","cluster:0"]'
 - Stage A の類似度表（`n * (n - 1) / 2 * 8` バイト、`n` はブロックのページ数）が `memoryBudget` を超える。`memoryBudget` は `createTemplateClassificationRun` のオプションで、既定は `TEMPLATE_MEMORY_BUDGET`（`@nitpicker/core/template-memory-budget`、512 MiB）、0 なら全ブロックが対象になる。
 - 全ページで計算するブロックの合計が `TEMPLATE_EXACT_PAGE_LIMIT`（`@nitpicker/core/template-exact-page-limit`、20,000 ページ）を超える。この場合は、標本より大きい（100 ページを超える）ブロックを、ページ数が多い順（同数なら出現順）に、収まるまで対象にする。100 ページ以下のブロックはサンプルにしても保持ページが減らないので対象にならず、それだけで上限を超えるときは超えたまま保持する。上限は固定で、利用者は変えられない。
 
-既定の 512 MiB は、約 11,500 ページのブロックまでの類似度表に当たります。1 ページの解析結果は約 60 KB で、20,000 ページなら約 1.2 GB を、ブロックの計算が終わるまで抱えます。どのブロックが落ちるかで保存される `templateKey` が決まるので、メモリ上限を変えると結果が変わります。既存のアーカイブは、`viewer-build` で再分類するまで以前のキーのままです。
+既定の 512 MiB は、約 11,500 ページのブロックまでの類似度表に当たります。1 ページの解析結果は最大で約 60 KB です。同じ切り取りの深さはトークンを共有し、本文は圧縮して持つので、通常はこれより小さくなります。20,000 ページなら最大で約 1.2 GB を、ブロックの計算が終わるまで抱えます。どのブロックが落ちるかで保存される `templateKey` が決まるので、メモリ上限を変えると結果が変わります。既存のアーカイブは、`viewer-build` で再分類するまで以前のキーのままです。
 
 サンプルに落としたブロックの残りのページは、2 回目の読み込み（`needsAssignment()` が true のときの `pushAssignmentPages`）で最も近いクラスタに割り当てます。落としたブロックは、`block()` の間に `block-sampled` の進捗イベントで 1 つずつ通知され、`takeOutput()` の `sampledBlocks` にも、理由（`table-over-budget` か `pages-over-limit`）つきで残ります。どちらの読み込みでも全ページをコーパス順に渡しますが、`pageMask()` が 0 のページは HTML を空文字にして構いません（HTML を読み出す必要もありません）。
 
