@@ -1,4 +1,7 @@
+use std::collections::hash_map::Entry;
+
 use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 
 use crate::jaccard::jaccard;
 
@@ -45,7 +48,7 @@ impl Similarities {
 		self.values[index] = value;
 	}
 
-	fn compute(sets: &[Vec<u32>]) -> Self {
+	fn compute(sets: &[&[u32]]) -> Self {
 		let n = sets.len();
 		let mut values = vec![0.0; n * (n - 1) / 2];
 		let mut rows: Vec<(usize, &mut [f64])> = Vec::with_capacity(n);
@@ -57,23 +60,79 @@ impl Similarities {
 		}
 		rows.into_par_iter().for_each(|(i, row)| {
 			for (offset, slot) in row.iter_mut().enumerate() {
-				*slot = jaccard(&sets[i], &sets[i + 1 + offset]);
+				*slot = jaccard(sets[i], sets[i + 1 + offset]);
 			}
 		});
 		Self { n, values }
 	}
 }
 
-/// The complete-linkage dendrogram of `sets` (ascending id lists) by the
-/// NN-chain algorithm (Murtagh 1983): all `n - 1` merges in discovery
-/// order, so a caller can pick the cut from the full height sequence.
+/// The complete-linkage dendrogram of `sets` (ascending id lists): all
+/// `n - 1` merges, so a caller can pick the cut from the full height
+/// sequence.
+///
+/// Identical sets are folded into their lowest-indexed member before the
+/// clustering, so the similarity table is `d × d` for `d` distinct sets
+/// rather than `n × n` — pages of one template often share their whole
+/// comparison set. What a caller reads from the result — the multiset of
+/// heights and [`labels_at_threshold`] at any threshold — is what
+/// [`nn_chain_dendrogram`] gives for all `n` sets; the order of the merges
+/// differs. Identical sets are at similarity 1 (also two empty ones), the
+/// highest there is, with the same similarity to every other set, so they
+/// merge before anything else could separate them; the lowest index wins
+/// every tie either way and the lowest-indexed member stays their
+/// survivor. The tests check this against [`nn_chain_dendrogram`] on random
+/// inputs with many identical sets and many ties, not by proof. The `k - 1`
+/// merges of `k` identical sets come first, at height 1, each absorbing the
+/// next member into the lowest-indexed one; the merges among the folded
+/// sets follow, named by their lowest-indexed members.
+#[must_use]
+pub fn complete_linkage_dendrogram(sets: &[Vec<u32>]) -> Vec<Merge> {
+	let size = sets.len();
+	if size <= 1 {
+		return Vec::new();
+	}
+	let mut group_of: FxHashMap<&[u32], usize> = FxHashMap::default();
+	let mut leaders: Vec<usize> = Vec::new();
+	let mut identical_merges: Vec<Merge> = Vec::new();
+	for (index, set) in sets.iter().enumerate() {
+		match group_of.entry(set.as_slice()) {
+			Entry::Occupied(group) => identical_merges.push(Merge {
+				survivor: leaders[*group.get()],
+				dead: index,
+				height: 1.0,
+			}),
+			Entry::Vacant(slot) => {
+				slot.insert(leaders.len());
+				leaders.push(index);
+			}
+		}
+	}
+	let distinct: Vec<&[u32]> = leaders
+		.iter()
+		.map(|&leader| sets[leader].as_slice())
+		.collect();
+	let mut merges = identical_merges;
+	merges.extend(
+		nn_chain_dendrogram(&distinct)
+			.into_iter()
+			.map(|merge| Merge {
+				survivor: leaders[merge.survivor],
+				dead: leaders[merge.dead],
+				height: merge.height,
+			}),
+	);
+	merges
+}
+
+/// The complete-linkage dendrogram of `sets` by the NN-chain algorithm
+/// (Murtagh 1983): all `n - 1` merges in discovery order.
 ///
 /// Ties go to the lowest candidate index and the chain restarts at the
 /// lowest active index — the choices the stored keys were computed with
 /// (the golden records pin them), since a different tie-break can produce a
 /// different (equally valid) dendrogram.
-#[must_use]
-pub fn complete_linkage_dendrogram(sets: &[Vec<u32>]) -> Vec<Merge> {
+fn nn_chain_dendrogram(sets: &[&[u32]]) -> Vec<Merge> {
 	let size = sets.len();
 	if size <= 1 {
 		return Vec::new();
@@ -168,7 +227,148 @@ pub fn labels_at_threshold(size: usize, merges: &[Merge], threshold: f64) -> Vec
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
-	use super::{complete_linkage_dendrogram, labels_at_threshold};
+	use super::{Merge, complete_linkage_dendrogram, labels_at_threshold, nn_chain_dendrogram};
+
+	/// The dendrogram of every set clustered on its own, without folding
+	/// identical ones: what the folded result must equal.
+	fn unfolded(sets: &[Vec<u32>]) -> Vec<Merge> {
+		let borrowed: Vec<&[u32]> = sets.iter().map(Vec::as_slice).collect();
+		nn_chain_dendrogram(&borrowed)
+	}
+
+	fn sorted_heights(merges: &[Merge]) -> Vec<f64> {
+		let mut heights: Vec<f64> = merges.iter().map(|merge| merge.height).collect();
+		heights.sort_by(f64::total_cmp);
+		heights
+	}
+
+	/// `count` sets drawn from `distinct` random templates over a small
+	/// vocabulary, so many are identical and many pairs tie.
+	fn sets_with_repeats(
+		seed: u64,
+		count: usize,
+		distinct: usize,
+		vocabulary: u32,
+	) -> Vec<Vec<u32>> {
+		let mut state = seed;
+		let mut next = move |bound: u64| {
+			state = state
+				.wrapping_mul(6_364_136_223_846_793_005)
+				.wrapping_add(1_442_695_040_888_963_407);
+			(state >> 33) % bound
+		};
+		let templates: Vec<Vec<u32>> = (0..distinct)
+			.map(|_| {
+				(0..vocabulary)
+					.filter(|_| next(2) == 0)
+					.collect::<Vec<u32>>()
+			})
+			.collect();
+		(0..count)
+			.map(|_| {
+				let template = usize::try_from(next(distinct as u64)).expect("fits usize");
+				templates[template].clone()
+			})
+			.collect()
+	}
+
+	fn assert_same_as_unfolded(sets: &[Vec<u32>]) {
+		let folded = complete_linkage_dendrogram(sets);
+		let reference = unfolded(sets);
+		assert_eq!(folded.len(), reference.len());
+		assert_eq!(sorted_heights(&folded), sorted_heights(&reference));
+		for merge in &folded {
+			assert!(merge.survivor < merge.dead);
+		}
+		for threshold in [0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 0.8, 0.9, 1.0] {
+			assert_eq!(
+				labels_at_threshold(sets.len(), &folded, threshold),
+				labels_at_threshold(sets.len(), &reference, threshold),
+				"threshold {threshold} on {sets:?}"
+			);
+		}
+	}
+
+	#[test]
+	fn folds_identical_sets_into_the_same_dendrogram_as_clustering_each_alone() {
+		for seed in 1..=40 {
+			for (count, distinct, vocabulary) in [(12, 3, 6), (30, 5, 8), (40, 12, 10), (25, 25, 6)]
+			{
+				assert_same_as_unfolded(&sets_with_repeats(seed, count, distinct, vocabulary));
+			}
+		}
+	}
+
+	#[test]
+	fn folds_identical_sets_that_tie_with_many_other_pairs() {
+		// Every set is a subset of three ids: at most eight distinct sets
+		// and equal similarities almost everywhere.
+		for seed in 1..=40 {
+			assert_same_as_unfolded(&sets_with_repeats(seed, 20, 6, 3));
+		}
+	}
+
+	#[test]
+	fn merges_identical_sets_before_any_other_pair_unlike_the_unfolded_chain() {
+		// Sets 0 and 1 are the closest distinct pair, so the chain started
+		// at 0 merges them first; folding puts the identical pair 2, 3 ahead.
+		let sets = vec![vec![1, 2], vec![1, 2, 3], vec![7], vec![7]];
+		let folded = complete_linkage_dendrogram(&sets);
+		assert_eq!(
+			(folded[0].survivor, folded[0].dead, folded[0].height),
+			(2, 3, 1.0)
+		);
+		assert_eq!(
+			(unfolded(&sets)[0].survivor, unfolded(&sets)[0].dead),
+			(0, 1)
+		);
+		assert_same_as_unfolded(&sets);
+	}
+
+	#[test]
+	fn merges_k_identical_sets_into_the_lowest_index_at_height_one() {
+		let merges = complete_linkage_dendrogram(&[vec![1, 2], vec![1, 2], vec![1, 2]]);
+		assert_eq!(merges.len(), 2);
+		for (merge, dead) in merges.iter().zip([1, 2]) {
+			assert_eq!((merge.survivor, merge.dead, merge.height), (0, dead, 1.0));
+		}
+	}
+
+	#[test]
+	fn names_the_merges_among_folded_sets_by_their_lowest_indexed_members() {
+		// {0, 2} and {1, 3} are identical pairs; the two sets share one of
+		// three ids.
+		let sets = vec![vec![1, 2], vec![2, 3], vec![1, 2], vec![2, 3]];
+		let merges = complete_linkage_dendrogram(&sets);
+		let last = merges.last().unwrap();
+		assert_eq!((last.survivor, last.dead), (0, 1));
+		assert_eq!(last.height, 1.0 / 3.0);
+		assert_eq!(sorted_heights(&merges), sorted_heights(&unfolded(&sets)));
+	}
+
+	#[test]
+	fn folds_empty_sets_as_identical() {
+		let merges = complete_linkage_dendrogram(&[vec![], vec![5], vec![]]);
+		assert_eq!(
+			(merges[0].survivor, merges[0].dead, merges[0].height),
+			(0, 2, 1.0)
+		);
+		assert_same_as_unfolded(&[vec![], vec![5], vec![]]);
+	}
+
+	#[test]
+	fn leaves_a_dendrogram_of_distinct_sets_unfolded() {
+		let sets = vec![vec![1, 2], vec![2, 3], vec![3, 4], vec![9]];
+		assert_eq!(complete_linkage_dendrogram(&sets), unfolded(&sets));
+	}
+
+	#[test]
+	fn clusters_all_identical_sets_into_one_label_without_any_comparison() {
+		let sets = vec![vec![1, 2, 3]; 6];
+		let merges = complete_linkage_dendrogram(&sets);
+		assert_eq!(merges.len(), 5);
+		assert_eq!(labels_at_threshold(6, &merges, 1.0), vec![0; 6]);
+	}
 
 	#[test]
 	fn merges_identical_sets_first_and_cuts_at_the_threshold() {

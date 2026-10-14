@@ -21,7 +21,11 @@ use crate::stage_b::stage_b;
 /// `n * (n - 1) / 2 * 8` bytes for `n` pages, and the largest allocation of
 /// a run. Blocks are clustered one at a time, so this bounds that table
 /// whatever the corpus size; 512 MiB takes a block of about 11,500 pages
-/// whole. The page limit ([`crate::EXACT_PAGE_LIMIT`]) samples the largest
+/// whole. The figure is the worst case, for pages whose comparison sets are
+/// all distinct: identical sets are folded into one before the table is
+/// built, so the real table is smaller, but the sampling decision stays on
+/// the page count alone so that which blocks are sampled (and so the stored
+/// keys) does not depend on page content. The page limit ([`crate::EXACT_PAGE_LIMIT`]) samples the largest
 /// blocks of a big corpus first, so a larger budget rarely changes which
 /// blocks are sampled but raises the peak. Which blocks fall over it decides their stored keys, so changing it
 /// reclassifies the archives it moves. A budget of 0 samples every block.
