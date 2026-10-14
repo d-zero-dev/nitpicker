@@ -258,6 +258,16 @@ describe('Page', () => {
 			expect(page.mainContentClassList).toEqual(['l-main', 'p-home']);
 		});
 
+		it('throws when the stored mainContentClassList is not a JSON array of strings', () => {
+			const page = new Page(
+				createMockArchive() as never,
+				createRawPage({ main_content_class_list: '{oops' }),
+			);
+			expect(() => page.mainContentClassList).toThrow(
+				'main_content_class_list is not valid JSON: {oops',
+			);
+		});
+
 		it('returns null mainContentClassList when column is null', () => {
 			const page = new Page(createMockArchive() as never, createRawPage());
 			expect(page.mainContentClassList).toBeNull();

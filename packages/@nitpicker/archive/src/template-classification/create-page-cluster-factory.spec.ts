@@ -7,6 +7,7 @@ import Archive from '../archive.js';
 
 import { collectPageIdsWithHtml } from './collect-page-ids-with-html.js';
 import { createPageClusterFactory } from './create-page-cluster-factory.js';
+import { loadPageClusterCandidates } from './load-page-cluster-candidates.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -151,11 +152,13 @@ describe('createPageClusterFactory', () => {
 	});
 
 	it('内部HTMLページのみyieldされる（外部ページ・非HTMLページ・HTML無しページは除外）、urlsはイテレーション前から確定している', async () => {
-		const pages = await archive.getPages();
-		const { factory, urls } = createPageClusterFactory({
-			pages,
-			stylesheetsByUrl: new Map(),
+		const candidates = await loadPageClusterCandidates(archive, {
 			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
+		const { factory, urls } = createPageClusterFactory({
+			archive,
+			candidates,
+			stylesheetsByUrl: new Map(),
 		});
 
 		expect(urls).toEqual(['https://example.com/news/1']);
@@ -169,12 +172,36 @@ describe('createPageClusterFactory', () => {
 		expect(urls).toEqual(['https://example.com/news/1']);
 	});
 
-	it('内部HTMLページでもpageIdsWithHtmlに無ければyieldされずurlsにも含まれない', async () => {
-		const pages = await archive.getPages();
-		const { factory, urls } = createPageClusterFactory({
-			pages,
+	it('候補のcontentRootはそのまま載せ、無い候補にはキー自体を付けない', async () => {
+		const { factory } = createPageClusterFactory({
+			archive,
+			candidates: [
+				{
+					id: 1,
+					href: 'https://example.com/a',
+					paths: ['a'],
+					host: 'example.com',
+					contentRoot: { tagName: 'div', id: 'main' },
+				},
+				{ id: 2, href: 'https://example.com/b', paths: ['b'], host: 'example.com' },
+			],
 			stylesheetsByUrl: new Map(),
-			pageIdsWithHtml: new Set(),
+		});
+
+		const signals = [];
+		for await (const signal of factory()) {
+			signals.push(signal);
+		}
+
+		expect(signals[0]!.contentRoot).toStrictEqual({ tagName: 'div', id: 'main' });
+		expect(signals[1]).not.toHaveProperty('contentRoot');
+	});
+
+	it('候補が空ならyieldされずurlsも空になる', async () => {
+		const { factory, urls } = createPageClusterFactory({
+			archive,
+			candidates: [],
+			stylesheetsByUrl: new Map(),
 		});
 
 		const signals = [];
@@ -186,13 +213,16 @@ describe('createPageClusterFactory', () => {
 		expect(urls).toEqual([]);
 	});
 
-	it('pageIdsWithHtmlに挙がっているのに保存済みHTMLが無いページはgetHtmlが説明つきのエラーを投げる', async () => {
-		const pages = await archive.getPages();
-		const empty = pages.find((page) => page.url.href === 'https://example.com/empty')!;
-		const { factory } = createPageClusterFactory({
-			pages,
-			stylesheetsByUrl: new Map(),
+	it('候補に挙がっているのに保存済みHTMLが無いページはgetHtmlが説明つきのエラーを投げる', async () => {
+		const all = await archive.getPages('internal-page');
+		const empty = all.find((page) => page.url.href === 'https://example.com/empty')!;
+		const candidates = await loadPageClusterCandidates(archive, {
 			pageIdsWithHtml: new Set([empty.id]),
+		});
+		const { factory } = createPageClusterFactory({
+			archive,
+			candidates,
+			stylesheetsByUrl: new Map(),
 		});
 
 		const signals = [];
@@ -207,11 +237,13 @@ describe('createPageClusterFactory', () => {
 	});
 
 	it('factory()を複数回呼んでも同一順序・同一件数のページを返す', async () => {
-		const pages = await archive.getPages();
-		const { factory } = createPageClusterFactory({
-			pages,
-			stylesheetsByUrl: new Map(),
+		const candidates = await loadPageClusterCandidates(archive, {
 			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
+		const { factory } = createPageClusterFactory({
+			archive,
+			candidates,
+			stylesheetsByUrl: new Map(),
 		});
 
 		const firstPass: string[] = [];
@@ -228,14 +260,16 @@ describe('createPageClusterFactory', () => {
 	});
 
 	it('paths/host/stylesheetHrefsを正しくマッピングする', async () => {
-		const pages = await archive.getPages();
+		const candidates = await loadPageClusterCandidates(archive, {
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 		const stylesheetsByUrl = new Map<string, readonly string[]>([
 			['https://example.com/news/1', ['https://example.com/style.css']],
 		]);
 		const { factory } = createPageClusterFactory({
-			pages,
+			archive,
+			candidates,
 			stylesheetsByUrl,
-			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
 		});
 
 		const signals = [];
@@ -250,11 +284,13 @@ describe('createPageClusterFactory', () => {
 	});
 
 	it('stylesheetsByUrlに存在しないページは空配列になる', async () => {
-		const pages = await archive.getPages();
-		const { factory } = createPageClusterFactory({
-			pages,
-			stylesheetsByUrl: new Map(),
+		const candidates = await loadPageClusterCandidates(archive, {
 			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
+		const { factory } = createPageClusterFactory({
+			archive,
+			candidates,
+			stylesheetsByUrl: new Map(),
 		});
 
 		const signals = [];
@@ -330,11 +366,13 @@ describe('createPageClusterFactory — urls は途中で打ち切ったイテレ
 	});
 
 	it('urlsはyield順で、完走・途中打ち切りのどちらのイテレーションでも変わらない', async () => {
-		const pages = await archive.getPages();
-		const { factory, urls } = createPageClusterFactory({
-			pages,
-			stylesheetsByUrl: new Map(),
+		const candidates = await loadPageClusterCandidates(archive, {
 			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
+		const { factory, urls } = createPageClusterFactory({
+			archive,
+			candidates,
+			stylesheetsByUrl: new Map(),
 		});
 
 		expect(urls).toEqual(['https://example.com/a', 'https://example.com/b']);
@@ -458,11 +496,13 @@ describe('createPageClusterFactory — 本文要素（contentRoot）のヒント
 	});
 
 	it('クローラが検出した本文要素を contentRoot として渡す（nodeName は小文字、classList はそのまま）', async () => {
-		const pages = await archive.getPages();
-		const { factory } = createPageClusterFactory({
-			pages,
-			stylesheetsByUrl: new Map(),
+		const candidates = await loadPageClusterCandidates(archive, {
 			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
+		const { factory } = createPageClusterFactory({
+			archive,
+			candidates,
+			stylesheetsByUrl: new Map(),
 		});
 
 		const signals = [];
@@ -479,11 +519,13 @@ describe('createPageClusterFactory — 本文要素（contentRoot）のヒント
 	});
 
 	it('本文要素が検出されていないページには contentRoot キー自体を付けない', async () => {
-		const pages = await archive.getPages();
-		const { factory } = createPageClusterFactory({
-			pages,
-			stylesheetsByUrl: new Map(),
+		const candidates = await loadPageClusterCandidates(archive, {
 			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
+		const { factory } = createPageClusterFactory({
+			archive,
+			candidates,
+			stylesheetsByUrl: new Map(),
 		});
 
 		const signals = [];

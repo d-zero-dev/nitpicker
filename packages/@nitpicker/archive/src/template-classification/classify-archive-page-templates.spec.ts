@@ -71,6 +71,9 @@ describe('classifyArchivePageTemplates', () => {
 			['/article-1', ARTICLE_A],
 			['/article-2', ARTICLE_B],
 			['/list', LIST_C],
+			// An internal HTML page with no stored snapshot: loaded by neither
+			// the classification nor its result.
+			['/empty', ''],
 		] as const) {
 			await archive.setPage({
 				url: parseUrl(`https://example.com${p}`)!,
@@ -125,12 +128,12 @@ describe('classifyArchivePageTemplates', () => {
 			},
 		});
 
-		expect(events[0]).toEqual({ phase: 'loading-pages-start' });
-		expect(events[1]).toEqual({ phase: 'loading-pages', done: 3, total: 3 });
-		expect(events[2]).toEqual({ phase: 'collecting-stylesheets' });
-		expect(events[3]).toEqual({ phase: 'listing-html-snapshots' });
+		expect(events[0]).toEqual({ phase: 'listing-html-snapshots' });
+		expect(events[1]).toEqual({ phase: 'loading-pages-start' });
+		expect(events[2]).toEqual({ phase: 'loading-pages', done: 4, total: 4 });
+		expect(events[3]).toEqual({ phase: 'collecting-stylesheets' });
 		expect(events.at(-1)).toEqual({ phase: 'writing-results', templateCount: 2 });
-		// Clustering events sit between listing the HTML and the write.
+		// Clustering events sit between gathering the stylesheets and the write.
 		expect(events.slice(4, -1).length).toBeGreaterThan(0);
 	});
 

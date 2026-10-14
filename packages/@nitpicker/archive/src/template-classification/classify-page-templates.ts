@@ -4,7 +4,6 @@ import type {
 } from './types.js';
 import type { TemplateClusterReason } from '../db-ops/templates/types.js';
 
-import { collectPageIdsWithHtml } from './collect-page-ids-with-html.js';
 import { collectPageStylesheetUrls } from './collect-page-stylesheet-urls.js';
 import { createPageClusterFactory } from './create-page-cluster-factory.js';
 import { resolvePageClusterKeys } from './page-cluster/resolve-page-cluster-keys.js';
@@ -34,24 +33,23 @@ import { resolvePageClusterKeys } from './page-cluster/resolve-page-cluster-keys
  * @returns See {@link PageTemplateClassification}.
  * @example
  * ```ts
- * const pages = await archive.getPages();
- * const { templateKeysByUrl } = await classifyPageTemplates({ archive, pages });
+ * const pageIdsWithHtml = await collectPageIdsWithHtml(archive);
+ * const candidates = await loadPageClusterCandidates(archive, { pageIdsWithHtml });
+ * const { templateKeysByUrl } = await classifyPageTemplates({ archive, candidates });
  * await archive.replacePageTemplates(templateKeysByUrl);
  * ```
  */
 export async function classifyPageTemplates(
 	options: ClassifyPageTemplatesOptions,
 ): Promise<PageTemplateClassification> {
-	const { archive, pages, memoryBudget, onProgress } = options;
+	const { archive, candidates, memoryBudget, onProgress } = options;
 
 	onProgress?.({ phase: 'collecting-stylesheets' });
 	const stylesheetsByUrl = await collectPageStylesheetUrls(archive);
-	onProgress?.({ phase: 'listing-html-snapshots' });
-	const pageIdsWithHtml = await collectPageIdsWithHtml(archive);
 	const { factory, urls } = createPageClusterFactory({
-		pages,
+		archive,
+		candidates,
 		stylesheetsByUrl,
-		pageIdsWithHtml,
 	});
 
 	const { keys, reasons, sampledBlocks } = await resolvePageClusterKeys(factory, {
