@@ -7,6 +7,7 @@ import {
 	PendingUrlsRemainError,
 } from '@nitpicker/crawler';
 
+import { assertTemplateMemoryBudget } from '../crawl/assert-template-memory-budget.js';
 import { resolveRequestHeaders } from '../crawl/resolve-request-headers.js';
 import { ExitCode } from '../exit-code.js';
 import { formatCliError } from '../format-cli-error.js';
@@ -57,6 +58,9 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 		// malformed header fails before the browser check or any archive I/O —
 		// the same order `crawl` itself uses.
 		const requestHeaders = await resolveRequestHeaders(flags);
+		if (!flags.skipTemplates) {
+			assertTemplateMemoryBudget(flags.templateMemoryBudget);
+		}
 		// Fails fast if Chrome is missing, before the crawl step does any
 		// archive I/O — see `assertChromeIsInstalled`'s JSDoc.
 		await assertChromeIsInstalled();
@@ -100,6 +104,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			dedupeMapCap: flags.dedupeMapCap,
 			skipTechnologyJsScan: flags.skipTechnologyJsScan,
 			skipTemplates: flags.skipTemplates,
+			templateMemoryBudget: flags.templateMemoryBudget,
 		});
 	} catch (error) {
 		if (error instanceof PendingUrlsRemainError) {

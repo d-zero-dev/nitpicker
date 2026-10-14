@@ -27,6 +27,11 @@ export const commandDef = {
 			type: 'boolean',
 			desc: 'Skip re-classifying page templates in the output archive (by default they are re-derived, since per-source template keys collide when merged)',
 		},
+		templateMemoryBudget: {
+			type: 'number',
+			valueName: 'MiB',
+			desc: 'Bytes a page-template block similarity table may take before the block is clustered from a sample instead of whole, in MiB (default 512; 0 samples every block; also NITPICKER_TEMPLATE_MEMORY_BUDGET; an invalid value is refused before any work starts). A table takes n*(n-1)/2*8 bytes for a block of n pages. Separately, when the blocks clustered whole would hold more than 20,000 pages, the largest are sampled too (a fixed limit)',
+		},
 		verbose: {
 			type: 'boolean',
 			desc: 'Append each progress/phase line with an ISO 8601 timestamp instead of overwriting a single line',

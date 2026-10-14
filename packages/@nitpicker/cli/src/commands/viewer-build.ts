@@ -18,6 +18,7 @@ import {
 } from '@nitpicker/query';
 
 import { appendViewerReadModelPhaseRows } from '../append-viewer-read-model-phase-rows.js';
+import { assertTemplateMemoryBudget } from '../crawl/assert-template-memory-budget.js';
 import { classifyTemplatesQuietly } from '../crawl/classify-templates-quietly.js';
 import { createVerboseTimestampStream } from '../crawl/create-verbose-timestamp-stream.js';
 import { dedupeProgressMessage } from '../dedupe-progress-message.js';
@@ -137,6 +138,10 @@ export async function viewerBuild(
 			'Usage: npx @nitpicker/cli viewer-build <archive> [--force] [--skip-templates] [--verbose]',
 		);
 		process.exit(ExitCode.Fatal);
+	}
+
+	if (!flags.skipTemplates) {
+		assertTemplateMemoryBudget(flags.templateMemoryBudget);
 	}
 
 	const absFilePath = path.isAbsolute(filePath)
@@ -259,12 +264,12 @@ export async function viewerBuild(
 			buildPipeline = buildPipeline.pipe(
 				'Classify page templates',
 				async (a: ArchiveType, ctx: StepContext<ArchiveType>) => {
-					lifecycle.templateClassificationError = await classifyTemplatesQuietly(
-						a,
-						(message) => {
+					lifecycle.templateClassificationError = await classifyTemplatesQuietly(a, {
+						onProgress: (message) => {
 							ctx.progress(message);
 						},
-					);
+						templateMemoryBudget: flags.templateMemoryBudget,
+					});
 					return a;
 				},
 			);

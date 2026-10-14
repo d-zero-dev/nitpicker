@@ -188,6 +188,28 @@ describe('pipeline command', () => {
 		);
 	});
 
+	it('forwards --template-memory-budget to startCrawl', async () => {
+		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');
+
+		await pipeline(['https://example.com'], {
+			...defaultFlags,
+			templateMemoryBudget: 512,
+		});
+
+		expect(startCrawlFn).toHaveBeenCalledWith(
+			['https://example.com'],
+			expect.objectContaining({ templateMemoryBudget: 512 }),
+		);
+	});
+
+	it('rejects an invalid --template-memory-budget before crawling', async () => {
+		await expect(
+			pipeline(['https://example.com'], { ...defaultFlags, templateMemoryBudget: -1 }),
+		).rejects.toThrow('Invalid template memory budget (--template-memory-budget -1)');
+
+		expect(startCrawlFn).not.toHaveBeenCalled();
+	});
+
 	it('runs crawl and report when --sheet is provided', async () => {
 		const sheetUrl = 'https://docs.google.com/spreadsheets/d/xxx';
 		vi.mocked(startCrawlFn).mockResolvedValue('/tmp/site.nitpicker');

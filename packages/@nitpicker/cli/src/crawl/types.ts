@@ -152,3 +152,44 @@ export interface CrawlFlagInput {
 	/** Hard cap on the number of distinct URL shapes `dedupeCap` tracks at once. */
 	readonly dedupeMapCap?: number;
 }
+
+/**
+ * Where {@link import('./resolve-template-memory-budget.js').resolveTemplateMemoryBudget}
+ * reads the template classification's memory budget from.
+ * @example
+ * ```ts
+ * const sources: TemplateMemoryBudgetSources = {
+ * 	flag: 512,
+ * 	env: process.env.NITPICKER_TEMPLATE_MEMORY_BUDGET,
+ * };
+ * ```
+ */
+export interface TemplateMemoryBudgetSources {
+	/** The `--template-memory-budget` flag, in MiB. */
+	readonly flag: number | undefined;
+	/** The `NITPICKER_TEMPLATE_MEMORY_BUDGET` environment variable, in MiB. */
+	readonly env: string | undefined;
+}
+
+/**
+ * Options of {@link import('./classify-templates-quietly.js').classifyTemplatesQuietly}.
+ * @example
+ * ```ts
+ * const options: ClassifyTemplatesQuietlyOptions = {
+ * 	onProgress: (message) => ctx.progress(message),
+ * 	templateMemoryBudget: flags.templateMemoryBudget,
+ * };
+ * ```
+ */
+export interface ClassifyTemplatesQuietlyOptions {
+	/**
+	 * Called with the rendered progress / summary message whenever it changes.
+	 * Omit for no progress reporting (a failure still goes to `console.error`).
+	 */
+	readonly onProgress: (message: string) => void;
+	/**
+	 * The `--template-memory-budget` flag, in MiB; the
+	 * `NITPICKER_TEMPLATE_MEMORY_BUDGET` variable applies when it is omitted.
+	 */
+	readonly templateMemoryBudget: number | undefined;
+}

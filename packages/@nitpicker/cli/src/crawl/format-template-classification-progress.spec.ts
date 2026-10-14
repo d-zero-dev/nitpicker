@@ -37,6 +37,32 @@ describe('formatTemplateClassificationProgress', () => {
 		).toBe('reading pages (1,200)');
 	});
 
+	it('says which block is clustered from a sample, and why, in MiB', () => {
+		expect(
+			formatTemplateClassificationProgress({
+				phase: 'block-sampled',
+				blockKey: 'path:news',
+				pageCount: 30_000,
+				pairBytes: 3_599_940_000,
+				budget: 2_147_483_648,
+				reason: 'table-over-budget',
+			}),
+		).toBe('sampling block of 30,000 pages (3,433 MiB table over the 2,048 MiB budget)');
+	});
+
+	it('says when a block is sampled because the pages clustered whole would be too many', () => {
+		expect(
+			formatTemplateClassificationProgress({
+				phase: 'block-sampled',
+				blockKey: 'path:news',
+				pageCount: 12_000,
+				pairBytes: 575_952_000,
+				budget: 2_147_483_648,
+				reason: 'pages-over-limit',
+			}),
+		).toBe('sampling block of 12,000 pages (too many pages to cluster whole)');
+	});
+
 	it('renders block completion with a done/total percentage', () => {
 		expect(
 			formatTemplateClassificationProgress({

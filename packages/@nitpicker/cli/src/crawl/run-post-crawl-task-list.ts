@@ -24,6 +24,8 @@ export interface RunPostCrawlTaskListOptions {
 	readonly skipTechnologyJsScan: boolean;
 	/** When `true`, the `'Classify page templates'` row is never built — mirrors `--skip-templates`. */
 	readonly skipTemplates: boolean;
+	/** `--template-memory-budget` in MiB; see `ClassifyTemplatesQuietlyOptions`. */
+	readonly templateMemoryBudget?: number | undefined;
 	/** Render target. Defaults to `process.stderr`; overridable for tests. */
 	readonly stream?: NodeJS.WritableStream;
 }
@@ -80,6 +82,7 @@ export interface RunPostCrawlTaskListOptions {
  *   silent: flags.silent,
  *   skipTechnologyJsScan: flags.skipTechnologyJsScan,
  *   skipTemplates: flags.skipTemplates,
+ *   templateMemoryBudget: flags.templateMemoryBudget,
  * });
  * ```
  */
@@ -92,7 +95,9 @@ export async function runPostCrawlTaskList(
 			await scanJsResourcesQuietly(orchestrator.archive);
 		}
 		if (!options.skipTemplates) {
-			await classifyTemplatesQuietly(orchestrator.archive);
+			await classifyTemplatesQuietly(orchestrator.archive, {
+				templateMemoryBudget: options.templateMemoryBudget,
+			});
 		}
 		await ensureViewerReadModelQuietly(orchestrator.archive);
 		await orchestrator.write();
@@ -115,8 +120,11 @@ export async function runPostCrawlTaskList(
 		pipeline = pipeline.pipe(
 			'Classify page templates',
 			async (orch: CrawlerOrchestrator, ctx: StepContext<CrawlerOrchestrator>) => {
-				await classifyTemplatesQuietly(orch.archive, (message) => {
-					ctx.progress(message);
+				await classifyTemplatesQuietly(orch.archive, {
+					onProgress: (message) => {
+						ctx.progress(message);
+					},
+					templateMemoryBudget: options.templateMemoryBudget,
 				});
 				return orch;
 			},
