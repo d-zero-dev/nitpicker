@@ -37,7 +37,7 @@ jobs:
             echo "::error::core.linux-x64-gnu.node requires glibc $newest (> 2.28)"
             exit 1
           fi
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: core-linux-x64-gnu
           path: core.linux-x64-gnu.node
@@ -68,7 +68,7 @@ jobs:
           node-version: 24.20.0
       - run: node packages/@nitpicker/core/scripts/build-native.mjs --profile dist
       - run: node packages/@nitpicker/core/scripts/verify-prebuilt.mjs packages/@nitpicker/core/core.darwin-arm64.node
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: core-darwin-arm64
           path: packages/@nitpicker/core/core.darwin-arm64.node
