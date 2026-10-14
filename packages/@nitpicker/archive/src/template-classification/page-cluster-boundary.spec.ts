@@ -46,7 +46,6 @@ describe('page-cluster ドライバの境界', () => {
 		).toEqual([
 			'@nitpicker/core/create-template-classification-run',
 			'@nitpicker/core/template-block-sample-size',
-			'@nitpicker/core/template-corpus-inline-threshold',
 			'@nitpicker/core/types',
 			'vitest',
 		]);

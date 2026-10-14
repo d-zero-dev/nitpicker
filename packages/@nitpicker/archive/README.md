@@ -36,13 +36,13 @@ console.log(classifyErrorKind('net::ERR_NAME_NOT_RESOLVED')); // 'dns'
 ```mermaid
 flowchart TD
     IN[入力ページ集合] --> P0["Pass 0: ブロッキング<br>URL パス + first-party CSS 集合 → blockKey<br>（orphan ページの再割当を含む）"]
-    P0 --> GATE{"ページ数 ≤ 20,000?"}
+    P0 --> GATE{"ブロックごと:<br>類似度表 n(n−1)/2×8 バイト ≤ メモリ上限?<br>かつ 全ページ計算の合計 ≤ 20,000 ページ?"}
 
-    GATE -- "yes（in-memory）" --> CHROME_ALL["chrome discovery（コーパス全体）<br>ランドマーク署名の度数分布に auto-cut<br>→ グローバル chrome 除外 / ローカル chrome 再注入"]
-    CHROME_ALL --> SA_ALL["Stage A × 全ブロック<br>深さキャップ → tokenize → 固有クラス除去 →<br>complete-linkage + auto-cut → 包含割当"]
+    GATE -- "yes（全ページ）" --> CHROME_ALL["chrome discovery（全ページをクラスタリングするブロックのページ全体）<br>ランドマーク署名の度数分布に auto-cut<br>→ グローバル chrome 除外 / ローカル chrome 再注入"]
+    CHROME_ALL --> SA_ALL["Stage A × そのブロック<br>深さキャップ → tokenize → 固有クラス除去 →<br>complete-linkage + auto-cut → 包含割当"]
 
-    GATE -- "no（ストリーミング）" --> RES["ブロックごとにリザーバサンプリング<br>（各ブロック最大 100 ページ、決定的シード）"]
-    RES --> SA_SAMPLE["chrome discovery + Stage A<br>（サンプルのみ、ブロック単位で逐次 flush）"]
+    GATE -- "no（サンプル）" --> RES["リザーバサンプリング<br>（最大 100 ページ、決定的シード）"]
+    RES --> SA_SAMPLE["chrome discovery + Stage A<br>（サンプルのみ、ブロックの最後のページを読んだ時点で flush）"]
     SA_SAMPLE --> P1B["Pass 1b: 非サンプルページを<br>max-Jaccard で最寄りクラスタへ割当"]
 
     SA_ALL --> SB["Stage B: ブロック越えマージ<br>（不動点ループ、下図）"]
@@ -53,7 +53,7 @@ flowchart TD
 - **Pass 0（ブロッキング）** — HTML を読まず、URL パスと first-party stylesheet 集合だけで粗く分割します。高価な構造比較を同一ブロック内に閉じ込め、コーパス全体の比較コストを O(n²) から劇的に減らします。stylesheet を持たない orphan ページは同一セクションの CSS ブロックへ再割当されます
 - **chrome discovery** — 全ページのランドマーク署名の度数分布に auto-cut を当て、閾値以上を「グローバル chrome」（サイト共通のヘッダー等）として比較から除外し、閾値未満かつ 2 ページ以上に出現するものを「ローカル chrome」（セクション固有のナビ等）としてトークン再注入します
 - **Stage A（ブロック内クラスタリング）** — ブロックごとに直線的に処理します。本文ルート（`contentRoot` → `<main>` → 内蔵リスト）の深さキャップ（候補深度 2〜10 を全走査して knee を探す自動選択）→ tokenize → **ページ固有クラスの除去**（ブロック内で 1 ページにしか現れないクラスは `<article class="outline">` のようなページ識別ラベルであってテンプレート構造ではないので、`allowedClasses` で除いて再 tokenize します。10 ページ以上のブロックのみ）→ complete-linkage 階層クラスタリング → max-gap auto-cut でカット高を決定 → 最後に包含関係にあるクラスタを吸収する包含割当（割当チェーンを辿り、循環はメンバー最大のクラスタをルートに選んで解決）
-- **Pass 1b（ストリーミング時のみ）** — 20,000 ページ超では各ブロックをリザーバサンプリング（最大 100 ページ、ブロックキーをシードにした決定的乱数）で代表させ、サンプル外のページは Stage A 完了後に max-Jaccard で最寄りクラスタへ一括割当する（tokenize にはサンプルで学習した許可クラス集合を適用し、サンプル側と同じ規則で比較します）。メモリ使用量はコーパス全体ではなくサンプルサイズに比例します
+- **Pass 1b（サンプルに落としたブロックのみ）** — Stage A の類似度表がメモリ上限（`--template-memory-budget <MiB>` または `NITPICKER_TEMPLATE_MEMORY_BUDGET`、既定 512 MiB、0 なら全ブロック）を超えるブロックだけ、リザーバサンプリング（最大 100 ページ、ブロックキーをシードにした決定的乱数）で代表させ、サンプル外のページは Stage A 完了後に max-Jaccard で最寄りクラスタへ一括割当する（tokenize にはサンプルで学習した許可クラス集合を適用し、サンプル側と同じ規則で比較します）。そのブロックのメモリ使用量はブロックのページ数ではなくサンプルサイズに比例します。もう 1 つの上限は、全ページで計算するブロックのページ（HTML の解析結果を計算が終わるまで全ブロック分抱える。1 ページ約 60KB）の合計で、`@nitpicker/core` の `TEMPLATE_EXACT_PAGE_LIMIT`（20,000 ページ、固定）です。超えるときは、標本より大きい（100 ページを超える）ブロックを、ページ数が多い順（同数ならブロックの出現順）に、収まるまでサンプルに落とします。100 ページ以下のブロックはサンプルにしても保持ページが減らないので落とさず、それだけで上限を超えるときは超えたまま保持します。ブロックの判定はページ数だけで決まり（重複する集合のまとめ込みはしません）、判定したブロックは `block-sampled` の進捗イベントと分類結果の `sampledBlocks` に、理由（`table-over-budget`、`pages-over-limit`）つきで残ります。サンプルに落としたブロックを含むマージ済みグループは Stage B でも 100 メンバーに抑えます
 - **Stage B（ブロック越えマージ）** — ブロック分割はあくまで比較コスト削減のためなので、最後に同一テンプレートがブロックを跨いで分かれていないか再統合します。これが唯一の反復処理です（次節）。収束後、確定した最終クラスタごとに reason（`TemplateClusterReason`）を 1 つずつ組み立てます — 追加の全コーパススキャンではなく、Stage A/B が既に計算済みの中間データ（quorum core、landmark インスタンス、ブロッキング根拠）を再利用するだけなので、クラスタ数にしか比例しません
 
 #### Stage B: ブロック越え統合の不動点ループ
@@ -84,7 +84,7 @@ fine stage・L2 stage いずれの経路で提案されたマージも、適用�
 
 ### golden（出力を固定するテスト）
 
-`src/template-classification/golden/` は、分類器の出力（ページごとの `templateKey` と、`page_template_clusters` に保存される reason JSON の文字列）を `__golden__/` に固定し、全件一致を確かめます。入力は、決定的に生成する合成サイト（in-memory 経路と streaming 経路の 2 規模）と `page-cluster/__fixtures__/` の HTML で、ドライバに直接渡します。分類器を書き換えても出力が同じであることのゲートです。アーカイブ側のアダプタ（`createPageClusterFactory` など）を含む本番経路全体は、実アーカイブで `scripts/template-classification-golden.mjs` を使って確かめます。
+`src/template-classification/golden/` は、分類器の出力（ページごとの `templateKey` と、`page_template_clusters` に保存される reason JSON の文字列）を `__golden__/` に固定し、全件一致を確かめます。入力は、決定的に生成する合成サイトと `page-cluster/__fixtures__/` の HTML で、ドライバに直接渡します。合成サイトは、小さい 1 規模と、約 2 万ページ強の 1 規模です。後者はメモリ上限を 3 通りに変えて記録します。既定のメモリ上限では最大のブロックだけが保持ページ数の上限でサンプルに落ち、メモリ上限 0 では全ブロックが落ち、メモリ上限を絞った場合は一部のブロックだけが落ちます。メモリ上限 0 の記録は、全ブロックをサンプルから計算した結果で、この方式の出力を固定します。分類器を書き換えても出力が同じであることのゲートです。アーカイブ側のアダプタ（`createPageClusterFactory` など）を含む本番経路全体は、実アーカイブで `scripts/template-classification-golden.mjs` を使って確かめます。
 
 出力を意図して変えるときだけ、次のコマンドで `__golden__/` を更新し、理由を PR に書きます（パスを付けないと他の spec の snapshot まで更新されます）。
 

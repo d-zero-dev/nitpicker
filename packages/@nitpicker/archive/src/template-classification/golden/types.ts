@@ -76,8 +76,24 @@ export interface SyntheticSiteOptions {
 	readonly seed: number;
 	/**
 	 * Multiplies the page count of every section. `1` gives a corpus of a few
-	 * hundred pages (the classifier's in-memory path); large values push it past
-	 * the streaming threshold.
+	 * hundred pages; large values give blocks of thousands of pages, which a
+	 * small memory budget samples.
 	 */
 	readonly scale: number;
+}
+
+/**
+ * Options of `classifyGoldenCorpus`.
+ * @example
+ * ```ts
+ * const options: ClassifyGoldenCorpusOptions = { memoryBudget: 0 };
+ * ```
+ */
+export interface ClassifyGoldenCorpusOptions {
+	/**
+	 * Bytes a block's similarity table may take before the block is
+	 * clustered from a sample (`resolvePageClusterKeys`'s `memoryBudget`);
+	 * the classifier's default when omitted.
+	 */
+	readonly memoryBudget: number;
 }

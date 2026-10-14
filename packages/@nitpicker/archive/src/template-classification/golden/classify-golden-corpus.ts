@@ -1,4 +1,4 @@
-import type { GoldenPage, GoldenRecord } from './types.js';
+import type { ClassifyGoldenCorpusOptions, GoldenPage, GoldenRecord } from './types.js';
 
 import { createHash } from 'node:crypto';
 
@@ -20,14 +20,17 @@ import { resolvePageClusterKeys } from '../page-cluster/resolve-page-cluster-key
  * specs, and `scripts/template-classification-golden.mjs` runs the whole
  * production path on real archives.
  * @param pages - The corpus.
+ * @param options - See {@link ClassifyGoldenCorpusOptions}.
  * @returns The record to compare against `__golden__/`.
  * @example
  * ```ts
  * const record = await classifyGoldenCorpus(buildSyntheticSite({ seed: 1, scale: 1 }));
+ * const sampled = await classifyGoldenCorpus(pages, { memoryBudget: 0 });
  * ```
  */
 export async function classifyGoldenCorpus(
 	pages: readonly GoldenPage[],
+	options: Partial<ClassifyGoldenCorpusOptions> = {},
 ): Promise<GoldenRecord> {
 	const { keys, reasons } = await resolvePageClusterKeys(
 		() =>
@@ -35,7 +38,12 @@ export async function classifyGoldenCorpus(
 				...signals,
 				getHtml: () => html,
 			})),
-		{ onProgress: () => {} },
+		{
+			...(options.memoryBudget === undefined
+				? {}
+				: { memoryBudget: options.memoryBudget }),
+			onProgress: () => {},
+		},
 	);
 
 	const templateKeys: string[] = [];

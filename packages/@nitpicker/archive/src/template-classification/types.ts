@@ -14,6 +14,14 @@ import type Page from '../page.js';
 export type TemplateClusteringProgress =
 	| { readonly phase: 'pass0-signals'; readonly pagesSeen: number }
 	| {
+			readonly phase: 'block-sampled';
+			readonly blockKey: string;
+			readonly pageCount: number;
+			readonly pairBytes: number;
+			readonly budget: number;
+			readonly reason: 'table-over-budget' | 'pages-over-limit';
+	  }
+	| {
 			readonly phase: 'pass1-block-complete';
 			readonly blockKey: string;
 			readonly blocksProcessed: number;
@@ -49,6 +57,35 @@ export type TemplateClassificationProgress =
 	| { readonly phase: 'writing-results'; readonly templateCount: number };
 
 /**
+ * A block clustered from a sample of its pages. Mirrors `@nitpicker/core`'s
+ * `TemplateSampledBlock`, for the same reason {@link TemplateClusterReason}
+ * mirrors its reason type.
+ * @example
+ * ```ts
+ * const block: SampledTemplateBlock = {
+ * 	blockKey: 'path:news',
+ * 	pageCount: 30_000,
+ * 	pairBytes: 3_599_880_000,
+ * 	reason: 'table-over-budget',
+ * };
+ * ```
+ */
+export interface SampledTemplateBlock {
+	/** The block's key. */
+	readonly blockKey: string;
+	/** Its pages. */
+	readonly pageCount: number;
+	/** Bytes its similarity table would have taken. */
+	readonly pairBytes: number;
+	/**
+	 * Why it was sampled: its table exceeds the memory budget, or the blocks
+	 * clustered whole would hold more than `@nitpicker/core`'s
+	 * `TEMPLATE_EXACT_PAGE_LIMIT` pages and it is among the largest.
+	 */
+	readonly reason: 'table-over-budget' | 'pages-over-limit';
+}
+
+/**
  * Options for {@link import('./classify-page-templates.js').classifyPageTemplates}.
  */
 export interface ClassifyPageTemplatesOptions {
@@ -60,6 +97,12 @@ export interface ClassifyPageTemplatesOptions {
 	 * pages must never be passed in per-batch slices.
 	 */
 	pages: readonly Page[];
+	/**
+	 * Bytes a block's Stage A similarity table may take before the block is
+	 * clustered from a sample instead; see `resolvePageClusterKeys`. Defaults
+	 * to `@nitpicker/core`'s `TEMPLATE_MEMORY_BUDGET`; `0` samples every block.
+	 */
+	memoryBudget?: number;
 	/**
 	 * Receives every {@link TemplateClassificationProgress} event of the call,
 	 * including the clustering phases `resolvePageClusterKeys` reports, so
@@ -96,16 +139,24 @@ export interface PageTemplateClassification {
 	/**
 	 * Template key → the classifier's cluster-selection evidence for that
 	 * key, one per final cluster. Built from each cluster's retained members
-	 * (on the streaming path, the block samples), so `memberCount` can be
-	 * smaller than the cluster's page count.
+	 * (the samples, for a sampled block), so `memberCount` can be smaller
+	 * than the cluster's page count.
 	 */
 	readonly clusterReasonsByTemplateKey: ReadonlyMap<string, TemplateClusterReason>;
+	/** The blocks clustered from a sample, in block order. */
+	readonly sampledBlocks: readonly SampledTemplateBlock[];
 }
 
 /**
  * Options for {@link import('./classify-archive-page-templates.js').classifyArchivePageTemplates}.
  */
 export interface ClassifyArchivePageTemplatesOptions {
+	/**
+	 * Bytes a block's Stage A similarity table may take before the block is
+	 * clustered from a sample instead; see `resolvePageClusterKeys`. Defaults
+	 * to `@nitpicker/core`'s `TEMPLATE_MEMORY_BUDGET`; `0` samples every block.
+	 */
+	readonly memoryBudget?: number;
 	/** Receives loading and clustering progress; omit for a silent run. */
 	readonly onProgress?: (event: TemplateClassificationProgress) => void;
 }
@@ -118,4 +169,6 @@ export interface ClassifyArchivePageTemplatesResult {
 	readonly classifiedPageCount: number;
 	/** Number of distinct template keys among them. */
 	readonly templateCount: number;
+	/** The blocks clustered from a sample, in block order; empty when none was. */
+	readonly sampledBlocks: readonly SampledTemplateBlock[];
 }

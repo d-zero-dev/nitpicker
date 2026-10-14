@@ -21,10 +21,13 @@ const fake = vi.hoisted(() => ({
 	signalBatches: [] as number[],
 	/** When set, every `pushPages` call rejects with it once it settles. */
 	pushError: undefined as Error | undefined,
+	/** Options of every `createTemplateClassificationRun` call. */
+	runOptions: [] as Record<string, unknown>[],
 }));
 
 vi.mock('@nitpicker/core/create-template-classification-run', () => ({
-	createTemplateClassificationRun: () => {
+	createTemplateClassificationRun: (options: Record<string, unknown>) => {
+		fake.runOptions.push(options);
 		let maskReads = 0;
 		return {
 			pushSignals: (signals: readonly TemplatePageSignals[]) => {
@@ -45,7 +48,19 @@ vi.mock('@nitpicker/core/create-template-classification-run', () => ({
 			needsAssignment: () => false,
 			pushAssignmentPages: () => Promise.resolve(),
 			takeOutput: () =>
-				Promise.resolve({ keys: [], keyOfPage: new Uint32Array(0), reasons: new Map() }),
+				Promise.resolve({
+					keys: [],
+					keyOfPage: new Uint32Array(0),
+					reasons: new Map(),
+					sampledBlocks: [
+						{
+							blockKey: 'path:p',
+							pageCount: 3,
+							pairBytes: 24,
+							reason: 'table-over-budget',
+						},
+					],
+				}),
 			cancel: () => {
 				fake.log.push('cancel');
 			},
@@ -88,6 +103,33 @@ describe('resolvePageClusterKeys driver', () => {
 		fake.pushedBatches = [];
 		fake.signalBatches = [];
 		fake.pushError = undefined;
+		fake.runOptions = [];
+	});
+
+	describe('the memory budget', () => {
+		test('is handed to the run when given, zero included', async () => {
+			fake.masks = [allUsed(0)];
+			await resolvePageClusterKeys(() => [], { memoryBudget: 0 });
+			await resolvePageClusterKeys(() => [], { memoryBudget: 1024 });
+
+			expect(fake.runOptions).toEqual([{ memoryBudget: 0 }, { memoryBudget: 1024 }]);
+		});
+
+		test('is left to the run default when omitted', async () => {
+			fake.masks = [allUsed(0)];
+			await resolvePageClusterKeys(() => []);
+
+			expect(fake.runOptions).toStrictEqual([{}]);
+		});
+
+		test('returns the blocks the run sampled', async () => {
+			fake.masks = [allUsed(0)];
+			const { sampledBlocks } = await resolvePageClusterKeys(() => []);
+
+			expect(sampledBlocks).toEqual([
+				{ blockKey: 'path:p', pageCount: 3, pairBytes: 24, reason: 'table-over-budget' },
+			]);
+		});
 	});
 
 	describe('reading the HTML ahead', () => {

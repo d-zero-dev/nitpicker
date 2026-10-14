@@ -3,6 +3,7 @@ import type {
 	TemplateClassificationRun,
 	TemplateClusterReason,
 	TemplatePageHtml,
+	TemplateSampledBlock,
 } from '@nitpicker/core/types';
 
 /**
@@ -28,17 +29,18 @@ export interface PageClusterPage {
 	readonly contentRoot?: ContentRootHint;
 	/**
 	 * The page's HTML, non-empty. Called only on the reads that use the page
-	 * (every page once in memory; on the streaming path the block samples on
-	 * the first read and the other pages on the second), so a page's HTML is
-	 * decompressed once however many times the corpus is read.
+	 * (every page of a block clustered whole, and the sampled pages of a
+	 * sampled block, on the first read; the other pages of the sampled blocks
+	 * on the second), so a page's HTML is decompressed once however many
+	 * times the corpus is read.
 	 */
 	getHtml(): string | Promise<string>;
 }
 
 /**
  * Factory returning an iterator over the corpus. Called once per read — the
- * signals, then the HTML, and on the streaming path the HTML again for the
- * pages outside the samples. Every call must yield the same pages in the
+ * signals, then the HTML, and, when a block was sampled, the HTML again for
+ * the pages outside the samples. Every call must yield the same pages in the
  * same order; a corpus that changes size between reads is rejected.
  *
  * A factory rather than an `AsyncIterable`: one returned once cannot be
@@ -52,13 +54,26 @@ export type PageFactory = () =>
 /**
  * Progress of `resolvePageClusterKeys`, a union on `phase`:
  * - `pass0-signals`: reading the blocking signals; every 1,000 pages.
+ * - `block-sampled`: a block will be clustered from a sample, because its
+ *   similarity table exceeds the memory budget or because the blocks
+ *   clustered whole would hold more than `@nitpicker/core`'s
+ *   `TEMPLATE_EXACT_PAGE_LIMIT` pages and it is among the largest; once per
+ *   such block, before any HTML is read.
  * - `pass1-block-complete`: one block's clusters are done.
- * - `pass1b-assign`: streaming path only; every 1,000 pages assigned to the
- *   sampled clusters.
+ * - `pass1b-assign`: only with a sampled block; every 1,000 pages assigned to
+ *   the sampled clusters.
  * - `stage-b-start`: the merge across blocks began; once per call.
  */
 export type ProgressEvent =
 	| { readonly phase: 'pass0-signals'; readonly pagesSeen: number }
+	| {
+			readonly phase: 'block-sampled';
+			readonly blockKey: string;
+			readonly pageCount: number;
+			readonly pairBytes: number;
+			readonly budget: number;
+			readonly reason: 'table-over-budget' | 'pages-over-limit';
+	  }
 	| {
 			readonly phase: 'pass1-block-complete';
 			readonly blockKey: string;
@@ -74,6 +89,12 @@ export type ProgressEvent =
 
 /** Options of `resolvePageClusterKeys`. */
 export interface ResolvePageClusterKeysOptions {
+	/**
+	 * Bytes a block's Stage A similarity table may take before the block is
+	 * clustered from a sample instead (`@nitpicker/core`'s
+	 * `TEMPLATE_MEMORY_BUDGET` by default; `0` samples every block).
+	 */
+	readonly memoryBudget: number;
 	/** Receives every {@link ProgressEvent}. */
 	readonly onProgress: (event: ProgressEvent) => void;
 }
@@ -84,10 +105,12 @@ export interface PageClusterKeys {
 	readonly keys: string[];
 	/**
 	 * Each final cluster's reason, by key. Built from the clusters' retained
-	 * members (the block samples on the streaming path), sized by cluster
-	 * count, not page count.
+	 * members (the samples, for a sampled block), sized by cluster count, not
+	 * page count.
 	 */
 	readonly reasons: ReadonlyMap<string, TemplateClusterReason>;
+	/** The blocks clustered from a sample, in block order. */
+	readonly sampledBlocks: readonly TemplateSampledBlock[];
 }
 
 /** One read of the corpus's HTML, as the driver hands it to the run. */
