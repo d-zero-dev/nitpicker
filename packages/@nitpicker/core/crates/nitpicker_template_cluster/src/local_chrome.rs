@@ -33,36 +33,54 @@ pub fn compute_local_chrome(pages: &[&[LandmarkInstance]]) -> LocalChrome {
 	if page_count == 0 {
 		return LocalChrome::default();
 	}
-	let mut counts: FxHashMap<&[u32], usize> = FxHashMap::default();
-	for instances in pages {
-		for instance in *instances {
-			*counts.entry(&instance.signature).or_insert(0) += 1;
-		}
-	}
+	// Each distinct signature is worked out once per instance and numbered;
+	// the rest of the function works with the numbers.
+	let mut number_of: FxHashMap<Vec<u32>, usize> = FxHashMap::default();
+	let mut counts: Vec<usize> = Vec::new();
+	let numbers_by_page: Vec<Vec<usize>> = pages
+		.iter()
+		.map(|instances| {
+			instances
+				.iter()
+				.map(|instance| {
+					let next = number_of.len();
+					let number = *number_of.entry(instance.signature()).or_insert(next);
+					if number == counts.len() {
+						counts.push(0);
+					}
+					counts[number] += 1;
+					number
+				})
+				.collect()
+		})
+		.collect();
 	if counts.is_empty() {
 		return empty();
 	}
 	// Page counts stay far below 2^52; the conversions are exact.
 	#[allow(clippy::cast_precision_loss)]
 	let frequency = |count: usize| count as f64 / page_count as f64;
-	let frequencies: Vec<f64> = counts.values().map(|&count| frequency(count)).collect();
+	let frequencies: Vec<f64> = counts.iter().map(|&count| frequency(count)).collect();
 	let cut = auto_cut_threshold(&frequencies, 0.8);
-	let signatures: FxHashSet<Vec<u32>> = counts
-		.iter()
-		.filter(|&(_, &count)| count >= 2 && frequency(count) < cut)
-		.map(|(signature, _)| signature.to_vec())
+	let is_local = |number: usize| counts[number] >= 2 && frequency(counts[number]) < cut;
+	let signatures: FxHashSet<Vec<u32>> = number_of
+		.into_iter()
+		.filter(|&(_, number)| is_local(number))
+		.map(|(signature, _)| signature)
 		.collect();
 	if signatures.is_empty() {
 		return empty();
 	}
 	let tokens_by_page = pages
 		.iter()
-		.map(|instances| {
+		.zip(&numbers_by_page)
+		.map(|(instances, numbers)| {
 			let mut seen = FxHashSet::default();
 			let mut tokens = Vec::new();
-			for instance in instances
+			for (instance, _) in instances
 				.iter()
-				.filter(|instance| signatures.contains(&instance.signature))
+				.zip(numbers)
+				.filter(|&(_, &number)| is_local(number))
 			{
 				for &token in &instance.tokens {
 					if seen.insert(token) {
@@ -103,31 +121,28 @@ mod tests {
 			sweep: true,
 			retain_markup: html_list.len() >= 10,
 		};
-		let pages: Vec<PreparedPage> = html_list
+		let mut pages: Vec<PreparedPage> = html_list
 			.iter()
 			.map(|html| prepare_page(html, None, preparation, &mut Ids::Shared(&vocabulary)))
 			.collect();
 		let instances: Vec<&[LandmarkInstance]> =
 			pages.iter().map(|page| page.instances.as_slice()).collect();
 		let chrome = compute_local_chrome(&instances);
-		let members: Vec<BlockMember> = pages
-			.iter()
+		let mut members: Vec<BlockMember> = pages
+			.iter_mut()
 			.zip(&chrome.tokens_by_page)
 			.map(|(page, tokens)| BlockMember {
 				page,
 				local_tokens: tokens,
 			})
 			.collect();
-		stage_a("path:articles", &members, &vocabulary)
+		stage_a("path:articles", &mut members, &vocabulary)
 	}
 
 	fn instance(tokens: &[u32]) -> LandmarkInstance {
-		let mut signature = tokens.to_vec();
-		signature.sort_unstable();
 		LandmarkInstance {
 			kind: LandmarkType::Nav,
 			tokens: tokens.to_vec(),
-			signature,
 		}
 	}
 
@@ -173,7 +188,7 @@ mod tests {
 			let mut sorted = instance.tokens.clone();
 			sorted.sort_unstable();
 			sorted.dedup();
-			assert_eq!(instance.signature, sorted);
+			assert_eq!(instance.signature(), sorted);
 		}
 	}
 
@@ -196,7 +211,7 @@ mod tests {
 			"<body><nav><a class=\"one\">a</a></nav><nav><a class=\"two\">b</a></nav></body>",
 		);
 		assert_eq!(page.instances.len(), 2);
-		assert_ne!(page.instances[0].signature, page.instances[1].signature);
+		assert_ne!(page.instances[0].signature(), page.instances[1].signature());
 	}
 
 	#[test]
@@ -207,7 +222,7 @@ mod tests {
 		let b = prepare(&vocabulary, html);
 		assert_eq!(a.instances.len(), 1);
 		assert_eq!(b.instances.len(), 1);
-		assert_eq!(a.instances[0].signature, b.instances[0].signature);
+		assert_eq!(a.instances[0].signature(), b.instances[0].signature());
 	}
 
 	#[test]

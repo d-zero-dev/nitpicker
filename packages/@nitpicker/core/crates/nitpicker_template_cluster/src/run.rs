@@ -529,7 +529,7 @@ impl Run {
 			let sample = self.samples[block]
 				.take()
 				.expect("a completing block is unfinished");
-			self.flush_block(block, &sample);
+			self.flush_block(block, sample);
 			self.blocks_completed += 1;
 			(context.progress)(Progress::BlockComplete {
 				block_key: self.block_keys[block].clone(),
@@ -582,22 +582,25 @@ impl Run {
 		key_indices
 	}
 
-	fn flush_block(&mut self, block: usize, sample: &Sample) {
-		let pages: Vec<&PreparedPage> = sample
+	fn flush_block(&mut self, block: usize, sample: Sample) {
+		let mut pages: Vec<PreparedPage> = sample
 			.prepared
-			.iter()
-			.map(|page| page.as_ref().expect("every sampled page was read"))
+			.into_iter()
+			.map(|page| page.expect("every sampled page was read"))
 			.collect();
 		let instances: Vec<&[LandmarkInstance]> =
 			pages.iter().map(|page| page.instances.as_slice()).collect();
 		let chrome = compute_local_chrome(&instances);
-		let members: Vec<BlockMember> = pages
-			.iter()
-			.zip(&chrome.tokens_by_page)
-			.map(|(page, local_tokens)| BlockMember { page, local_tokens })
-			.collect();
-		let result = stage_a(&self.block_keys[block], &members, &self.vocabulary);
-		let key_indices = self.record_block(block, &sample.pages, &pages, &result);
+		let result = {
+			let mut members: Vec<BlockMember> = pages
+				.iter_mut()
+				.zip(&chrome.tokens_by_page)
+				.map(|(page, local_tokens)| BlockMember { page, local_tokens })
+				.collect();
+			stage_a(&self.block_keys[block], &mut members, &self.vocabulary)
+		};
+		let page_refs: Vec<&PreparedPage> = pages.iter().collect();
+		let key_indices = self.record_block(block, &sample.pages, &page_refs, &result);
 
 		if sample.pages.len() < self.block_sizes[block] {
 			let clusters = result
@@ -694,24 +697,25 @@ impl Run {
 					.iter()
 					.map(|&position| self.exact_page_indices[position])
 					.collect();
-				let block_pages: Vec<&PreparedPage> = positions
+				// A block's pages are not needed past its own Stage A: they are
+				// taken out of `pages` and dropped at the end of this scope.
+				let mut block_pages: Vec<PreparedPage> = positions
 					.iter()
-					.map(|&position| pages[position].as_ref().expect("a page is clustered once"))
+					.map(|&position| pages[position].take().expect("a page is clustered once"))
 					.collect();
-				let members: Vec<BlockMember> = positions
-					.iter()
-					.zip(&block_pages)
-					.map(|(&position, page)| BlockMember {
-						page,
-						local_tokens: &chrome.tokens_by_page[position],
-					})
-					.collect();
-				let result = stage_a(&self.block_keys[block], &members, &self.vocabulary);
-				self.record_block(block, &page_indices, &block_pages, &result);
-			}
-			// A block's pages are not needed past its own Stage A.
-			for &position in positions {
-				pages[position] = None;
+				let result = {
+					let mut members: Vec<BlockMember> = positions
+						.iter()
+						.zip(&mut block_pages)
+						.map(|(&position, page)| BlockMember {
+							page,
+							local_tokens: &chrome.tokens_by_page[position],
+						})
+						.collect();
+					stage_a(&self.block_keys[block], &mut members, &self.vocabulary)
+				};
+				let page_refs: Vec<&PreparedPage> = block_pages.iter().collect();
+				self.record_block(block, &page_indices, &page_refs, &result);
 			}
 			self.blocks_completed += 1;
 			(context.progress)(Progress::BlockComplete {

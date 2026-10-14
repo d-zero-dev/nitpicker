@@ -3,7 +3,8 @@
 //! Two limits decide it, each bounding a different memory: Stage A's
 //! similarity table (per block, `n * (n - 1) / 2 * 8` bytes) and the pages
 //! held until the blocks clustered whole are processed (all of them at once,
-//! about 60 KB a page). The table limit is the caller's budget. The page
+//! at most about 60 KB a page: depths that cut the same spans share their
+//! tokens and the markup is held compressed, so it is usually less). The table limit is the caller's budget. The page
 //! limit is fixed at [`EXACT_PAGE_LIMIT`] and bounds only the held pages;
 //! the table of a block is bounded by the budget alone.
 

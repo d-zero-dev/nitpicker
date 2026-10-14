@@ -27,8 +27,10 @@ const MIN_PAGES_PER_RECURRING_CLASS: usize = 2;
 
 /// One page of a block.
 pub struct BlockMember<'a> {
-	/// What was read from the page.
-	pub page: &'a PreparedPage,
+	/// What was read from the page. [`stage_a`] releases its tokens and
+	/// markup once the block's comparison sets are built (see
+	/// [`PreparedPage::release_tokens`]); its landmark instances stay.
+	pub page: &'a mut PreparedPage,
 	/// The tokens of its local-chrome landmark instances.
 	pub local_tokens: &'a [u32],
 }
@@ -132,7 +134,11 @@ fn fold_contained(
 /// comparison sets, the complete-linkage dendrogram, its max-gap cut
 /// (at most [`SIMILARITY_THRESHOLD`]) and, from the same floor, folding
 /// clusters into ones containing them.
-pub fn stage_a(block_key: &str, members: &[BlockMember], vocabulary: &Vocabulary) -> StageAResult {
+pub fn stage_a(
+	block_key: &str,
+	members: &mut [BlockMember],
+	vocabulary: &Vocabulary,
+) -> StageAResult {
 	let size = members.len();
 
 	let depth_index = (size > 1).then(|| {
@@ -177,7 +183,7 @@ pub fn stage_a(block_key: &str, members: &[BlockMember], vocabulary: &Vocabulary
 
 	let token_sets: Vec<Vec<u32>> = tokens
 		.into_iter()
-		.zip(members)
+		.zip(members.iter())
 		.map(|(mut tokens, member)| {
 			let mut seen: FxHashSet<u32> = tokens.iter().copied().collect();
 			for &token in member.local_tokens {
@@ -188,6 +194,12 @@ pub fn stage_a(block_key: &str, members: &[BlockMember], vocabulary: &Vocabulary
 			tokens
 		})
 		.collect();
+
+	// The pages' tokens and markup are not read again; only the comparison
+	// sets are, and they are what the quadratic work below holds beside.
+	for member in members.iter_mut() {
+		member.page.release_tokens();
+	}
 
 	let sorted: Vec<Vec<u32>> = token_sets.iter().map(|set| sorted_set(set)).collect();
 	let comparison_sets = derive_comparison_sets(&sorted);
@@ -238,7 +250,7 @@ mod tests {
 		MIN_PAGE_COUNT_FOR_FREQUENCY_SPLIT, derive_comparison_sets,
 	};
 	use crate::jaccard::{jaccard, sorted_set};
-	use crate::page::{Preparation, prepare_page};
+	use crate::page::{DepthTokens, Preparation, prepare_page};
 	use crate::vocabulary::{Ids, Vocabulary};
 
 	/// Stage A on one block (`path:section`) of `html_list`, with no local
@@ -253,7 +265,7 @@ mod tests {
 			sweep: size > 1,
 			retain_markup: size >= MIN_PAGE_COUNT_FOR_FREQUENCY_SPLIT,
 		};
-		let pages: Vec<_> = {
+		let mut pages: Vec<_> = {
 			let mut ids = Ids::Shared(&vocabulary);
 			html_list
 				.iter()
@@ -264,14 +276,14 @@ mod tests {
 				})
 				.collect()
 		};
-		let members: Vec<BlockMember> = pages
-			.iter()
+		let mut members: Vec<BlockMember> = pages
+			.iter_mut()
 			.map(|page| BlockMember {
 				page,
 				local_tokens: &[],
 			})
 			.collect();
-		let result = stage_a("path:section", &members, &vocabulary);
+		let result = stage_a("path:section", &mut members, &vocabulary);
 		(result, vocabulary)
 	}
 
@@ -335,22 +347,48 @@ mod tests {
 			sweep: true,
 			retain_markup: false,
 		};
-		let pages: Vec<_> = [list, list, detail, detail]
+		let mut pages: Vec<_> = [list, list, detail, detail]
 			.iter()
 			.map(|html| prepare_page(html, None, preparation, &mut ids))
 			.collect();
-		let members: Vec<BlockMember> = pages
-			.iter()
+		let mut members: Vec<BlockMember> = pages
+			.iter_mut()
 			.map(|page| BlockMember {
 				page,
 				local_tokens: &[],
 			})
 			.collect();
-		let result = stage_a("path:news", &members, &vocabulary);
+		let result = stage_a("path:news", &mut members, &vocabulary);
 		assert_eq!(result.cluster_of_member, vec![0, 0, 1, 1]);
 		assert_eq!(result.clusters[1].key, "[\"path:news\",\"cluster:1\"]");
 		assert_eq!(result.max_depth, Some(10));
 		assert!(result.allowed_classes.is_none());
+	}
+
+	#[test]
+	fn releases_the_tokens_of_its_pages_but_not_their_landmarks() {
+		let vocabulary = Vocabulary::default();
+		let mut ids = Ids::Shared(&vocabulary);
+		let preparation = Preparation {
+			sweep: true,
+			retain_markup: false,
+		};
+		let html = "<body><nav><a>n</a></nav><main><p>a</p></main></body>";
+		let mut pages: Vec<_> = (0..2)
+			.map(|_| prepare_page(html, None, preparation, &mut ids))
+			.collect();
+		let mut members: Vec<BlockMember> = pages
+			.iter_mut()
+			.map(|page| BlockMember {
+				page,
+				local_tokens: &[],
+			})
+			.collect();
+		stage_a("path:news", &mut members, &vocabulary);
+		for page in &pages {
+			assert!(matches!(page.depth_tokens, DepthTokens::Released));
+			assert_eq!(page.instances.len(), 1);
+		}
 	}
 
 	#[test]

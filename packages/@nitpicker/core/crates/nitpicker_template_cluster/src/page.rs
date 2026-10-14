@@ -1,6 +1,7 @@
 //! Everything the classifier derives from one page's HTML.
 
 use std::ops::Range;
+use std::sync::Arc;
 
 use nitpicker_html_parser::{Document, parse};
 use rustc_hash::FxHashSet;
@@ -22,16 +23,32 @@ pub struct LandmarkInstance {
 	pub kind: LandmarkType,
 	/// Its tokens, in document order.
 	pub tokens: Vec<u32>,
+}
+
+impl LandmarkInstance {
 	/// Its token set, ascending: equal for instances with equal token sets.
-	pub signature: Vec<u32>,
+	///
+	/// Worked out per call rather than kept beside [`LandmarkInstance::tokens`]:
+	/// a page holds its instances until its block is clustered, and the
+	/// signature would be a second copy of the tokens.
+	#[must_use]
+	pub fn signature(&self) -> Vec<u32> {
+		sorted_set(&self.tokens)
+	}
 }
 
 /// Each landmark instance's tokens (the instance's markup wrapped in a
 /// `<body>`), skipping instances without tokens and, within the page,
 /// instances whose token set repeats an earlier one (a duplicated footer,
-/// one element matching two types) — so none counts twice.
-fn landmark_instances(html: &str, landmarks: &Landmarks, ids: &mut Ids) -> Vec<LandmarkInstance> {
-	let mut instances: Vec<LandmarkInstance> = Vec::new();
+/// one element matching two types) — so none counts twice. Each comes with
+/// its signature, for a caller that compares it at once.
+fn landmark_instances(
+	html: &str,
+	landmarks: &Landmarks,
+	ids: &mut Ids,
+) -> Vec<(LandmarkInstance, Vec<u32>)> {
+	let mut instances: Vec<(LandmarkInstance, Vec<u32>)> = Vec::new();
+	let mut seen: FxHashSet<Vec<u32>> = FxHashSet::default();
 	for (kind, range) in &landmarks.instances {
 		let wrapped = format!("<body>{}</body>", &html[range.clone()]);
 		let tokens = tokenize(&wrapped, None, ids).tokens;
@@ -39,17 +56,16 @@ fn landmark_instances(html: &str, landmarks: &Landmarks, ids: &mut Ids) -> Vec<L
 			continue;
 		}
 		let signature = sorted_set(&tokens);
-		if instances
-			.iter()
-			.any(|instance| instance.signature == signature)
-		{
+		if !seen.insert(signature.clone()) {
 			continue;
 		}
-		instances.push(LandmarkInstance {
-			kind: *kind,
-			tokens,
+		instances.push((
+			LandmarkInstance {
+				kind: *kind,
+				tokens,
+			},
 			signature,
-		});
+		));
 	}
 	instances
 }
@@ -79,8 +95,30 @@ pub enum DepthTokens {
 	/// The same at every depth: no content root, or a single-page block
 	/// (which never caps).
 	Uncapped(Tokenized),
-	/// One entry per [`CANDIDATE_DEPTHS`] entry.
-	ByDepth(Vec<Tokenized>),
+	/// One entry per [`CANDIDATE_DEPTHS`] entry. Depths that cut the same
+	/// spans (a page with nothing below the shallower depth cuts the same
+	/// at every deeper one) share one allocation.
+	ByDepth(Vec<Arc<Tokenized>>),
+	/// Dropped by [`PreparedPage::release_tokens`]: the block's comparison
+	/// sets are built and nothing reads the tokens again.
+	Released,
+}
+
+/// `depth_spans` with each entry that equals an earlier one pointing at
+/// that one's allocation.
+fn share_equal_spans(depth_spans: Vec<Vec<Range<usize>>>) -> Vec<Arc<[Range<usize>]>> {
+	let mut shared: Vec<Arc<[Range<usize>]>> = Vec::with_capacity(depth_spans.len());
+	for spans in depth_spans {
+		let earlier = shared
+			.iter()
+			.find(|earlier| earlier.as_ref() == spans.as_slice());
+		let next = match earlier {
+			Some(earlier) => Arc::clone(earlier),
+			None => Arc::from(spans),
+		};
+		shared.push(next);
+	}
+	shared
 }
 
 impl DepthTokens {
@@ -89,13 +127,16 @@ impl DepthTokens {
 	/// # Panics
 	///
 	/// When asked for no depth on a page that was swept: a swept block always
-	/// chooses one.
+	/// chooses one. Also after [`PreparedPage::release_tokens`]: Stage A
+	/// releases a block's pages once, after its comparison sets are built,
+	/// and a block is clustered once.
 	#[must_use]
 	pub fn at(&self, depth_index: Option<usize>) -> &Tokenized {
 		match (self, depth_index) {
 			(Self::Uncapped(tokens), _) => tokens,
-			(Self::ByDepth(by_depth), Some(index)) => &by_depth[index],
+			(Self::ByDepth(by_depth), Some(index)) => by_depth[index].as_ref(),
 			(Self::ByDepth(_), None) => unreachable!("a swept block always chooses a depth"),
+			(Self::Released, _) => unreachable!("released tokens are not read"),
 		}
 	}
 }
@@ -114,10 +155,14 @@ pub struct PreparedPage {
 }
 
 /// See [`PreparedPage::retained`].
+///
+/// The markup is held LZ4-compressed (HTML shrinks to a third or less):
+/// it is the largest thing a page keeps until its block is clustered, and
+/// it is read once more, by [`PreparedPage::tokens_with_allowed_classes`].
 #[derive(Debug)]
 pub struct RetainedMarkup {
-	prepared: String,
-	depth_spans: Option<Vec<Vec<Range<usize>>>>,
+	compressed: Vec<u8>,
+	depth_spans: Option<Vec<Arc<[Range<usize>]>>>,
 }
 
 /// How a page's block will use it.
@@ -143,7 +188,10 @@ pub fn prepare_page(
 	ids: &mut Ids,
 ) -> PreparedPage {
 	let landmarks = extract_landmarks(html, &parse(html));
-	let instances = landmark_instances(html, &landmarks, ids);
+	let instances = landmark_instances(html, &landmarks, ids)
+		.into_iter()
+		.map(|(instance, _)| instance)
+		.collect();
 	let prepared = landmarks.remainder;
 	let document = parse(&prepared);
 	let mut cache = ReplayCache::default();
@@ -153,15 +201,26 @@ pub fn prepare_page(
 	} else {
 		None
 	};
-	let depth_spans =
-		content.map(|content| collect_deep_spans(&prepared, content, &CANDIDATE_DEPTHS));
+	let depth_spans = content.map(|content| {
+		share_equal_spans(collect_deep_spans(&prepared, content, &CANDIDATE_DEPTHS))
+	});
 	let depth_tokens = match &depth_spans {
-		Some(depth_spans) => DepthTokens::ByDepth(
-			depth_spans
-				.iter()
-				.map(|spans| tokens_without(&prepared, &document, spans, None, &mut cache, ids))
-				.collect(),
-		),
+		Some(depth_spans) => {
+			let mut by_depth: Vec<Arc<Tokenized>> = Vec::with_capacity(depth_spans.len());
+			for (depth, spans) in depth_spans.iter().enumerate() {
+				let same_cut = depth_spans[..depth]
+					.iter()
+					.position(|earlier| Arc::ptr_eq(earlier, spans));
+				let tokenized = match same_cut {
+					Some(earlier) => Arc::clone(&by_depth[earlier]),
+					None => Arc::new(tokens_without(
+						&prepared, &document, spans, None, &mut cache, ids,
+					)),
+				};
+				by_depth.push(tokenized);
+			}
+			DepthTokens::ByDepth(by_depth)
+		}
 		None => DepthTokens::Uncapped(tokens_without(
 			&prepared,
 			&document,
@@ -174,20 +233,32 @@ pub fn prepare_page(
 	PreparedPage {
 		instances,
 		depth_tokens,
-		retained: preparation.retain_markup.then_some(RetainedMarkup {
-			prepared,
+		retained: preparation.retain_markup.then(|| RetainedMarkup {
+			compressed: lz4_flex::compress_prepend_size(prepared.as_bytes()),
 			depth_spans,
 		}),
 	}
 }
 
 impl PreparedPage {
+	/// Drops what only the block's comparison sets are built from — the
+	/// tokens at every depth and the retained markup — keeping the landmark
+	/// instances, which Stage B still needs.
+	///
+	/// Called once Stage A has built its comparison sets, so the quadratic
+	/// work that follows does not hold every page's parse results beside it.
+	pub fn release_tokens(&mut self) {
+		self.depth_tokens = DepthTokens::Released;
+		self.retained = None;
+	}
+
 	/// The page's tokens at `CANDIDATE_DEPTHS[depth_index]` (or uncapped)
 	/// keeping only the classes in `allowed`.
 	///
 	/// # Panics
 	///
-	/// When the page was prepared without [`Preparation::retain_markup`].
+	/// When the page was prepared without [`Preparation::retain_markup`], or
+	/// after [`PreparedPage::release_tokens`].
 	pub fn tokens_with_allowed_classes(
 		&self,
 		depth_index: Option<usize>,
@@ -202,9 +273,14 @@ impl PreparedPage {
 			(Some(depth_spans), Some(index)) => &depth_spans[index],
 			_ => &[],
 		};
-		let document = parse(&retained.prepared);
+		let prepared = String::from_utf8(
+			lz4_flex::decompress_size_prepended(&retained.compressed)
+				.expect("the markup was compressed by `prepare_page`"),
+		)
+		.expect("the markup was compressed from a `String`");
+		let document = parse(&prepared);
 		tokens_without(
-			&retained.prepared,
+			&prepared,
 			&document,
 			spans,
 			Some(allowed),
@@ -245,8 +321,8 @@ pub fn assignment_tokens(
 	)
 	.tokens;
 	if !local_signatures.is_empty() {
-		for instance in landmark_instances(html, &landmarks, ids) {
-			if local_signatures.contains(&instance.signature) {
+		for (instance, signature) in landmark_instances(html, &landmarks, ids) {
+			if local_signatures.contains(&signature) {
 				tokens.extend(instance.tokens);
 			}
 		}
@@ -257,10 +333,12 @@ pub fn assignment_tokens(
 #[cfg(test)]
 mod tests {
 	use std::path::{Path, PathBuf};
+	use std::sync::Arc;
 
 	use nitpicker_html_parser::parse;
 	use rustc_hash::FxHashSet;
 
+	use super::{DepthTokens, Preparation, prepare_page};
 	use crate::collect_deep_spans::collect_deep_spans;
 	use crate::content_root::find_content_root;
 	use crate::detect_content_depth_cap::CANDIDATE_DEPTHS;
@@ -304,6 +382,68 @@ mod tests {
 			corpus.push((file.display().to_string(), html));
 		}
 		corpus
+	}
+
+	#[test]
+	fn shares_the_tokens_of_depths_that_cut_the_same_spans() {
+		let vocabulary = Vocabulary::default();
+		let preparation = Preparation {
+			sweep: true,
+			retain_markup: true,
+		};
+		// Nothing below level 2, so no depth cuts anything.
+		let shallow = prepare_page(
+			"<body><main><p>a</p><p>b</p></main></body>",
+			None,
+			preparation,
+			&mut Ids::Shared(&vocabulary),
+		);
+		let DepthTokens::ByDepth(by_depth) = &shallow.depth_tokens else {
+			panic!("a swept page with a content root is tokenized per depth");
+		};
+		assert_eq!(by_depth.len(), CANDIDATE_DEPTHS.len());
+		assert!(
+			by_depth
+				.iter()
+				.all(|tokens| Arc::ptr_eq(tokens, &by_depth[0]))
+		);
+
+		// A chain deeper than the deepest candidate is cut differently by every one.
+		let levels = CANDIDATE_DEPTHS[CANDIDATE_DEPTHS.len() - 1] + 2;
+		let chain = format!(
+			"<body><main>{}x{}</main></body>",
+			"<div>".repeat(levels),
+			"</div>".repeat(levels)
+		);
+		let deep = prepare_page(&chain, None, preparation, &mut Ids::Shared(&vocabulary));
+		let DepthTokens::ByDepth(by_depth) = &deep.depth_tokens else {
+			panic!("a swept page with a content root is tokenized per depth");
+		};
+		for (first, second) in by_depth.iter().zip(by_depth.iter().skip(1)) {
+			assert!(!Arc::ptr_eq(first, second));
+		}
+	}
+
+	#[test]
+	fn keeps_its_landmark_instances_when_the_tokens_are_released() {
+		let vocabulary = Vocabulary::default();
+		let preparation = Preparation {
+			sweep: true,
+			retain_markup: true,
+		};
+		let mut page = prepare_page(
+			"<body><nav><a>x</a></nav><main><p>a</p></main></body>",
+			None,
+			preparation,
+			&mut Ids::Shared(&vocabulary),
+		);
+		let instances = page.instances.clone();
+		assert!(!instances.is_empty());
+		assert!(page.retained.is_some());
+		page.release_tokens();
+		assert_eq!(page.instances, instances);
+		assert!(page.retained.is_none());
+		assert!(matches!(page.depth_tokens, DepthTokens::Released));
 	}
 
 	/// Where the replay claims to apply, it must give exactly what parsing
