@@ -3,17 +3,10 @@ import type {
 	ClassifyArchivePageTemplatesResult,
 } from './types.js';
 import type Archive from '../archive.js';
-import type Page from '../page.js';
 
 import { classifyPageTemplates } from './classify-page-templates.js';
-
-/**
- * Number of page handles loaded per `getPagesWithRefs` batch. `Page`
- * instances are lightweight handles (HTML is fetched lazily via `getHtml()`),
- * so accumulating every page of a several-hundred-thousand-page archive is
- * not an OOM risk; the batch size only bounds each query's result set.
- */
-const PAGE_BATCH_SIZE = 100_000;
+import { collectPageIdsWithHtml } from './collect-page-ids-with-html.js';
+import { loadPageClusterCandidates } from './load-page-cluster-candidates.js';
 
 /**
  * Classifies every internal HTML page of the archive into a template group
@@ -26,9 +19,11 @@ const PAGE_BATCH_SIZE = 100_000;
  * their archive. It is a corpus-wide batch computation (template keys are
  * only comparable within one run), not a per-page one.
  *
- * Every page is loaded before clustering starts and clustered **once**,
- * never per `getPagesWithRefs` batch: per-batch keys would only be
- * comparable within their own batch.
+ * The signals of every internal HTML page with a stored snapshot are loaded
+ * before clustering starts (`loadPageClusterCandidates`: ids and the few
+ * columns the classifier reads, no `Page` objects) and clustered **once**,
+ * never per loading batch: per-batch keys would only be comparable within
+ * their own batch.
  *
  * A run that classifies no page at all (no internal page has a stored HTML
  * snapshot to cluster) leaves the stored classification untouched instead of
@@ -57,30 +52,19 @@ export async function classifyArchivePageTemplates(
 	options: ClassifyArchivePageTemplatesOptions = {},
 ): Promise<ClassifyArchivePageTemplatesResult> {
 	const { memoryBudget, onProgress } = options;
-	const pages: Page[] = [];
+
+	onProgress?.({ phase: 'listing-html-snapshots' });
+	const pageIdsWithHtml = await collectPageIdsWithHtml(archive);
 
 	onProgress?.({ phase: 'loading-pages-start' });
-
-	await archive.getPagesWithRefs(
-		PAGE_BATCH_SIZE,
-		(batch, currentOffset, total) => {
-			// Avoid `push(...batch)`: a 100,000-page batch can overflow V8's
-			// argument-spread limit even though the data itself fits in memory.
-			for (const page of batch) {
-				pages.push(page);
-			}
-			onProgress?.({
-				phase: 'loading-pages',
-				done: currentOffset + batch.length,
-				total,
-			});
-		},
-		{ withRefs: false },
-	);
+	const candidates = await loadPageClusterCandidates(archive, {
+		pageIdsWithHtml,
+		...(onProgress ? { onProgress } : {}),
+	});
 
 	const classification = await classifyPageTemplates({
 		archive,
-		pages,
+		candidates,
 		...(memoryBudget === undefined ? {} : { memoryBudget }),
 		onProgress,
 	});

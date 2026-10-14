@@ -1,4 +1,4 @@
-import type Page from '../page.js';
+import type { ContentRootSource } from './types.js';
 import type { ContentRootHint } from '@nitpicker/core/types';
 
 /**
@@ -26,25 +26,26 @@ import type { ContentRootHint } from '@nitpicker/core/types';
  * `tag#id.class` string that is not guaranteed unique and would need a CSS
  * selector parser on the library side; the four structured columns carry the
  * same information without parsing.
- * @param page - Anything exposing the four main-content getters of `Page`.
+ * @param source - The four main-content values of a page; a `Page` satisfies it.
  * @returns The hint, or `undefined` when there is nothing to anchor on.
  * @example
  * ```ts
- * createContentRootHint(page);
+ * createContentRootHint({
+ * 	mainContentNodeName: 'DIV',
+ * 	mainContentId: 'main',
+ * 	mainContentRole: null,
+ * 	mainContentClassList: ['spc'],
+ * });
  * // { tagName: 'div', id: 'main', classList: ['spc'] }
  * ```
  */
 export function createContentRootHint(
-	page: Pick<
-		Page,
-		'mainContentNodeName' | 'mainContentId' | 'mainContentRole' | 'mainContentClassList'
-	>,
+	source: ContentRootSource,
 ): ContentRootHint | undefined {
-	const tagName = page.mainContentNodeName?.toLowerCase();
-	const id = page.mainContentId;
-	const role = page.mainContentRole;
-	// The getter parses JSON on every read, so read it once.
-	const classList = page.mainContentClassList;
+	const tagName = source.mainContentNodeName?.toLowerCase();
+	const id = source.mainContentId;
+	const role = source.mainContentRole;
+	const classList = source.mainContentClassList;
 
 	const hint = {
 		...(tagName ? { tagName } : {}),

@@ -100,6 +100,7 @@ async function runFull(writable) {
 			sampledBlocks: result.sampledBlocks.length,
 			sampledPages: result.sampledBlocks.reduce((sum, block) => sum + block.pageCount, 0),
 			phasesMs: {
+				listingSnapshots: span('listing-html-snapshots', 'loading-pages-start'),
 				loadingPages: span('loading-pages-start', 'collecting-stylesheets'),
 				untilStageB: span('collecting-stylesheets', 'stage-b-start'),
 				stageB: span('stage-b-start', 'writing-results'),

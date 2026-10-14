@@ -1,6 +1,52 @@
 import type Archive from '../archive.js';
 import type { TemplateClusterReason } from '../db-ops/templates/types.js';
-import type Page from '../page.js';
+import type { ContentRootHint } from '@nitpicker/core/types';
+
+/**
+ * The four values of a page's detected main-content element that
+ * `createContentRootHint` builds the classifier's content-root hint from.
+ * Structurally the matching getters of `Page`, and the decoded
+ * `page_meta.main_content_*` columns `loadPageClusterCandidates` reads.
+ */
+export interface ContentRootSource {
+	/** The element's DOM node name (`'DIV'`), or `null`. */
+	readonly mainContentNodeName: string | null;
+	/** The element's `id`, or `null`. */
+	readonly mainContentId: string | null;
+	/** The element's `role`, or `null`. */
+	readonly mainContentRole: string | null;
+	/** The element's CSS classes, or `null` when no main region was detected. */
+	readonly mainContentClassList: readonly string[] | null;
+}
+
+/**
+ * What template classification keeps of one internal HTML page while it
+ * waits for the clustering: the page's id (to read its HTML by) and the
+ * signals the classifier reads without HTML. Deliberately not a `Page` — a
+ * `Page` holds the page's whole row (every meta column), and holding one per
+ * page of a several-hundred-thousand-page archive is what this type avoids.
+ * @example
+ * ```ts
+ * const candidate: PageClusterCandidate = {
+ * 	id: 12,
+ * 	href: 'https://example.com/news/1',
+ * 	paths: ['news', '1'],
+ * 	host: 'example.com',
+ * };
+ * ```
+ */
+export interface PageClusterCandidate {
+	/** `Page.id`; the key the page's HTML is read by. */
+	readonly id: number;
+	/** The page's `url.href`; the key of its result and of its stylesheet references. */
+	readonly href: string;
+	/** The page's URL path segments. */
+	readonly paths: readonly string[];
+	/** `hostname`, or `hostname:port` when the URL has a port. */
+	readonly host: string;
+	/** The crawler-detected main-content hint; absent when none was detected. */
+	readonly contentRoot?: ContentRootHint;
+}
 
 /**
  * Progress of the clustering step itself. A copy of the page-cluster
@@ -37,16 +83,16 @@ export type TemplateClusteringProgress =
 /**
  * Progress of the whole crawl-end classification
  * ({@link import('./classify-archive-page-templates.js').classifyArchivePageTemplates}):
- * loading every page handle out of the archive, gathering stylesheet
- * references, listing the pages with stored HTML, the clustering phases,
- * then writing the result.
+ * listing the pages with stored HTML, loading their signals out of the
+ * archive, gathering stylesheet references, the clustering phases, then
+ * writing the result.
  *
  * `loading-pages-start`, `collecting-stylesheets`, `listing-html-snapshots`
  * and `writing-results` carry no count: each is a step with no natural
- * progress unit (a single batched query, three chained SQL passes, one join
- * query, one write transaction), so they only announce that the step began —
- * otherwise the previous step's last message would stay on screen and look
- * like a stall.
+ * progress unit (a count query followed by keyset batches that report their
+ * own `loading-pages` counts, three chained SQL passes, one join query, one
+ * write transaction), so they only announce that the step began — otherwise
+ * the previous step's last message would stay on screen and look like a stall.
  */
 export type TemplateClassificationProgress =
 	| { readonly phase: 'loading-pages-start' }
@@ -92,11 +138,13 @@ export interface ClassifyPageTemplatesOptions {
 	/** The archive to read stylesheet references and the stored-HTML listing from. */
 	archive: Archive;
 	/**
-	 * Every page of the archive. Classification is a corpus-wide batch
-	 * computation: template keys are only comparable within one call, so the
-	 * pages must never be passed in per-batch slices.
+	 * Every internal HTML page of the archive that has a stored HTML snapshot
+	 * (`loadPageClusterCandidates`).
+	 * Classification is a corpus-wide batch computation: template keys are
+	 * only comparable within one call, so the pages must never be passed in
+	 * per-batch slices.
 	 */
-	pages: readonly Page[];
+	candidates: readonly PageClusterCandidate[];
 	/**
 	 * Bytes a block's Stage A similarity table may take before the block is
 	 * clustered from a sample instead; see `resolvePageClusterKeys`. Defaults
@@ -113,18 +161,33 @@ export interface ClassifyPageTemplatesOptions {
 }
 
 /**
+ * Options for {@link import('./load-page-cluster-candidates.js').loadPageClusterCandidates}.
+ */
+export interface LoadPageClusterCandidatesOptions {
+	/**
+	 * Output of `collectPageIdsWithHtml`: only pages whose id is in it are
+	 * loaded, so pages with no stored HTML never take part (nor stay resident).
+	 */
+	readonly pageIdsWithHtml: ReadonlySet<number>;
+	/** Receives a `loading-pages` event after each batch. */
+	readonly onProgress?: (event: TemplateClassificationProgress) => void;
+	/** Rows read per query. Defaults to 10,000; a bound on one query's transient garbage only. */
+	readonly batchSize?: number;
+}
+
+/**
  * Options for {@link import('./create-page-cluster-factory.js').createPageClusterFactory}.
  */
 export interface CreatePageClusterFactoryOptions {
+	/** Reads each page's HTML by id, only on the reads that use it. */
+	readonly archive: Pick<Archive, 'getHtmlOfPage'>;
 	/**
-	 * Candidate pages, as already loaded by `classifyArchivePageTemplates`
-	 * (the factory does not re-query the archive).
+	 * The pages to cluster, as `loadPageClusterCandidates` returned them
+	 * (already limited to pages with a stored HTML snapshot).
 	 */
-	readonly pages: readonly Page[];
-	/** Output of `collectPageStylesheetUrls`, keyed by `page.url.href`. */
+	readonly candidates: readonly PageClusterCandidate[];
+	/** Output of `collectPageStylesheetUrls`, keyed by `url.href`. */
 	readonly stylesheetsByUrl: ReadonlyMap<string, readonly string[]>;
-	/** Output of `collectPageIdsWithHtml`. */
-	readonly pageIdsWithHtml: ReadonlySet<number>;
 }
 
 /**

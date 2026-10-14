@@ -7,6 +7,8 @@ import Archive from '../archive.js';
 import { decodeJsonRef } from '../db-ops/_shared/decode-json-ref.js';
 
 import { classifyPageTemplates } from './classify-page-templates.js';
+import { collectPageIdsWithHtml } from './collect-page-ids-with-html.js';
+import { loadPageClusterCandidates } from './load-page-cluster-candidates.js';
 
 vi.mock('./page-cluster/resolve-page-cluster-keys.js', async (importOriginal) => {
 	const actual =
@@ -114,11 +116,13 @@ describe('classifyPageTemplates', () => {
 	});
 
 	it('同一テンプレートのページには同じtemplateKeyを、別テンプレートのページには異なるtemplateKeyを割り当てる', async () => {
-		const pages = await archive.getPages();
+		const candidates = await loadPageClusterCandidates(archive, {
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 		const { templateKeysByUrl, clusterReasonsByTemplateKey } =
 			await classifyPageTemplates({
 				archive,
-				pages,
+				candidates,
 			});
 
 		const keyA = templateKeysByUrl.get('https://example.com/article-1');
@@ -144,11 +148,13 @@ describe('classifyPageTemplates', () => {
 		// (list-page-template-clusters.spec.ts), so a future upstream shape
 		// drift (a renamed field, a differently-typed `landmarks`) would
 		// otherwise go undetected until it broke in production.
-		const pages = await archive.getPages();
+		const candidates = await loadPageClusterCandidates(archive, {
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 		const { templateKeysByUrl, clusterReasonsByTemplateKey } =
 			await classifyPageTemplates({
 				archive,
-				pages,
+				candidates,
 			});
 
 		await archive.replacePageTemplates(templateKeysByUrl, clusterReasonsByTemplateKey);
@@ -172,9 +178,11 @@ describe('classifyPageTemplates', () => {
 	});
 
 	it('各templateKeyのクラスタ選定理由を捕捉する', async () => {
-		const pages = await archive.getPages();
+		const candidates = await loadPageClusterCandidates(archive, {
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
-		const result = await classifyPageTemplates({ archive, pages });
+		const result = await classifyPageTemplates({ archive, candidates });
 		const keyA = result.templateKeysByUrl.get('https://example.com/article-1')!;
 
 		expect(result.clusterReasonsByTemplateKey.size).toBeGreaterThan(0);
@@ -183,35 +191,40 @@ describe('classifyPageTemplates', () => {
 		expect(reasonA!.memberCount).toBeGreaterThan(0);
 	});
 
-	it('スタイルシート収集と保存済みHTMLの列挙の開始を通知したうえで、クラスタリングの進捗イベントを転送する', async () => {
-		const pages = await archive.getPages();
+	it('スタイルシート収集の開始を通知したうえで、クラスタリングの進捗イベントを転送する', async () => {
+		const candidates = await loadPageClusterCandidates(archive, {
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 		const events: string[] = [];
 
 		await classifyPageTemplates({
 			archive,
-			pages,
+			candidates,
 			onProgress: (event) => {
 				events.push(event.phase);
 			},
 		});
 
 		expect(events[0]).toBe('collecting-stylesheets');
-		expect(events[1]).toBe('listing-html-snapshots');
-		expect(events.length).toBeGreaterThan(2);
+		expect(events.length).toBeGreaterThan(1);
 	});
 
 	it('呼び出しごとに再計算し、結果をキャッシュしない', async () => {
-		const pages = await archive.getPages();
+		const candidates = await loadPageClusterCandidates(archive, {
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
 		vi.mocked(resolvePageClusterKeys).mockClear();
-		await classifyPageTemplates({ archive, pages });
-		await classifyPageTemplates({ archive, pages });
+		await classifyPageTemplates({ archive, candidates });
+		await classifyPageTemplates({ archive, candidates });
 
 		expect(resolvePageClusterKeys).toHaveBeenCalledTimes(2);
 	});
 
 	it('返されたキーをファクトリのurls順にURLへ対応づけ、reasonsをそのまま返す', async () => {
-		const pages = await archive.getPages();
+		const candidates = await loadPageClusterCandidates(archive, {
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 		const reasons = new Map([
 			[
 				'k1',
@@ -230,7 +243,7 @@ describe('classifyPageTemplates', () => {
 			reasons,
 		});
 
-		const result = await classifyPageTemplates({ archive, pages });
+		const result = await classifyPageTemplates({ archive, candidates });
 
 		expect([...result.templateKeysByUrl.values()]).toEqual(['k1', 'k1', 'k1']);
 		expect(result.templateKeysByUrl.size).toBe(3);
@@ -238,14 +251,16 @@ describe('classifyPageTemplates', () => {
 	});
 
 	it('resolvePageClusterKeysの戻り値件数がページ数と食い違う場合はエラーを投げる', async () => {
-		const pages = await archive.getPages();
+		const candidates = await loadPageClusterCandidates(archive, {
+			pageIdsWithHtml: await collectPageIdsWithHtml(archive),
+		});
 
 		vi.mocked(resolvePageClusterKeys).mockResolvedValueOnce({
 			keys: ['only-one-key'],
 			reasons: new Map(),
 		});
 
-		await expect(classifyPageTemplates({ archive, pages })).rejects.toThrow(
+		await expect(classifyPageTemplates({ archive, candidates })).rejects.toThrow(
 			'classifyPageTemplates: resolvePageClusterKeys returned 1 keys for 3 pages.',
 		);
 	});

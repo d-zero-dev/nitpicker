@@ -18,6 +18,7 @@ import type {
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 
 import { isHtmlContentType } from './content-type/is-html-content-type.js';
+import { parseMainContentClassList } from './meta/parse-main-content-class-list.js';
 import { summarizeJsonLd } from './meta/summarize-jsonld.js';
 import { parseResponseHeaders } from './utils/object/parse-response-headers.js';
 
@@ -268,12 +269,12 @@ export default class Page {
 	/**
 	 * Detected main-content element's CSS classes, or null when no main region
 	 * was found. Parsed from the JSON-encoded `main_content_class_list` column.
+	 * @throws {Error} When the stored value is not a JSON array of strings — a
+	 *   corrupt archive; a silently dropped class list would change which
+	 *   template the page is classified into.
 	 */
 	get mainContentClassList(): string[] | null {
-		if (this.#raw.main_content_class_list === null) {
-			return null;
-		}
-		return JSON.parse(this.#raw.main_content_class_list) as string[];
+		return parseMainContentClassList(this.#raw.main_content_class_list);
 	}
 
 	/**
