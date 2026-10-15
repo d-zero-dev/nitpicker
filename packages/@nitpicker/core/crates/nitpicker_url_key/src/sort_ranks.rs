@@ -5,10 +5,11 @@ use crate::build_url_sort_key::build_url_sort_key;
 /// Ranks every URL in natural URL order: the result holds, for each input
 /// position, the position that URL takes in the sorted list.
 ///
-/// Identical URLs (and URLs whose keys tie otherwise — none can, the key
-/// ends in the raw string) rank in input order, so the ranks are a
-/// permutation of `0..urls.len()` and never depend on how the work was
-/// split across threads. Keys are built and sorted on rayon's pool.
+/// URLs are ordered by their key, then by their raw string (UTF-8 byte
+/// order), then by input position, so identical URLs rank in input order, the
+/// ranks are a permutation of `0..urls.len()`, and they never depend on how
+/// the work was split across threads. Keys are built and sorted on rayon's
+/// pool.
 ///
 /// # Panics
 ///
@@ -37,8 +38,10 @@ pub fn sort_ranks<S: AsRef<str> + Sync>(urls: &[S]) -> Vec<u32> {
 		.map(|index| u32::try_from(index).unwrap_or(u32::MAX))
 		.collect();
 	order.par_sort_unstable_by(|&a, &b| {
-		keys[a as usize]
-			.cmp(&keys[b as usize])
+		let (a_index, b_index) = (a as usize, b as usize);
+		keys[a_index]
+			.cmp(&keys[b_index])
+			.then_with(|| urls[a_index].as_ref().cmp(urls[b_index].as_ref()))
 			.then_with(|| a.cmp(&b))
 	});
 	let mut ranks = vec![0_u32; urls.len()];

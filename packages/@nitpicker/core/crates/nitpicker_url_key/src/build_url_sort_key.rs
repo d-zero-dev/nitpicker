@@ -14,22 +14,23 @@ const SEGMENT_INDEX_LIKE: u8 = 0x03;
 const SEGMENT_NAME: u8 = 0x04;
 
 /// Builds the sort key of one URL: bytes whose `memcmp` order is the natural
-/// URL order the viewer lists in. The order is defined in the crate docs.
+/// URL order the viewer lists in, up to the raw-string tie-break the crate
+/// docs describe (applied by [`crate::sort_ranks`], which already holds the
+/// raw strings — repeating them in every key would double the memory of a
+/// ranking over millions of URLs). Two URLs can share a key (they differ only
+/// in the port or credentials, or in how the same query was written); the raw
+/// strings then decide.
 ///
-/// Two URLs get the same key only when their strings are identical, because
-/// the raw string (as UTF-8) closes the key. A key takes about three times
-/// the URL's length: the host, path, query and fragment as UTF-16 (their
-/// parts add up to roughly the URL), plus the raw string.
+/// A key takes about the host, path, query and fragment as UTF-16.
 #[must_use]
 pub fn build_url_sort_key(url: &str) -> Vec<u8> {
 	let parsed = parse_url(url);
-	let mut key = Vec::with_capacity(url.len() * 3 + 16);
+	let mut key = Vec::with_capacity(url.len() * 2 + 16);
 	push_text(&mut key, &parsed.hostname, false);
 	push_path(&mut key, &parsed.segments);
 	push_text(&mut key, &parsed.search, true);
 	push_text(&mut key, &parsed.hash, true);
 	push_text(&mut key, &parsed.protocol, false);
-	key.extend_from_slice(url.as_bytes());
 	key
 }
 

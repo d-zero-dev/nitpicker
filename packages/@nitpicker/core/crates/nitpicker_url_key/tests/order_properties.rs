@@ -1,8 +1,9 @@
-//! Properties of the order over random URLs. The key is bytes, so transitivity
-//! and antisymmetry hold by construction; what can fail is the key's meaning —
-//! that it does not depend on input order, that it separates URLs exactly
-//! when their strings differ, and that its rules (host before path, numbers
-//! by value, ...) hold for URLs the examples never thought of.
+//! Properties of the order over random URLs. The comparison is on bytes (the
+//! key, then the raw string), so transitivity and antisymmetry hold by
+//! construction; what can fail is its meaning — that it does not depend on
+//! input order, that URLs with equal keys fall back to their raw strings, and
+//! that its rules (host before path, numbers by value, ...) hold for URLs the
+//! examples never thought of.
 
 use nitpicker_url_key::{build_url_sort_key, sort_ranks};
 use proptest::prelude::*;
@@ -106,16 +107,33 @@ proptest! {
 	}
 
 	#[test]
-	fn two_keys_are_equal_only_for_identical_urls(a in any_url(), b in any_url()) {
-		prop_assert_eq!(build_url_sort_key(&a) == build_url_sort_key(&b), a == b);
+	fn urls_with_equal_keys_order_by_their_raw_strings(
+		path in prop::collection::vec(segment(), 0..3),
+		port_a in prop::option::of(1_u16..9999),
+		port_b in prop::option::of(1_u16..9999),
+	) {
+		// The same URL written with different ports: the key leaves the port
+		// out, so the raw strings decide.
+		let with_port = |port: Option<u16>| match port {
+			Some(port) => format!("https://a.example.com:{port}/{}", path.join("/")),
+			None => format!("https://a.example.com/{}", path.join("/")),
+		};
+		let (a, b) = (with_port(port_a), with_port(port_b));
+		prop_assert_eq!(build_url_sort_key(&a), build_url_sort_key(&b));
+		prop_assume!(a != b);
+		let ranks = sort_ranks(&[a.clone(), b.clone()]);
+		prop_assert_eq!(ranks[0] < ranks[1], a < b);
 	}
 
 	#[test]
-	fn the_ranks_follow_the_keys(urls in prop::collection::vec(any_url(), 0..40)) {
+	fn the_ranks_follow_the_keys_then_the_raw_strings(
+		urls in prop::collection::vec(any_url(), 0..40),
+	) {
 		let borrowed: Vec<&str> = urls.iter().map(String::as_str).collect();
 		let ordered = sorted(&borrowed);
 		for pair in ordered.windows(2) {
-			prop_assert!(build_url_sort_key(pair[0]) <= build_url_sort_key(pair[1]));
+			let (first, second) = (build_url_sort_key(pair[0]), build_url_sort_key(pair[1]));
+			prop_assert!(first < second || (first == second && pair[0] <= pair[1]));
 		}
 	}
 
