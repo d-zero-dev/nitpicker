@@ -20,6 +20,10 @@
 	],
 	"type": "module",
 	"exports": {
+		"./compute-alias-keys": {
+			"import": "./lib/compute-alias-keys.js",
+			"types": "./lib/compute-alias-keys.d.ts"
+		},
 		"./compute-body-hash": {
 			"import": "./lib/compute-body-hash.js",
 			"types": "./lib/compute-body-hash.d.ts"
@@ -28,9 +32,17 @@
 			"import": "./lib/compute-url-sort-ranks.js",
 			"types": "./lib/compute-url-sort-ranks.d.ts"
 		},
+		"./create-isolated-cluster-run": {
+			"import": "./lib/create-isolated-cluster-run.js",
+			"types": "./lib/create-isolated-cluster-run.d.ts"
+		},
 		"./create-template-classification-run": {
 			"import": "./lib/create-template-classification-run.js",
 			"types": "./lib/create-template-classification-run.d.ts"
+		},
+		"./group-alias-candidates": {
+			"import": "./lib/group-alias-candidates.js",
+			"types": "./lib/group-alias-candidates.d.ts"
 		},
 		"./template-exact-page-limit": {
 			"import": "./lib/template-exact-page-limit.js",

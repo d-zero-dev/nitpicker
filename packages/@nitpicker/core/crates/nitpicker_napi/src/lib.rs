@@ -2,14 +2,24 @@
 //! crates to Node. Keeping napi out of the other crates lets them be tested
 //! with plain `cargo test`, without a Node runtime.
 //!
-//! Every exported function uses `catch_unwind`, so a Rust panic reaches JS as
-//! a thrown `Error` instead of aborting the whole Node process.
+//! Every exported function, and every method of `IsolatedClusterRun`, uses
+//! `catch_unwind`, so a Rust panic reaches JS as a thrown `Error` instead of
+//! aborting the whole Node process. `TemplateClassificationRun` runs its work
+//! on rayon's pool and catches a panic there itself, rejecting the call.
 
+// The exported functions count as unused in the test build, where the addon
+// registration that calls them is compiled out.
+#[cfg_attr(test, allow(dead_code))]
+mod alias;
+mod isolated_cluster;
+mod slice_by_offsets;
 mod template_classification;
 
+use napi::Result;
 use napi::bindgen_prelude::{Buffer, Uint32Array};
-use napi::{Error, Result, Status};
 use napi_derive::napi;
+
+use crate::slice_by_offsets::slice_utf8_by_offsets;
 
 /// Pages per sampled block a template classification run clusters (see
 /// `template_classification`).
@@ -60,23 +70,6 @@ pub fn compute_body_hash(html: &[u8]) -> Buffer {
 /// past `urls` or stops short of its end, or when a URL is not valid UTF-8.
 #[napi(catch_unwind)]
 pub fn compute_url_sort_ranks(urls: &[u8], offsets: &[u32]) -> Result<Uint32Array> {
-	let invalid = |reason: &str| Error::new(Status::InvalidArg, reason.to_owned());
-	if offsets.first() != Some(&0) {
-		return Err(invalid("offsets must start at 0"));
-	}
-	let mut slices = Vec::with_capacity(offsets.len() - 1);
-	for pair in offsets.windows(2) {
-		let (start, end) = (pair[0] as usize, pair[1] as usize);
-		if start > end || end > urls.len() {
-			return Err(invalid("offsets must ascend and stay within the URL bytes"));
-		}
-		slices.push(
-			std::str::from_utf8(&urls[start..end])
-				.map_err(|_| invalid("every URL must be valid UTF-8"))?,
-		);
-	}
-	if offsets.last().map(|&end| end as usize) != Some(urls.len()) {
-		return Err(invalid("offsets must end at the length of the URL bytes"));
-	}
+	let slices = slice_utf8_by_offsets(urls, offsets)?;
 	Ok(Uint32Array::new(nitpicker_url_key::sort_ranks(&slices)))
 }

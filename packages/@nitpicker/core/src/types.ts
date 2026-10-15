@@ -9,6 +9,15 @@ export interface NativeBinding {
 	computeBodyHash(html: Uint8Array): Buffer;
 	/** See `compute-url-sort-ranks.ts`. */
 	computeUrlSortRanks(urls: Uint8Array, offsets: Uint32Array): Uint32Array;
+	/** See `compute-alias-keys.ts`. */
+	computeAliasKeys(url: string): { tierA: string; tierB: string } | null;
+	/** See `group-alias-candidates.ts`. */
+	groupAliasCandidates(input: NativeAliasCandidates): Uint32Array;
+	/** See `create-isolated-cluster-run.ts`. */
+	IsolatedClusterRun: new (
+		candidateIds: Uint32Array,
+		redirects: Uint32Array,
+	) => NativeIsolatedClusterRun;
 	/** See `create-template-classification-run.ts`. */
 	TemplateClassificationRun: new (
 		onProgress?: (event: NativeTemplateClassificationProgress) => void,
@@ -491,6 +500,123 @@ export interface CreateTemplateClassificationRunOptions {
 	readonly memoryBudget?: number;
 	/** Receives progress events. */
 	readonly onProgress?: (event: TemplateClassificationProgress) => void;
+}
+
+/**
+ * The addon's isolated-cluster run, which `createIsolatedClusterRun` wraps
+ * into an {@link IsolatedClusterRun}; use that instead.
+ * @example
+ * ```ts
+ * const native = new nativeBinding.IsolatedClusterRun(Uint32Array.of(1, 2), new Uint32Array());
+ * native.unionEdges(Uint32Array.of(1, 2));
+ * native.labels(); // Uint32Array [0, 0]
+ * ```
+ */
+export interface NativeIsolatedClusterRun {
+	/** {@link IsolatedClusterRun.unionEdges}, the pairs flattened. */
+	unionEdges(edges: Uint32Array): void;
+	/** {@link IsolatedClusterRun.labels}. */
+	labels(): Uint32Array;
+}
+
+/**
+ * The candidates {@link groupAliasCandidates} hands the addon, column by
+ * column.
+ * @example
+ * ```ts
+ * const columns: NativeAliasCandidates = {
+ * 	urls: Buffer.from('https://example.com/'),
+ * 	urlOffsets: Uint32Array.of(0, 20),
+ * 	urlIds: Uint32Array.of(1),
+ * 	titleTextIds: Uint32Array.of(1),
+ * 	canonicalUrlIds: Uint32Array.of(4_294_967_295),
+ * 	bodyHashes: new Uint8Array(),
+ * 	hashOffsets: Uint32Array.of(0, 0),
+ * 	hashPresent: Uint8Array.of(0),
+ * };
+ * ```
+ */
+export interface NativeAliasCandidates {
+	/** The URLs back to back as UTF-8. */
+	readonly urls: Uint8Array;
+	/** `n + 1` positions cutting `urls` into the `n` URLs. */
+	readonly urlOffsets: Uint32Array;
+	readonly urlIds: Uint32Array;
+	readonly titleTextIds: Uint32Array;
+	/** `4294967295` for a page without a canonical. */
+	readonly canonicalUrlIds: Uint32Array;
+	/** The body hashes back to back. */
+	readonly bodyHashes: Uint8Array;
+	/** `n + 1` positions cutting `bodyHashes` into `n` pieces. */
+	readonly hashOffsets: Uint32Array;
+	/** `0` for a page without a body hash (its piece is empty). */
+	readonly hashPresent: Uint8Array;
+}
+
+/**
+ * The two keys under which pages are grouped as the same page under another
+ * URL; see `computeAliasKeys`.
+ * @example
+ * ```ts
+ * const keys: AliasKeys = { tierA: 'example.com/about/', tierB: 'example.com/about' };
+ * ```
+ */
+export interface AliasKeys {
+	/** Folds the scheme, the host's case and a trailing `/index.{ext}`. */
+	readonly tierA: string;
+	/** Tier A with one trailing `/` of the path dropped. */
+	readonly tierB: string;
+}
+
+/**
+ * One page that may be the same page as another under a different URL.
+ * @example
+ * ```ts
+ * const page: AliasCandidate = {
+ * 	url: 'https://example.com/about/',
+ * 	urlId: 7,
+ * 	titleTextId: 3,
+ * 	canonicalUrlId: null,
+ * 	bodyHash: null,
+ * };
+ * ```
+ */
+export interface AliasCandidate {
+	/** The page's URL. */
+	readonly url: string;
+	/** `url_refs.id` of that URL. */
+	readonly urlId: number;
+	/** The id of the page's title text; pages with different titles never group. */
+	readonly titleTextId: number;
+	/** `url_refs.id` of the URL the page's `<link rel="canonical">` points at. */
+	readonly canonicalUrlId: number | null;
+	/** The page's body hash; without one the page groups by URL form only. */
+	readonly bodyHash: Uint8Array | null;
+}
+
+/**
+ * The connected components of the isolated pages, built from the pages' link
+ * edges as they are read. Created by `createIsolatedClusterRun`.
+ * @example
+ * ```ts
+ * const run = createIsolatedClusterRun([10, 20, 30], []);
+ * run.unionEdges([10, 20]);
+ * run.labels(); // Uint32Array [0, 0, 1]
+ * ```
+ */
+export interface IsolatedClusterRun {
+	/**
+	 * Joins the pages of a batch of link edges, `[page, href, page, href, ...]`
+	 * by page id, in any order and batch size. An edge counts when `page` is a
+	 * candidate and `href`, once redirects and aliases are followed, is a
+	 * different one.
+	 */
+	unionEdges(edges: ArrayLike<number>): void;
+	/**
+	 * For each candidate, in the order given, the number of its component,
+	 * counted in order of first appearance.
+	 */
+	labels(): Uint32Array;
 }
 
 /**

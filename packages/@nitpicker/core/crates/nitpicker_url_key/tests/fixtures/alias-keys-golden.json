@@ -1,0 +1,374 @@
+[
+	{
+		"name": "\"https://example.com\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d",
+		"tierA": "example.com/",
+		"tierB": "example.com/"
+	},
+	{
+		"name": "\"https://example.com/\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f",
+		"tierA": "example.com/",
+		"tierB": "example.com/"
+	},
+	{
+		"name": "\"http://Example.COM/About/Index.HTML\"",
+		"utf8Hex": "687474703a2f2f4578616d706c652e434f4d2f41626f75742f496e6465782e48544d4c",
+		"tierA": "example.com/About/",
+		"tierB": "example.com/About"
+	},
+	{
+		"name": "\"https://example.com/index.html\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f696e6465782e68746d6c",
+		"tierA": "example.com/",
+		"tierB": "example.com/"
+	},
+	{
+		"name": "\"https://example.com/index.\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f696e6465782e",
+		"tierA": "example.com/index.",
+		"tierB": "example.com/index."
+	},
+	{
+		"name": "\"https://example.com/index.tar.gz\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f696e6465782e7461722e677a",
+		"tierA": "example.com/index.tar.gz",
+		"tierB": "example.com/index.tar.gz"
+	},
+	{
+		"name": "\"https://example.com/index/\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f696e6465782f",
+		"tierA": "example.com/index/",
+		"tierB": "example.com/index"
+	},
+	{
+		"name": "\"https://example.com/a/INDEX.PHP?x=1\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f612f494e4445582e5048503f783d31",
+		"tierA": "example.com/a/?x=1",
+		"tierB": "example.com/a?x=1"
+	},
+	{
+		"name": "\"https://example.com/a//b///index.html\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f612f2f622f2f2f696e6465782e68746d6c",
+		"tierA": "example.com/a//b///",
+		"tierB": "example.com/a//b//"
+	},
+	{
+		"name": "\"https://example.com/a/./b/../c/\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f612f2e2f622f2e2e2f632f",
+		"tierA": "example.com/a/c/",
+		"tierB": "example.com/a/c"
+	},
+	{
+		"name": "\"https://example.com/a/%2e%2e/b\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f612f2532652532652f62",
+		"tierA": "example.com/b",
+		"tierB": "example.com/b"
+	},
+	{
+		"name": "\"https://example.com/a b/c d\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f6120622f632064",
+		"tierA": "example.com/a%20b/c%20d",
+		"tierB": "example.com/a%20b/c%20d"
+	},
+	{
+		"name": "\"https://example.com/a\\\\b\\\\c\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f615c625c63",
+		"tierA": "example.com/a/b/c",
+		"tierB": "example.com/a/b/c"
+	},
+	{
+		"name": "\"https://example.com\\\\a\\\\b\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d5c615c62",
+		"tierA": "example.com/a/b",
+		"tierB": "example.com/a/b"
+	},
+	{
+		"name": "\"https://example.com/%E3%81%82/index.html\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f2545332538312538322f696e6465782e68746d6c",
+		"tierA": "example.com/%E3%81%82/",
+		"tierB": "example.com/%E3%81%82"
+	},
+	{
+		"name": "\"https://example.com/あ/index.html\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2fe381822f696e6465782e68746d6c",
+		"tierA": "example.com/%E3%81%82/",
+		"tierB": "example.com/%E3%81%82"
+	},
+	{
+		"name": "\"https://example.com/😀/\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2ff09f98802f",
+		"tierA": "example.com/%F0%9F%98%80/",
+		"tierB": "example.com/%F0%9F%98%80"
+	},
+	{
+		"name": "\"https://example.com/%zz/%/%4\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f257a7a2f252f2534",
+		"tierA": "example.com/%zz/%/%4",
+		"tierB": "example.com/%zz/%/%4"
+	},
+	{
+		"name": "\"https://example.com/a?\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f613f",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"https://example.com/a?#x\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f613f2378",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"https://example.com/a?x=1&y=2#frag\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f613f783d3126793d322366726167",
+		"tierA": "example.com/a?x=1&y=2",
+		"tierB": "example.com/a?x=1&y=2"
+	},
+	{
+		"name": "\"https://example.com/a?q=あ&r=%E3\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f613f713de3818226723d254533",
+		"tierA": "example.com/a?q=%E3%81%82&r=%E3",
+		"tierB": "example.com/a?q=%E3%81%82&r=%E3"
+	},
+	{
+		"name": "\"https://example.com/a?q=a b\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f613f713d612062",
+		"tierA": "example.com/a?q=a%20b",
+		"tierB": "example.com/a?q=a%20b"
+	},
+	{
+		"name": "\"https://example.com:80/a\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d3a38302f61",
+		"tierA": "example.com:80/a",
+		"tierB": "example.com:80/a"
+	},
+	{
+		"name": "\"https://example.com:443/a\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d3a3434332f61",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"http://example.com:80/a\"",
+		"utf8Hex": "687474703a2f2f6578616d706c652e636f6d3a38302f61",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"http://example.com:443/a\"",
+		"utf8Hex": "687474703a2f2f6578616d706c652e636f6d3a3434332f61",
+		"tierA": "example.com:443/a",
+		"tierB": "example.com:443/a"
+	},
+	{
+		"name": "\"https://example.com:8443/a/\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d3a383434332f612f",
+		"tierA": "example.com:8443/a/",
+		"tierB": "example.com:8443/a"
+	},
+	{
+		"name": "\"https://example.com:/a\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d3a2f61",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"https://user:pass@example.com/a\"",
+		"utf8Hex": "68747470733a2f2f757365723a70617373406578616d706c652e636f6d2f61",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"https://[::1]/a\"",
+		"utf8Hex": "68747470733a2f2f5b3a3a315d2f61",
+		"tierA": "[::1]/a",
+		"tierB": "[::1]/a"
+	},
+	{
+		"name": "\"http://[::1]:3000/a/\"",
+		"utf8Hex": "687474703a2f2f5b3a3a315d3a333030302f612f",
+		"tierA": "[::1]:3000/a/",
+		"tierB": "[::1]:3000/a"
+	},
+	{
+		"name": "\"http://[2001:DB8::1]/a\"",
+		"utf8Hex": "687474703a2f2f5b323030313a4442383a3a315d2f61",
+		"tierA": "[2001:db8::1]/a",
+		"tierB": "[2001:db8::1]/a"
+	},
+	{
+		"name": "\"http://127.0.0.1/a\"",
+		"utf8Hex": "687474703a2f2f3132372e302e302e312f61",
+		"tierA": "127.0.0.1/a",
+		"tierB": "127.0.0.1/a"
+	},
+	{
+		"name": "\"http://0x7f.1/a\"",
+		"utf8Hex": "687474703a2f2f307837662e312f61",
+		"tierA": "127.0.0.1/a",
+		"tierB": "127.0.0.1/a"
+	},
+	{
+		"name": "\"http://2130706433/a\"",
+		"utf8Hex": "687474703a2f2f323133303730363433332f61",
+		"tierA": "127.0.0.1/a",
+		"tierB": "127.0.0.1/a"
+	},
+	{
+		"name": "\"https://日本語.example/a\"",
+		"utf8Hex": "68747470733a2f2fe697a5e69cace8aa9e2e6578616d706c652f61",
+		"tierA": "xn--wgv71a119e.example/a",
+		"tierB": "xn--wgv71a119e.example/a"
+	},
+	{
+		"name": "\"https://xn--wgv71a119e.example/a\"",
+		"utf8Hex": "68747470733a2f2f786e2d2d776776373161313139652e6578616d706c652f61",
+		"tierA": "xn--wgv71a119e.example/a",
+		"tierB": "xn--wgv71a119e.example/a"
+	},
+	{
+		"name": "\"https://EXAMPLE.com./a\"",
+		"utf8Hex": "68747470733a2f2f4558414d504c452e636f6d2e2f61",
+		"tierA": "example.com./a",
+		"tierB": "example.com./a"
+	},
+	{
+		"name": "\"https://exa mple.com/a\"",
+		"utf8Hex": "68747470733a2f2f657861206d706c652e636f6d2f61",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"https://exa%6Dple.com/a\"",
+		"utf8Hex": "68747470733a2f2f657861253644706c652e636f6d2f61",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"https://example.com\\t/a\\n/b\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d092f610a2f62",
+		"tierA": "example.com/a/b",
+		"tierB": "example.com/a/b"
+	},
+	{
+		"name": "\"  https://example.com/a  \"",
+		"utf8Hex": "202068747470733a2f2f6578616d706c652e636f6d2f612020",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"HTTPS://EXAMPLE.COM/A\"",
+		"utf8Hex": "48545450533a2f2f4558414d504c452e434f4d2f41",
+		"tierA": "example.com/A",
+		"tierB": "example.com/A"
+	},
+	{
+		"name": "\"https:example.com/a\"",
+		"utf8Hex": "68747470733a6578616d706c652e636f6d2f61",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"https:///example.com/a\"",
+		"utf8Hex": "68747470733a2f2f2f6578616d706c652e636f6d2f61",
+		"tierA": "example.com/a",
+		"tierB": "example.com/a"
+	},
+	{
+		"name": "\"https://\"",
+		"utf8Hex": "68747470733a2f2f",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"file:///a/b\"",
+		"utf8Hex": "66696c653a2f2f2f612f62",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"ftp://example.com/a\"",
+		"utf8Hex": "6674703a2f2f6578616d706c652e636f6d2f61",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"mailto:a@example.com\"",
+		"utf8Hex": "6d61696c746f3a61406578616d706c652e636f6d",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"javascript:void(0)\"",
+		"utf8Hex": "6a6176617363726970743a766f6964283029",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"/relative/path\"",
+		"utf8Hex": "2f72656c61746976652f70617468",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"//example.com/a\"",
+		"utf8Hex": "2f2f6578616d706c652e636f6d2f61",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"example.com/a\"",
+		"utf8Hex": "6578616d706c652e636f6d2f61",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"not a url\"",
+		"utf8Hex": "6e6f7420612075726c",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"\"",
+		"utf8Hex": "",
+		"tierA": null,
+		"tierB": null
+	},
+	{
+		"name": "\"https://example.com/a%00b\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f6125303062",
+		"tierA": "example.com/a%00b",
+		"tierB": "example.com/a%00b"
+	},
+	{
+		"name": "\"https://example.com/index.html/\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f696e6465782e68746d6c2f",
+		"tierA": "example.com/index.html/",
+		"tierB": "example.com/index.html"
+	},
+	{
+		"name": "\"https://example.com/x/index._\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f782f696e6465782e5f",
+		"tierA": "example.com/x/",
+		"tierB": "example.com/x"
+	},
+	{
+		"name": "\"https://example.com/x/index.é\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f782f696e6465782ec3a9",
+		"tierA": "example.com/x/index.%C3%A9",
+		"tierB": "example.com/x/index.%C3%A9"
+	},
+	{
+		"name": "\"https://example.com/x/index.a-b\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f782f696e6465782e612d62",
+		"tierA": "example.com/x/index.a-b",
+		"tierB": "example.com/x/index.a-b"
+	},
+	{
+		"name": "\"https://example.com/x/Index.Html?y=2\"",
+		"utf8Hex": "68747470733a2f2f6578616d706c652e636f6d2f782f496e6465782e48746d6c3f793d32",
+		"tierA": "example.com/x/?y=2",
+		"tierB": "example.com/x?y=2"
+	}
+]

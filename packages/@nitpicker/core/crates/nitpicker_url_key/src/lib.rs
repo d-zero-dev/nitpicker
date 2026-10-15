@@ -53,13 +53,27 @@
 //! The order is persisted: the viewer read model stores each page's rank, so
 //! changing any rule above must bump the read model's schema version.
 
+//! # Alias keys
+//!
+//! The same crate also decides which pages are one page under another URL
+//! ([`alias_keys`], [`group_alias_candidates`]). That is unrelated to the
+//! order above, and independent of it: the alias keys read the URL as it is
+//! written (`pathname` and `search` as the WHATWG URL serializes them), not
+//! the normalized form the sort key reads. The grouping is persisted
+//! (`content_items.alias_of_id`); the definition lives in the docs of those
+//! two functions.
+
 #![forbid(unsafe_code)]
 
+mod alias_group;
+mod alias_key;
 mod build_url_sort_key;
 mod decode_uri;
 mod parse_url;
 mod push_text;
 mod sort_ranks;
 
+pub use alias_group::{AliasCandidate, group_alias_candidates};
+pub use alias_key::{AliasKeys, alias_keys};
 pub use build_url_sort_key::build_url_sort_key;
 pub use sort_ranks::sort_ranks;

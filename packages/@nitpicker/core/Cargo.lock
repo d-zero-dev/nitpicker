@@ -597,6 +597,7 @@ dependencies = [
  "napi-derive",
  "nitpicker_html_scan",
  "nitpicker_template_cluster",
+ "nitpicker_union_find",
  "nitpicker_url_key",
  "rayon",
  "rustc-hash",
@@ -615,12 +616,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "nitpicker_union_find"
+version = "0.0.0"
+dependencies = [
+ "proptest",
+ "rustc-hash",
+]
+
+[[package]]
 name = "nitpicker_url_key"
 version = "0.0.0"
 dependencies = [
  "form_urlencoded",
+ "nitpicker_union_find",
  "proptest",
  "rayon",
+ "rustc-hash",
+ "serde_json",
  "url",
 ]
 
