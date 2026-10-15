@@ -24,6 +24,10 @@
 			"import": "./lib/compute-body-hash.js",
 			"types": "./lib/compute-body-hash.d.ts"
 		},
+		"./compute-url-sort-ranks": {
+			"import": "./lib/compute-url-sort-ranks.js",
+			"types": "./lib/compute-url-sort-ranks.d.ts"
+		},
 		"./create-template-classification-run": {
 			"import": "./lib/create-template-classification-run.js",
 			"types": "./lib/create-template-classification-run.d.ts"

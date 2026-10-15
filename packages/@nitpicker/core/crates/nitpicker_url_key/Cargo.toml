@@ -1,0 +1,18 @@
+[package]
+name = "nitpicker_url_key"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+form_urlencoded = { workspace = true }
+rayon = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true
