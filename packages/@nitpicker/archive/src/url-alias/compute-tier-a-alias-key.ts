@@ -10,11 +10,11 @@ import { parseAliasKeyParts } from './parse-alias-key-parts.js';
  *
  * This is a canonical-key function, not a pairwise comparator: grouping
  * rows by exact string equality of this function's output is definitionally
- * an equivalence relation (reflexive, symmetric, transitive), unlike
- * `compareUrlSortKeys`'s pairwise "roughly equal" comparison (see
- * ARCHITECTURE.md's "URL natural-sort comparator は推移律を保証しない" —
- * that non-transitivity problem is inherent to pairwise comparators, and
- * does not apply to a canonical-key partition like this one).
+ * an equivalence relation (reflexive, symmetric, transitive). A pairwise
+ * "roughly equal" comparison would not be: non-transitivity is inherent to
+ * pairwise comparators (see ARCHITECTURE.md's "URL の自然順は、2 件ずつ比べる
+ * 比較関数ではなくバイト列キーの全順序で決める"), and does not apply to a
+ * canonical-key partition like this one.
  *
  * Deliberately does not touch the query string or fragment: a query-string
  * difference is not addressed by this feature (out of scope — see the
