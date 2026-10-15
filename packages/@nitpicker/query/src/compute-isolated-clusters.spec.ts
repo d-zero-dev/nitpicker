@@ -293,6 +293,21 @@ describe('computeIsolatedClusters', () => {
 		rmSync(workingDir, { recursive: true, force: true });
 	});
 
+	it('orders components by their smallest member page id', async () => {
+		const components = await computeIsolatedClusters(archive);
+		const rows = (await archive
+			.getKnex()('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select('ci.id as id', 'ur.url as url')) as { id: number; url: string }[];
+		const idByUrl = new Map(rows.map((r) => [r.url, r.id]));
+		const smallestIds = components.map((c) =>
+			Math.min(...c.members.map((m) => idByUrl.get(m.url)!)),
+		);
+
+		expect(components.length).toBeGreaterThan(2);
+		expect(smallestIds).toEqual(smallestIds.toSorted((a, b) => a - b));
+	});
+
 	it('returns one component per connected group, including singletons', async () => {
 		const components = await computeIsolatedClusters(archive);
 		const byRep = new Map(components.map((c) => [c.representativeUrl, c]));

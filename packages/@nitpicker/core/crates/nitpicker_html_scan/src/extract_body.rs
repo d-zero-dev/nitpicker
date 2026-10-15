@@ -5,16 +5,16 @@ use regex::bytes::Regex;
 /// `<body` followed by an attribute-aware span up to the real closing `>`.
 ///
 /// The span skips quoted values so a literal `>` inside one
-/// (`<body data-x="a>b">`) does not end the tag early. Nothing requires a
-/// tag-name boundary after `<body`, so `<bodyguard>` also matches — kept on
-/// purpose because `page_meta.body_hash` values already persisted were
-/// computed that way (see issue #434 before changing it).
-const OPENING_TAG: &str = r#"<body(?:"[^"]*"|'[^']*'|[^"'>])*>"#;
+/// (`<body data-x="a>b">`) does not end the tag early. `<body` must be
+/// followed by a tag-name boundary (ASCII whitespace, `/` or `>`), so a
+/// custom element such as `<bodyguard>` is not taken for the body (#434).
+const OPENING_TAG: &str = r#"<body(?:[\t\n\x0c\r /](?:"[^"]*"|'[^']*'|[^"'>])*)?>"#;
 
 const CLOSING_TAG: &str = "</body>";
 
-/// The JS pattern `/<body(?:"[^"]*"|'[^']*'|[^"'>])*>([\s\S]*)<\/body>/i`
-/// without its capture group: the greedy `(?s-u:.)*` runs to the last
+/// The JS pattern `BODY_PATTERN` in `@nitpicker/archive`'s `extract-body.ts`
+/// (`<body`, the same optional boundary-plus-attribute span, `>`, a greedy
+/// capture, `</body>`, case-insensitive) without its capture group: the greedy `(?s-u:.)*` runs to the last
 /// `</body>`, and the regex engine keeps JS's leftmost-first choice of start
 /// (including a retry that begins inside an earlier tag's attribute value,
 /// `<body a="<body></body>">`).
@@ -108,8 +108,25 @@ mod tests {
 	}
 
 	#[test]
-	fn treats_bodyguard_as_body() {
-		assert_eq!(extract_body(b"<bodyguard>g</body>"), b"g");
+	fn does_not_treat_a_custom_element_starting_with_body_as_body() {
+		let html = b"<bodyguard>g</body>";
+		assert_eq!(extract_body(html), html);
+		assert_eq!(extract_body(b"<body-x>g</body>"), b"<body-x>g</body>");
+	}
+
+	#[test]
+	fn skips_a_custom_element_before_the_real_body() {
+		assert_eq!(
+			extract_body(b"<bodyguard>g</bodyguard><body>real</body>"),
+			b"real"
+		);
+	}
+
+	#[test]
+	fn accepts_every_tag_name_boundary() {
+		assert_eq!(extract_body(b"<body\tclass=a>t</body>"), b"t");
+		assert_eq!(extract_body(b"<body\nclass=a>n</body>"), b"n");
+		assert_eq!(extract_body(b"<body/>s</body>"), b"s");
 	}
 
 	#[test]
