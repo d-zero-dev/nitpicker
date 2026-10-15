@@ -105,7 +105,7 @@ export async function query(args: string[], flags: QueryFlags) {
 				// Every other sub-command reports through plain stderr lines
 				// (issue #294): they fire strictly before the `console.log`, so
 				// there's no shared-region redraw conflict — just a single
-				// human-readable status line per `externalSortUrls` phase change,
+				// human-readable status line per `sortArchiveUrls` phase change,
 				// safe to interleave with anything.
 				result = await dispatchQuery(accessor, subCommand, flags, (message) => {
 					if (scanLanes) {

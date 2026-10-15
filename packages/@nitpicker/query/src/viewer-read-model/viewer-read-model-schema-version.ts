@@ -58,5 +58,14 @@
  * redirect-source rows are counted (status 3xx, Content-Type `unknown`),
  * and internal pages that were only fetched incidentally (`is_target = 0`)
  * are no longer counted. `viewer_pages` itself is unchanged.
+ *
+ * 35 -> 36 (natural URL order defined by a total-order key): every persisted
+ * natural URL rank (`viewer_pages.natural_url_rank` and the
+ * `natural_url_rank` columns of the header-check and mismatch tables) and
+ * the order of `viewer_resource_groups` rows now follow
+ * `computeUrlSortRanks` (the `nitpicker_url_key` crate) instead of pairwise
+ * comparison. Table shapes are unchanged; the ranks mean something else, so
+ * an existing read model must be rebuilt (`viewer-build`) to list in the new
+ * order.
  */
-export const VIEWER_READ_MODEL_SCHEMA_VERSION = 35;
+export const VIEWER_READ_MODEL_SCHEMA_VERSION = 36;

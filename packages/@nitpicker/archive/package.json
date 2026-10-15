@@ -260,6 +260,10 @@
 			"import": "./lib/url-pattern/reconstruct-url.js",
 			"types": "./lib/url-pattern/reconstruct-url.d.ts"
 		},
+		"./url-sort/compute-url-sort-ranks": {
+			"import": "./lib/url-sort/compute-url-sort-ranks.js",
+			"types": "./lib/url-sort/compute-url-sort-ranks.d.ts"
+		},
 		"./utils/array/each-splitted": {
 			"import": "./lib/utils/array/each-splitted.js",
 			"types": "./lib/utils/array/each-splitted.d.ts"

@@ -9,7 +9,7 @@
  */
 export const BENCH_CASES = Object.freeze({
 	'template-classification': ['full'],
-	'url-natural-sort': ['rank-map', 'external-sort'],
+	'url-natural-sort': ['rank-map', 'all-urls'],
 	'isolated-clusters': ['default'],
 	'alias-backfill': ['default'],
 	'match-selector': ['simple', 'compound', 'nth'],

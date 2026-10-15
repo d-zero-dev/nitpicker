@@ -382,7 +382,7 @@ interface ViewerPageInsertRow {
 	 * Dense, zero-based rank in natural URL order (see
 	 * {@link buildPageNaturalUrlRankMap}) — what `viewer_pages`'s default
 	 * `sortBy: 'url'` listing orders by, persisted here so the viewer never
-	 * needs to run the startup external merge sort just to serve that order.
+	 * needs to rank every URL of the archive at startup just to serve that order.
 	 */
 	natural_url_rank: number;
 }

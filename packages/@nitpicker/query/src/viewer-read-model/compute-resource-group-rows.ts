@@ -1,9 +1,10 @@
 import type { Knex } from 'knex';
 
+import { computeUrlSortRanks } from '@nitpicker/archive/url-sort/compute-url-sort-ranks';
+
 import { getResourceReferrerEdges } from '../get-resource-referrer-edges.js';
 
 import { canonicalizeUrlWithQueryPairs } from './canonicalize-url-with-query-pairs.js';
-import { naturalCompare } from './sort-resources-by-url.js';
 
 /** `resource_items` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 5000;
@@ -354,9 +355,13 @@ export async function computeResourceGroupRows(
 		}
 	}
 
-	const sortedEntries = [...entries.values()].toSorted((a, b) =>
-		naturalCompare(a.canonicalUrl, b.canonicalUrl),
-	);
+	// Natural URL order — the same order the pages and resources lists use.
+	const groupEntries = [...entries.values()];
+	const ranks = computeUrlSortRanks(groupEntries.map((entry) => entry.canonicalUrl));
+	const sortedEntries = groupEntries
+		.map((entry, index) => ({ entry, rank: ranks[index]! }))
+		.toSorted((a, b) => a.rank - b.rank)
+		.map(({ entry }) => entry);
 	return sortedEntries.map((entry) => ({
 		canonical_url: entry.canonicalUrl,
 		status: entry.status,
