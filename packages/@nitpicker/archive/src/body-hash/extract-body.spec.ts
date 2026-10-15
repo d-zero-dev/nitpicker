@@ -46,6 +46,22 @@ describe('extractBody', () => {
 		expect(extractBody(html)).toBe('CONTENT');
 	});
 
+	it('does not take a custom element whose name starts with body for the body', () => {
+		const html = '<bodyguard>guarded</body>';
+		expect(extractBody(html)).toBe(html);
+	});
+
+	it('skips a custom element before the real body', () => {
+		const html = '<bodyguard>g</bodyguard><body>real</body>';
+		expect(extractBody(html)).toBe('real');
+	});
+
+	it('accepts whitespace and a slash as the tag-name boundary', () => {
+		expect(extractBody('<body\tclass=a>t</body>')).toBe('t');
+		expect(extractBody('<body\nclass=a>n</body>')).toBe('n');
+		expect(extractBody('<body/>s</body>')).toBe('s');
+	});
+
 	it('extends the match to the last </body> when the body contains a literal <body> substring', () => {
 		const html =
 			'<body>before <code>&lt;body&gt;example&lt;/body&gt;</code> after</body>';

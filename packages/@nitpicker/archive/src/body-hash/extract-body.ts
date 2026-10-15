@@ -5,7 +5,12 @@
 // unescaped inside the value — does not end the match early. A plain
 // `[^>]*` would stop at that inner `>`, so the captured body would start
 // mid-attribute instead of at the real content.
-const BODY_PATTERN = /<body(?:"[^"]*"|'[^']*'|[^"'>])*>([\s\S]*)<\/body>/i;
+//
+// `<body` must be followed by a tag-name boundary (ASCII whitespace, `/` or
+// `>`): without it a custom element such as `<bodyguard>` or `<body-foo>`
+// would be taken for the body, and the hash would cover the wrong span.
+const BODY_PATTERN =
+	/<body(?:[\t\n\f\r /](?:"[^"]*"|'[^']*'|[^"'>])*)?>([\s\S]*)<\/body>/i;
 
 /**
  * Extracts the inner HTML of the first `<body>` element from a full HTML
