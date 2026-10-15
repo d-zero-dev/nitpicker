@@ -133,8 +133,7 @@ export async function* computeResourceInsertRows(
 				referrer_count: referrerCount,
 				// A blob-routed resource (identity is a large `data:` URI, not
 				// a URL) has `url === null`; sort_key is NOT NULL, so it falls
-				// back to the empty string, sorting first (mirrors
-				// `sort-resources-by-url.ts`'s report-side convention).
+				// back to the empty string, sorting first.
 				url_sort_key: row.url ?? '',
 			};
 		});

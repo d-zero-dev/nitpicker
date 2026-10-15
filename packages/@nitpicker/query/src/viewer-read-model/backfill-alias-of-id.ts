@@ -141,8 +141,9 @@ function selectRepresentative(group: readonly AliasCandidate[]): AliasCandidate 
  * and every Tier B bucket contributes "same group" edges, and the
  * connected components of that combined edge set are — by the graph-theory
  * definition of a connected component — always a transitive partition. See
- * ARCHITECTURE.md's "URL natural-sort comparator は推移律を保証しない" for
- * the pairwise-comparator failure mode this design avoids.
+ * ARCHITECTURE.md's "URL の自然順は、2 件ずつ比べる比較関数ではなく
+ * バイト列キーの全順序で決める" for the pairwise-comparator failure mode
+ * this design avoids.
  *
  * **`title_text_id` gate**: both tiers additionally require the candidate
  * rows to share the same `page_meta.title_text_id` — a page whose title
