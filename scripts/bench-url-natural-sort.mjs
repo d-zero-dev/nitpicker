@@ -11,21 +11,21 @@
  *   `--list` archive this ranks a few more rows than it does). Loading the
  *   rows is timed separately (`loadMs`) and excluded from `timeMs`. Metric
  *   `pageUrls`: pages ranked.
- * - `external-sort`: `externalSortUrls`, the chunked external merge sort
- *   over every page and resource URL that `listPages` / `listExternalLinks`
- *   fall back to when an archive has no read model. Its own reads, temp-file
- *   spills and K-way merge are all inside `timeMs`. Metric `distinctUrls`:
- *   distinct page and resource URLs emitted.
+ * - `all-urls`: `sortArchiveUrls`, which ranks every page and resource URL
+ *   that `listPages` / `listExternalLinks` fall back to when an archive has
+ *   no read model. Its own reads, de-duplication and the native ranking are
+ *   all inside `timeMs`. Metric `distinctUrls`: distinct page and resource
+ *   URLs emitted.
  *
  * USAGE
  * -----
  *
  *     yarn build
- *     node scripts/bench-url-natural-sort.mjs <archive.nitpicker> [--case rank-map|external-sort] [--json]
+ *     node scripts/bench-url-natural-sort.mjs <archive.nitpicker> [--case rank-map|all-urls] [--json]
  */
 
 import { applyPageListUniverse } from '../packages/@nitpicker/query/lib/apply-page-list-universe.js';
-import { externalSortUrls } from '../packages/@nitpicker/query/lib/external-url-sort.js';
+import { sortArchiveUrls } from '../packages/@nitpicker/query/lib/sort-archive-urls.js';
 import { buildPageNaturalUrlRankMap } from '../packages/@nitpicker/query/lib/viewer-read-model/build-page-natural-url-rank-map.js';
 
 import { countInternalPages } from './bench-lib/count-internal-pages.mjs';
@@ -55,10 +55,10 @@ const RUNNERS = {
 			metrics: { pageUrls: sorted.value.size, loadMs: Math.round(loaded.ms) },
 		};
 	},
-	'external-sort': async (accessor) => {
+	'all-urls': async (accessor) => {
 		let distinctUrls = 0;
 		const sorted = await measureMs(() =>
-			externalSortUrls(accessor, async () => {
+			sortArchiveUrls(accessor, async () => {
 				distinctUrls++;
 			}),
 		);

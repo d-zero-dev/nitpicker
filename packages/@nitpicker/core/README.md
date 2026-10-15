@@ -74,7 +74,7 @@ Rust ツールチェーンが必要です（バージョンはリポジトリル
 - `yarn test:rust` で Rust のテスト、`yarn lint` で rustfmt と clippy も実行します
 - body hash は既存アーカイブに保存済みの値と byte 単位で一致させています。`crates/nitpicker_html_scan/tests/fixtures/body-hash-golden.json` は `@nitpicker/archive` の `src/body-hash/` にある JavaScript 段階実装（parity テストの oracle）から生成した golden fixture です
 - テンプレート分類（`crates/nitpicker_template_cluster`）も、既存アーカイブの `templateKey` と reason に一致させています。HTML は htmlparser2 12.0.0 の挙動を移植した `crates/nitpicker_html_parser` で読み、スタイルシートのホストは呼び出し側の `new URL(href).host` を使います。一致の確認は `@nitpicker/archive` の golden（`src/template-classification/golden/`）で行います
-- URL の順序（`crates/nitpicker_url_key`）は、文字列から数値を取り出して 2 件ずつ比べる方式を採りません。その方式は推移律が崩れる（`a9` は `a10` より前、`a10` は `a1x` より前、`a1x` は `a9` より前になる）ためで、順序はバイト列キーの全順序として定義します。基準は、`tests/order_spec.rs`（期待順序の表）と `tests/order_properties.rs`（入力順不変・同値キー ⇔ 同一 URL・数値順などのプロパティテスト）です。順位は viewer の read model に保存されるので、順序の定義を変えるときは read model の schema version を上げます
+- URL の順序（`crates/nitpicker_url_key`）は、文字列から数値を取り出して 2 件ずつ比べる方式を採りません。その方式は推移律が崩れる（`a9` は `a10` より前、`a10` は `a1x` より前、`a1x` は `a9` より前になる）ためで、順序はバイト列キーの全順序として定義します。基準は、`tests/order_spec.rs`（期待順序の表）と `tests/order_properties.rs`（入力順不変・キーが同じ URL は生の URL 文字列の順・数値順などのプロパティテスト）です。順位は viewer の read model に保存されるので、順序の定義を変えるときは read model の schema version を上げます
 - `crates/nitpicker_html_parser` には生成した固定データが 2 つあります。どちらも、リポジトリが依存していない固定版のパッケージを scratch ディレクトリに入れ、そのディレクトリを引数に渡して生成します（手順と理由は各スクリプトの冒頭）
   - エンティティの表 `src/html_decode_tree.rs`: `node scripts/generate-html-decode-tree.mjs <entities@8.0.0 のディレクトリ>`。デコードを意図して変えるときだけ再生成します
   - パーサーの比較基準 `tests/htmlparser2-fixture-events.tsv`: `node scripts/record-htmlparser2-events.mjs <htmlparser2@12.0.0 のディレクトリ>`。`@nitpicker/archive` の `page-cluster/__fixtures__/` を変えたときに取り直します

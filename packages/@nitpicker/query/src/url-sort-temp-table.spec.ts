@@ -4,6 +4,7 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { sortArchiveUrls } from './sort-archive-urls.js';
 import {
 	ensureUrlSortTempTable,
 	orderByUrlRank,
@@ -129,6 +130,84 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 		]);
 	});
 
+	it('ranks URLs a pairwise numeric comparison could not order, densely and in a total order', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		await using archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'total-order.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+
+		for (const name of ['a10', 'a9', 'a1x', 'index-j.html', 'index.html', '']) {
+			await addPage(archive, `https://example.com/${name}`);
+		}
+
+		await prepareUrlSortTempTable(archive);
+
+		const rows = await archive
+			.getKnex()(URL_SORT_TEMP_TABLE)
+			.select('url', 'rank')
+			.orderBy('rank', 'asc');
+		expect(rows).toEqual([
+			{ url: 'https://example.com', rank: 0 },
+			{ url: 'https://example.com/index.html', rank: 1 },
+			{ url: 'https://example.com/index-j.html', rank: 2 },
+			{ url: 'https://example.com/a1x', rank: 3 },
+			{ url: 'https://example.com/a9', rank: 4 },
+			{ url: 'https://example.com/a10', rank: 5 },
+		]);
+	});
+
+	it('ranks the URLs of every chunk of a multi-chunk read together', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		await using archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'chunks.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+		for (const n of [30, 4, 21, 7, 13, 2]) {
+			await addPage(archive, `https://example.com/p${n}`);
+		}
+
+		const ranked: string[] = [];
+		await sortArchiveUrls(
+			archive,
+			(url) => {
+				ranked.push(url);
+				return Promise.resolve();
+			},
+			{ readChunkSize: 2 },
+		);
+
+		expect(ranked).toEqual([2, 4, 7, 13, 21, 30].map((n) => `https://example.com/p${n}`));
+	});
+
+	it('emits nothing and still reports completion for an archive without URLs', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		await using archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'empty.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+
+		const ranked: string[] = [];
+		const messages: string[] = [];
+		await sortArchiveUrls(
+			archive,
+			(url) => {
+				ranked.push(url);
+				return Promise.resolve();
+			},
+			{ onProgress: (message) => messages.push(message) },
+		);
+
+		expect(ranked).toEqual([]);
+		expect(messages.at(-1)).toBe('Sorting URLs: done — 0 distinct URLs ranked');
+	});
+
 	it('orderByUrlRank sorts a query by natural URL order via the temp table', async () => {
 		const { mkdirSync } = await import('node:fs');
 		mkdirSync(workingDir, { recursive: true });
@@ -168,14 +247,11 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 
 		await prepareUrlSortTempTable(archive);
 
-		// Reproduces the crash observed on an 11 GB / ~1.5M-URL archive: the
-		// natural-sort comparator behind the external merge sort
-		// (`@d-zero/shared`'s `numericalComparator`) is not guaranteed
-		// transitive, which can occasionally let the same URL reach this
-		// insert twice with different ranks. `onConflict('url').ignore()` in
-		// `prepareUrlSortTempTable` must turn that into a no-op, not a
-		// `UNIQUE constraint failed` crash — this exercises the exact insert
-		// shape it uses against the exact table it built.
+		// The insert in `prepareUrlSortTempTable` carries `onConflict('url').ignore()`
+		// as a fail-safe: ranking emits each distinct URL once, so a conflict is
+		// not expected, but if one ever reached it, it must be a no-op and not a
+		// `UNIQUE constraint failed` crash. This exercises the exact insert shape
+		// against the exact table it built.
 		const knex = archive.getKnex();
 		const existing = await knex(URL_SORT_TEMP_TABLE).select('url', 'rank').first();
 		await expect(
@@ -187,63 +263,6 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 
 		const row = await knex(URL_SORT_TEMP_TABLE).where({ url: existing.url }).first();
 		expect(row.rank).toBe(existing.rank);
-	});
-
-	it('onRanked reports every row externalSortUrls ranks, in the same order as the insert', async () => {
-		const { mkdirSync } = await import('node:fs');
-		mkdirSync(workingDir, { recursive: true });
-		await using archive = await Archive.create({
-			filePath: path.resolve(workingDir, 'on-ranked.nitpicker'),
-			cwd: workingDir,
-		});
-		await archive.setConfig(baseConfig());
-		await addPage(archive, 'https://example.com/image-10.jpg');
-		await addPage(archive, 'https://example.com/image-2.jpg');
-
-		const ranked: { url: string; rank: number }[] = [];
-		await prepareUrlSortTempTable(archive, {
-			onRanked: (url, rank) => ranked.push({ url, rank }),
-		});
-
-		expect(ranked).toEqual([
-			{ url: 'https://example.com/image-2.jpg', rank: 0 },
-			{ url: 'https://example.com/image-10.jpg', rank: 1 },
-		]);
-	});
-
-	it('rankedUrls replays a caller-supplied source instead of running externalSortUrls', async () => {
-		const { mkdirSync } = await import('node:fs');
-		mkdirSync(workingDir, { recursive: true });
-		await using archive = await Archive.create({
-			filePath: path.resolve(workingDir, 'ranked-urls-source.nitpicker'),
-			cwd: workingDir,
-		});
-		await archive.setConfig(baseConfig());
-		// Not sorted, and not even a real URL under this archive — proves the
-		// replay path trusts the supplied source verbatim rather than falling
-		// back to (or cross-checking against) `pages`/`resources`.
-		/**
-		 * Fixture ranked-URL source. Must be an async generator to satisfy
-		 * `rankedUrls: AsyncIterable<...>`, even though the fixture data is
-		 * available synchronously.
-		 * @yields {{url: string, rank: number}} A fixed, out-of-natural-order pair.
-		 */
-		// eslint-disable-next-line @typescript-eslint/require-await -- async generator required by the AsyncIterable type; fixture body is synchronous.
-		async function* source() {
-			yield { url: 'https://cached.example.com/b', rank: 0 };
-			yield { url: 'https://cached.example.com/a', rank: 1 };
-		}
-
-		await prepareUrlSortTempTable(archive, { rankedUrls: source() });
-
-		const rows = await archive
-			.getKnex()(URL_SORT_TEMP_TABLE)
-			.select('url', 'rank')
-			.orderBy('rank', 'asc');
-		expect(rows).toEqual([
-			{ url: 'https://cached.example.com/b', rank: 0 },
-			{ url: 'https://cached.example.com/a', rank: 1 },
-		]);
 	});
 
 	it('ensureUrlSortTempTable only prepares the table once per connection', async () => {
@@ -265,6 +284,32 @@ describe('prepareUrlSortTempTable / ensureUrlSortTempTable / orderByUrlRank', ()
 
 		const rows = await archive.getKnex()(URL_SORT_TEMP_TABLE).select('url');
 		expect(rows.map((r: { url: string }) => r.url)).toEqual(['https://example.com']);
+	});
+
+	it('ensureUrlSortTempTable shares one preparation between concurrent first calls', async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		await using archive = await Archive.create({
+			filePath: path.resolve(workingDir, 'ensure-concurrent.nitpicker'),
+			cwd: workingDir,
+		});
+		await archive.setConfig(baseConfig());
+		await addPage(archive, 'https://example.com/a');
+		await addPage(archive, 'https://example.com/b');
+
+		const first: string[] = [];
+		const second: string[] = [];
+		await Promise.all([
+			ensureUrlSortTempTable(archive, (message) => first.push(message)),
+			ensureUrlSortTempTable(archive, (message) => second.push(message)),
+		]);
+
+		// Only the call that started the preparation reports its progress; the
+		// other waits for it instead of running a second sort.
+		expect(first.length).toBeGreaterThan(0);
+		expect(second).toEqual([]);
+		const rows = await archive.getKnex()(URL_SORT_TEMP_TABLE).select('url');
+		expect(rows).toHaveLength(2);
 	});
 
 	it('ensureUrlSortTempTable forwards onProgress to prepareUrlSortTempTable on a cold connection (issue #294)', async () => {

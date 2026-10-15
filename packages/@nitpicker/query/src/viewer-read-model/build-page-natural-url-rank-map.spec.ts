@@ -28,6 +28,28 @@ describe('buildPageNaturalUrlRankMap', () => {
 		expect(map.get(10)).toBe(2);
 	});
 
+	it('puts a directory page, its index page and the pages below in that order', () => {
+		const map = buildPageNaturalUrlRankMap([
+			{ id: 4, url: 'https://example.com/docs/guide.html' },
+			{ id: 3, url: 'https://example.com/docs/index-ja.html' },
+			{ id: 2, url: 'https://example.com/docs/index.html' },
+			{ id: 1, url: 'https://example.com/docs/' },
+		]);
+		expect([1, 2, 3, 4].map((id) => map.get(id))).toStrictEqual([0, 1, 2, 3]);
+	});
+
+	it('ranks names that mix letters and digits as one consistent order', () => {
+		// Pairwise comparison by parsed numbers cannot order these three.
+		const map = buildPageNaturalUrlRankMap([
+			{ id: 1, url: 'https://example.com/a10' },
+			{ id: 2, url: 'https://example.com/a1x' },
+			{ id: 3, url: 'https://example.com/a9' },
+		]);
+		expect(map.get(2)).toBe(0);
+		expect(map.get(3)).toBe(1);
+		expect(map.get(1)).toBe(2);
+	});
+
 	it('breaks ties on equal URLs by ascending page id', () => {
 		const map = buildPageNaturalUrlRankMap([
 			{ id: 20, url: 'https://example.com/dup' },

@@ -28,10 +28,13 @@
 //!    them. Within a class, segments are ordered by their text.
 //! 3. **Query** (as normalized: `PHPSESSID` removed, pairs sorted by name),
 //!    then **fragment**, then **protocol**.
-//! 4. The **raw URL string**, so two keys are equal only for identical URLs;
-//!    among those the caller's position decides. The port and credentials
-//!    take no part before this point: URLs that differ only in them order by
-//!    their raw strings.
+//!
+//! URLs whose keys are equal (they differ only in the port or credentials, or
+//! in how the same query was written) are then ordered by their **raw URL
+//! string**, by UTF-8 byte order, and identical strings by the caller's
+//! position. [`sort_ranks`] applies this after the key, from the strings it
+//! already holds; the key does not repeat them, which would double the memory
+//! a ranking of millions of URLs takes.
 //!
 //! Text is compared percent-decoded (like `decodeURI`; text that does not
 //! decode stays as written) and lowercased, by UTF-16 code unit. The host and

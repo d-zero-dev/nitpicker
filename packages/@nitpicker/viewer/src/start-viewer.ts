@@ -22,14 +22,12 @@ const DEFAULT_PORT = 4324;
  * `process.exit` is not reached while the server is running. On signal it
  * closes the archive (`closeAll`) and the server, then resolves for a clean exit.
  *
- * **No eager startup URL sort.** This used to unconditionally run the
- * natural-sort external merge sort (`prepareCachedUrlSortTempTable`) before
- * ever starting the server — a multi-minute cost on a million-plus-URL
- * archive, paid on every open regardless of whether the read model was
- * current. `viewer_pages.natural_url_rank` (built once at crawl/migration
- * completion, see `buildViewerReadModel`) now covers the fast path's default
+ * **No eager startup URL sort.** Ranking every URL of the archive takes
+ * long on a million-plus-URL archive, so it is not paid on every open.
+ * `viewer_pages.natural_url_rank` (built once at crawl/migration
+ * completion, see `buildViewerReadModel`) covers the fast path's default
  * URL order, so a current read model never needs the sort at all. The
- * live (stale/missing read model) query path still needs it, but prepares
+ * live (stale/missing read model) query path does need it, and prepares
  * it lazily on its own first request via `ensureUrlSortTempTable` — see
  * `list-pages.ts` — rather than the viewer paying for it upfront on every
  * single start regardless of whether that path is even reached.

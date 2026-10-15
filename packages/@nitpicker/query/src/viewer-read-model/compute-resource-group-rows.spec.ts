@@ -240,6 +240,38 @@ describe('computeResourceGroupRows', () => {
 		expect(urls).toEqual([...urls].toSorted());
 	});
 
+	it('orders numbers in a canonical URL by value, as the pages and resources lists do', async () => {
+		await using numbered = await Archive.create({
+			filePath: path.resolve(workingDir, 'natural-order.nitpicker'),
+			cwd: workingDir,
+		});
+		await numbered.setConfig(BASE_CONFIG);
+		for (const name of ['img-10.jpg', 'img-2.jpg', 'img-1.jpg']) {
+			await numbered.setResources({
+				url: parseUrl(`https://example.com/${name}`)!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'image/jpeg',
+				contentLength: 10,
+				compress: false,
+				cdn: false,
+				headers: {},
+			});
+		}
+
+		const rows = await numbered
+			.getKnex()
+			.transaction((trx) => computeResourceGroupRows(trx));
+
+		expect(rows.map((row) => row.canonical_url)).toStrictEqual([
+			'https://example.com/img-1.jpg',
+			'https://example.com/img-2.jpg',
+			'https://example.com/img-10.jpg',
+		]);
+	});
+
 	it('reads across multiple chunkSize-bounded chunks without losing or duplicating groups', async () => {
 		const knex = archive.getKnex();
 		const baseline = await knex.transaction((trx) => computeResourceGroupRows(trx));

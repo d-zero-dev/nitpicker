@@ -9,7 +9,7 @@ Rust に移植する処理（#420 のロードマップ）の時間とピーク 
 | スクリプト                          | 計測対象                                                                    | ケース                                                      |
 | ----------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `bench-template-classification.mjs` | `classifyArchivePageTemplates`                                              | `full`                                                      |
-| `bench-url-natural-sort.mjs`        | `buildPageNaturalUrlRankMap` と `externalSortUrls`                          | `rank-map` / `external-sort`                                |
+| `bench-url-natural-sort.mjs`        | `buildPageNaturalUrlRankMap` と `sortArchiveUrls`                           | `rank-map` / `all-urls`                                     |
 | `bench-isolated-clusters.mjs`       | `computeIsolatedClusters`                                                   | `default`                                                   |
 | `bench-alias-backfill.mjs`          | `backfillAliasOfId`                                                         | `default`                                                   |
 | `bench-match-selector.mjs`          | `matchSelector`（単純・子孫結合子・`:nth-child()`）                         | `simple` / `compound` / `nth`                               |
