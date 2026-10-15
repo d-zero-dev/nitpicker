@@ -25,6 +25,18 @@ const b = computeBodyHash(Buffer.from('<body><a href="/p/z9y8x7w6">x</a></body>'
 a.equals(b); // true — 動的 ID はマスクしてからハッシュする
 ```
 
+URL の自然順（`page2` が `page10` の前、大文字小文字・パーセントエンコードで順序が割れない、ホストが先でパスが後）は、`computeUrlSortRanks` が全件まとめて順位にします。URL は 1 回だけパースし、結果は入力順に依存しない全順序です（同じ URL は入力順）。順序の定義は `crates/nitpicker_url_key` の doc が正です。
+
+```ts
+import { computeUrlSortRanks } from '@nitpicker/core/compute-url-sort-ranks';
+
+computeUrlSortRanks([
+	'https://example.com/page10',
+	'https://example.com/page2',
+	'https://example.com/',
+]); // Uint32Array [2, 1, 0]
+```
+
 テンプレート分類は、呼び出し側（`@nitpicker/archive` の `resolvePageClusterKeys`）がコーパスを読んで順に渡して実行します。全ページのシグナル（URL パス・スタイルシート・ホスト）を渡してブロック分け（Pass 0）し、続けて全ページの HTML をコーパス順に渡します。計算する呼び出しはアドオン内のスレッドプールで動き、Promise を返します。呼び出しは重ねず、1 つずつ await します。
 
 ```ts
@@ -62,6 +74,7 @@ Rust ツールチェーンが必要です（バージョンはリポジトリル
 - `yarn test:rust` で Rust のテスト、`yarn lint` で rustfmt と clippy も実行します
 - body hash は既存アーカイブに保存済みの値と byte 単位で一致させています。`crates/nitpicker_html_scan/tests/fixtures/body-hash-golden.json` は `@nitpicker/archive` の `src/body-hash/` にある JavaScript 段階実装（parity テストの oracle）から生成した golden fixture です
 - テンプレート分類（`crates/nitpicker_template_cluster`）も、既存アーカイブの `templateKey` と reason に一致させています。HTML は htmlparser2 12.0.0 の挙動を移植した `crates/nitpicker_html_parser` で読み、スタイルシートのホストは呼び出し側の `new URL(href).host` を使います。一致の確認は `@nitpicker/archive` の golden（`src/template-classification/golden/`）で行います
+- URL の順序（`crates/nitpicker_url_key`）は、文字列から数値を取り出して 2 件ずつ比べる方式を採りません。その方式は推移律が崩れる（`a9` は `a10` より前、`a10` は `a1x` より前、`a1x` は `a9` より前になる）ためで、順序はバイト列キーの全順序として定義します。基準は、`tests/order_spec.rs`（期待順序の表）と `tests/order_properties.rs`（入力順不変・同値キー ⇔ 同一 URL・数値順などのプロパティテスト）です。順位は viewer の read model に保存されるので、順序の定義を変えるときは read model の schema version を上げます
 - `crates/nitpicker_html_parser` には生成した固定データが 2 つあります。どちらも、リポジトリが依存していない固定版のパッケージを scratch ディレクトリに入れ、そのディレクトリを引数に渡して生成します（手順と理由は各スクリプトの冒頭）
   - エンティティの表 `src/html_decode_tree.rs`: `node scripts/generate-html-decode-tree.mjs <entities@8.0.0 のディレクトリ>`。デコードを意図して変えるときだけ再生成します
   - パーサーの比較基準 `tests/htmlparser2-fixture-events.tsv`: `node scripts/record-htmlparser2-events.mjs <htmlparser2@12.0.0 のディレクトリ>`。`@nitpicker/archive` の `page-cluster/__fixtures__/` を変えたときに取り直します

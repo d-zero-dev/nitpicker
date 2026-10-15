@@ -7,6 +7,8 @@
 export interface NativeBinding {
 	/** See `compute-body-hash.ts`. */
 	computeBodyHash(html: Uint8Array): Buffer;
+	/** See `compute-url-sort-ranks.ts`. */
+	computeUrlSortRanks(urls: Uint8Array, offsets: Uint32Array): Uint32Array;
 	/** See `create-template-classification-run.ts`. */
 	TemplateClassificationRun: new (
 		onProgress?: (event: NativeTemplateClassificationProgress) => void,

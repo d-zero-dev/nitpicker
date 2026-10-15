@@ -1,7 +1,8 @@
 // Loads a built `.node` file directly (no workspace install needed) and checks
 // it against the body-hash golden fixture, then runs one small template
-// classification to its known keys — a smoke check that the export
-// works in this build, not a substitute for the template golden records.
+// classification to its known keys and one URL ranking — a smoke check that
+// the exports work in this build, not a substitute for the template golden
+// records or the URL order tests.
 // CI runs this on every prebuilt binary — on the platform it targets —
 // before it can be published.
 // Usage: node verify-prebuilt.mjs <path-to-addon.node>
@@ -68,3 +69,23 @@ if (templateKeys !== expectedTemplateKeys) {
 	process.exit(1);
 }
 console.log(`Template classification smoke check passed for ${addonPath}`);
+
+// Numbers compare by value and the root page comes first; the host decides
+// before the path.
+const sortUrls = [
+	'https://b.example.com/a',
+	'https://a.example.com/page10',
+	'https://a.example.com/page2',
+	'https://a.example.com/',
+];
+const urlBytes = Buffer.from(sortUrls.join(''), 'utf8');
+const urlOffsets = new Uint32Array(sortUrls.length + 1);
+for (const [index, url] of sortUrls.entries()) {
+	urlOffsets[index + 1] = urlOffsets[index] + Buffer.byteLength(url, 'utf8');
+}
+const ranks = [...binding.computeUrlSortRanks(urlBytes, urlOffsets)].join(' ');
+if (ranks !== '3 2 1 0') {
+	console.error(`MISMATCH url sort ranks: expected 3 2 1 0, got ${ranks}`);
+	process.exit(1);
+}
+console.log(`URL sort ranks smoke check passed for ${addonPath}`);
