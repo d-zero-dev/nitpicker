@@ -33,8 +33,10 @@ import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
  * page" where the pair forms a single isolated group regardless of which
  * end carries the explicit link.
  *
- * Returned components are unsorted; callers (`listIsolatedClusters` etc.)
- * apply their own sort order.
+ * Returned components are ordered by their smallest member page id, so the
+ * order (and the `component_id` the read model derives from it) does not
+ * depend on SQLite's row order. Callers (`listIsolatedClusters` etc.) apply
+ * their own display sort order.
  *
  * Performance: O(N + E + N·α(N)) where N is the inventory-* page count
  * and E is the anchor count touching the candidate set. The redirect chain
@@ -100,7 +102,11 @@ export async function computeIsolatedClusters(
 		})
 		.whereIn('ci.source', ['inventory-seed', 'inventory-discovered'])
 		.whereNull('ci.redirect_dest_id')
-		.whereNull('ci.alias_of_id')) as {
+		.whereNull('ci.alias_of_id')
+		// Components below are numbered in first-seen order, and the read model
+		// stores that number as `component_id`. Without an explicit order the
+		// number would follow whatever plan SQLite picks.
+		.orderBy('ci.id')) as {
 		id: number;
 		url: string;
 		title: string | null;
