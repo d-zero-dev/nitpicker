@@ -43,7 +43,8 @@ fn cluster_count(sets: &[Vec<u32>]) -> usize {
 /// jump of at least [`MIN_KNEE_RATIO`] is returned; with no such jump the
 /// deepest candidate is (no cap rather than a guess). Depths are counted one
 /// after another rather than in parallel: each holds an `n²/2` similarity
-/// table (itself filled in parallel), the largest allocation of the run.
+/// table (`d²/2` for `d` distinct sets, as identical ones are folded; itself
+/// filled in parallel), the largest allocation of the run.
 #[must_use]
 pub fn detect_content_depth_cap(sets_by_depth: &[Vec<Vec<u32>>]) -> usize {
 	let counts: Vec<usize> = sets_by_depth
