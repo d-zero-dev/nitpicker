@@ -3,6 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { PageSource } from '@nitpicker/archive/types';
 
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
+import { selectMostLinkedTo } from './select-most-linked-to.js';
 
 /**
  * Builds the internal-page-filter predicate for an aliased `content_items`
@@ -29,10 +30,13 @@ function aliasedInternalWhere(
  * Builds the internal-page link graph from the archive.
  *
  * 0.13: nodes come from `content_items` + `url_refs` +
- * `content_type_refs`; edges from `anchor_edges` (which already collapses
- * duplicate anchors between the same page pair). Edges are further deduped
- * to distinct `(source.url, dest.url)` pairs via `DISTINCT` because the
- * grouping is at the URL level, not the edge-row level.
+ * `content_type_refs`; edges from `anchor_edges`, which already holds one
+ * row per `(page_id, href_page_id)` pair (`UNIQUE`) — and a page has exactly
+ * one URL, so those are exactly the distinct `(source URL, target URL)`
+ * pairs. Edges are read and counted as page ids; URLs are put back from the
+ * node rows, only for the edges that are returned. With `limit`, the nodes
+ * kept are the most linked-to ones (`selectMostLinkedTo`, ties in node-row
+ * order).
  * Alias members (`content_items.alias_of_id IS NOT NULL`) are dropped
  * entirely from both nodes and edges — the same "drop, don't resolve"
  * treatment already applied to `redirect_dest_id` here — since the
@@ -57,18 +61,25 @@ export async function getLinkGraph(
 		knex('content_items as ci')
 			.join('url_refs as ur', 'ur.id', 'ci.url_id')
 			.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
-			.select('ur.url as url', 'ci.status as status', 'ci.source as source')
+			.select(
+				'ci.id as id',
+				'ur.url as url',
+				'ci.status as status',
+				'ci.source as source',
+			)
 			.where({ 'ci.is_external': 0, 'ci.scraped': 1, 'ctr.raw': 'text/html' })
 			.whereNull('ci.redirect_dest_id')
 			.whereNull('ci.alias_of_id'),
+		// Edges as page ids, not URLs: `UNIQUE(page_id, href_page_id)` already
+		// makes each pair one row, and a page has exactly one URL, so no
+		// `DISTINCT` over URL strings is needed and the two `url_refs` joins
+		// drop out. The URLs are put back from `pageRows` below.
 		knex('anchor_edges as ae')
 			.join('content_items as source', 'ae.page_id', 'source.id')
 			.join('content_items as dest', 'ae.href_page_id', 'dest.id')
-			.join('url_refs as source_ur', 'source_ur.id', 'source.url_id')
-			.join('url_refs as dest_ur', 'dest_ur.id', 'dest.url_id')
 			.join('content_type_refs as source_ctr', 'source_ctr.id', 'source.content_type_id')
 			.join('content_type_refs as dest_ctr', 'dest_ctr.id', 'dest.content_type_id')
-			.distinct('source_ur.url as source', 'dest_ur.url as target')
+			.select('ae.page_id as sourceId', 'ae.href_page_id as targetId')
 			.where(aliasedInternalWhere('source', 'source_ctr'))
 			.whereNull('source.redirect_dest_id')
 			.whereNull('source.alias_of_id')
@@ -77,33 +88,57 @@ export async function getLinkGraph(
 			.whereNull('dest.alias_of_id')
 			.whereRaw('"ae"."page_id" != "ae"."href_page_id"'),
 	])) as [
-		{ url: string; status: number | null; source: PageSource }[],
-		{ source: string; target: string }[],
+		{ id: number; url: string; status: number | null; source: PageSource }[],
+		{ sourceId: number; targetId: number }[],
 	];
 
-	const inDegree = new Map<string, number>();
-	for (const edge of edgeRows) {
-		inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
+	const indexById = new Map<number, number>();
+	for (const [index, row] of pageRows.entries()) {
+		indexById.set(row.id, index);
 	}
 
-	let nodes: GraphNode[] = pageRows.map((row) => ({
-		url: row.url,
-		status: row.status,
-		inDegree: inDegree.get(row.url) ?? 0,
-		source: row.source,
-	}));
-	let edges: GraphEdge[] = edgeRows.map((edge) => ({
-		source: edge.source,
-		target: edge.target,
-	}));
-
-	let truncated = false;
-	if (options.limit != null && nodes.length > options.limit) {
-		nodes = nodes.toSorted((a, b) => b.inDegree - a.inDegree).slice(0, options.limit);
-		const kept = new Set(nodes.map((node) => node.url));
-		edges = edges.filter((edge) => kept.has(edge.source) && kept.has(edge.target));
-		truncated = true;
+	// Both ends of an edge are nodes, since the edge query applies the same
+	// filters as the node query — but the two run as separate statements, so a
+	// write landing between them (a crawl appending while this reads) could
+	// leave an edge whose end is not in `pageRows`. Such an edge is dropped
+	// rather than failing the graph.
+	const knownEdges = edgeRows.filter(
+		(edge) => indexById.has(edge.sourceId) && indexById.has(edge.targetId),
+	);
+	const inDegree = new Int32Array(pageRows.length);
+	for (const edge of knownEdges) {
+		inDegree[indexById.get(edge.targetId)!]!++;
 	}
 
-	return { nodes, edges, truncated };
+	const toEdge = (edge: { sourceId: number; targetId: number }): GraphEdge => ({
+		source: pageRows[indexById.get(edge.sourceId)!]!.url,
+		target: pageRows[indexById.get(edge.targetId)!]!.url,
+	});
+	const toNode = (index: number): GraphNode => {
+		const row = pageRows[index]!;
+		return {
+			url: row.url,
+			status: row.status,
+			inDegree: inDegree[index]!,
+			source: row.source,
+		};
+	};
+
+	if (options.limit != null && pageRows.length > options.limit) {
+		const kept = selectMostLinkedTo(inDegree, options.limit);
+		const keptIds = new Set(kept.map((index) => pageRows[index]!.id));
+		return {
+			nodes: kept.map((index) => toNode(index)),
+			edges: knownEdges
+				.filter((edge) => keptIds.has(edge.sourceId) && keptIds.has(edge.targetId))
+				.map((edge) => toEdge(edge)),
+			truncated: true,
+		};
+	}
+
+	return {
+		nodes: pageRows.map((_row, index) => toNode(index)),
+		edges: knownEdges.map((edge) => toEdge(edge)),
+		truncated: false,
+	};
 }

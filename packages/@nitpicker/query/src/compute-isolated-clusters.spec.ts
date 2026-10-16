@@ -230,7 +230,7 @@ describe('computeIsolatedClusters', () => {
 			},
 			'inventory-seed',
 		);
-		// Record /old-y → /seed-z redirect. Per the crawler's
+		// Record /old-y → /seed-z redirect. Per the archive's
 		// `resolveRedirectChain`, `url` is the requested URL (= redirect
 		// source) and the last entry of `redirectPaths` is the final
 		// destination — so `url: /old-y, redirectPaths: [/seed-z]` records
@@ -551,5 +551,95 @@ describe('computeIsolatedClusters: content_items.alias_of_id handling', () => {
 		await knex.schema.alterTable('content_items', (t) => {
 			t.integer('alias_of_id');
 		});
+	});
+});
+
+describe('computeIsolatedClusters: more candidates than one anchor chunk', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_isolated_clusters_chunks__',
+	);
+	const archiveFilePath = path.resolve(dir, 'compute-clusters-chunks-test.nitpicker');
+	/** One more page than `SQLITE_IN_CHUNK` (500), so the anchors are read in two chunks. */
+	const PAGES = 501;
+	const urlOf = (index: number) => `https://example.com/ring/p${index}`;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// A ring: page i anchors to page i + 1 (the last to the first), so whichever
+		// page is read in the second chunk carries an edge, and the one component
+		// only forms if the first chunk's edges are still joined when the second
+		// chunk arrives.
+		for (let index = 0; index < PAGES; index++) {
+			await archive.setPage(
+				{
+					url: parseUrl(urlOf(index))!,
+					redirectPaths: [],
+					isExternal: false,
+					isTarget: true,
+					status: 200,
+					statusText: 'OK',
+					contentType: 'text/html',
+					contentLength: 100,
+					responseHeaders: {},
+					html: '<html></html>',
+					meta: { ...EMPTY_META, title: `Ring ${index}` },
+					anchorList: [
+						{
+							href: parseUrl(urlOf((index + 1) % PAGES))!,
+							isExternal: false,
+							title: null,
+							textContent: 'next',
+							hash: null,
+						},
+					],
+					imageList: [],
+					isSkipped: false,
+				},
+				'inventory-seed',
+			);
+		}
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('joins edges read in different chunks into one component', async () => {
+		const components = await computeIsolatedClusters(archive);
+		expect(components).toHaveLength(1);
+		expect(components[0]!.size).toBe(PAGES);
+		expect(components[0]!.members.map((member) => member.url)).toStrictEqual(
+			Array.from({ length: PAGES }, (_, index) => urlOf(index)).toSorted(),
+		);
 	});
 });

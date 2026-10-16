@@ -3379,8 +3379,10 @@ export interface LinkGraph {
  */
 export interface GetLinkGraphOptions {
 	/**
-	 * Maximum number of nodes to return, keeping the highest in-degree pages.
-	 * Omit for all internal pages.
+	 * Maximum number of nodes to return, keeping the highest in-degree pages
+	 * (equal in-degrees in node-row order). Omit for all internal pages. A
+	 * fraction is cut down, and a limit of 0 or less keeps no nodes (and still
+	 * reports `truncated` when there are pages).
 	 */
 	limit?: number;
 }

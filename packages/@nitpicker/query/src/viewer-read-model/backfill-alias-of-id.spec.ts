@@ -499,3 +499,128 @@ describe('backfillAliasOfId — reacts to newly added pages on rebuild', () => {
 		);
 	});
 });
+
+describe('backfillAliasOfId — writes in chunks', () => {
+	const chunkWorkingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_backfill_alias_chunks__',
+	);
+	const archiveFilePath = path.resolve(chunkWorkingDir, 'chunks-test.nitpicker');
+	let archive: InstanceType<typeof Archive>;
+
+	/**
+	 * Writes `pairs` two-page groups: `/pN/index.html` and `/pN/` share a Tier A
+	 * key and a title, so each pair yields one assignment (the `index.html`
+	 * page points at the bare directory page).
+	 * @param pairs - How many groups to write.
+	 */
+	async function writePairs(pairs: number) {
+		const pages: FixturePage[] = [];
+		for (let index = 0; index < pairs; index++) {
+			pages.push(
+				{ url: `https://example.com/p${index}/index.html`, title: `Pair ${index}` },
+				{ url: `https://example.com/p${index}/`, title: `Pair ${index}` },
+			);
+		}
+		await setPages(archive, pages);
+	}
+
+	beforeEach(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(chunkWorkingDir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: chunkWorkingDir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+	});
+
+	afterEach(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(chunkWorkingDir, { recursive: true, force: true });
+	});
+
+	it('writes every assignment of 300 groups and reports progress after each chunk of 250', async () => {
+		await writePairs(300);
+		const calls: [number, number][] = [];
+
+		await backfillAliasOfId(archive, (processed, total) => {
+			calls.push([processed, total]);
+		});
+
+		expect(calls).toStrictEqual([
+			[250, 300],
+			[300, 300],
+		]);
+		const [{ count }] = await archive
+			.getKnex()('content_items')
+			.whereNotNull('alias_of_id')
+			.count({ count: '*' });
+		expect(Number(count)).toBe(300);
+		expect(await getAliasTargetUrl(archive, 'https://example.com/p0/index.html')).toBe(
+			'https://example.com/p0/',
+		);
+		expect(await getAliasTargetUrl(archive, 'https://example.com/p299/index.html')).toBe(
+			'https://example.com/p299/',
+		);
+		expect(await getAliasTargetUrl(archive, 'https://example.com/p299/')).toBeNull();
+	});
+
+	it('reports exactly one (250, 250) when there are exactly 250 assignments', async () => {
+		await writePairs(250);
+		const calls: [number, number][] = [];
+
+		await backfillAliasOfId(archive, (processed, total) => {
+			calls.push([processed, total]);
+		});
+
+		expect(calls).toStrictEqual([[250, 250]]);
+	});
+
+	it('leaves no staging table behind, in the file or on the connection', async () => {
+		await writePairs(3);
+
+		await backfillAliasOfId(archive);
+
+		const leftovers = await archive.getKnex().raw(
+			`SELECT name FROM sqlite_master WHERE name = 'viewer_alias_assignments'
+			 UNION ALL
+			 SELECT name FROM sqlite_temp_master WHERE name = 'viewer_alias_assignments'`,
+		);
+		expect(leftovers).toHaveLength(0);
+	});
+
+	it('does not touch pages outside every group', async () => {
+		await writePairs(2);
+		await setPages(archive, [{ url: 'https://example.com/alone', title: 'Alone' }]);
+
+		await backfillAliasOfId(archive);
+
+		expect(await getAliasTargetUrl(archive, 'https://example.com/alone')).toBeNull();
+		const [{ count }] = await archive
+			.getKnex()('content_items')
+			.whereNotNull('alias_of_id')
+			.count({ count: '*' });
+		expect(Number(count)).toBe(2);
+	});
+});
