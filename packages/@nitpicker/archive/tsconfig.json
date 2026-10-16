@@ -15,6 +15,8 @@
 		"./src/template-classification/golden/**",
 		"./src/body-hash/extract-body.ts",
 		"./src/body-hash/mask-dynamic-ids.ts",
-		"./src/body-hash/normalize-url-like-strings.ts"
+		"./src/body-hash/normalize-url-like-strings.ts",
+		"./src/url-alias/parse-alias-key-parts.ts",
+		"./src/url-alias/format-alias-key.ts"
 	]
 }

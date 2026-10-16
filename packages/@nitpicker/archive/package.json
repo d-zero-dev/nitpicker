@@ -120,6 +120,10 @@
 			"import": "./lib/is-within-outage-window.js",
 			"types": "./lib/is-within-outage-window.d.ts"
 		},
+		"./isolated-cluster/create-isolated-cluster-run": {
+			"import": "./lib/isolated-cluster/create-isolated-cluster-run.js",
+			"types": "./lib/isolated-cluster/create-isolated-cluster-run.d.ts"
+		},
 		"./meta/assert-compatible-version": {
 			"import": "./lib/meta/assert-compatible-version.js",
 			"types": "./lib/meta/assert-compatible-version.d.ts"
@@ -247,6 +251,10 @@
 		"./url-alias/compute-tier-b-alias-key": {
 			"import": "./lib/url-alias/compute-tier-b-alias-key.js",
 			"types": "./lib/url-alias/compute-tier-b-alias-key.d.ts"
+		},
+		"./url-alias/group-alias-candidates": {
+			"import": "./lib/url-alias/group-alias-candidates.js",
+			"types": "./lib/url-alias/group-alias-candidates.d.ts"
 		},
 		"./url-pattern/compute-shape-key": {
 			"import": "./lib/url-pattern/compute-shape-key.js",

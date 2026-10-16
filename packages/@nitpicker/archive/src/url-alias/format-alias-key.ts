@@ -5,6 +5,12 @@ import type { AliasKeyParts } from './types.js';
  * never contain `/` or `?`, and `path`/`search` always start with those
  * characters respectively (or `search` is empty), so concatenation without
  * an explicit delimiter is unambiguous.
+ *
+ * Not on any runtime path: `computeTierAAliasKey` / `computeTierBAliasKey`
+ * run the native port (`@nitpicker/core`). This is the parity oracle for
+ * `compute-alias-keys.parity.spec.ts` and for
+ * `core/scripts/generate-alias-keys-golden.mjs` only, and is excluded from the
+ * build (`tsconfig.json`).
  * @param parts - The parts to format.
  * @returns The formatted key string.
  * @example

@@ -375,3 +375,143 @@ describe('getLinkGraph: content_items.alias_of_id handling', () => {
 		});
 	});
 });
+
+describe('getLinkGraph: in-degree, edges and limit', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(dirname, '__test_fixtures_link_graph_limit__');
+	const archiveFilePath = path.resolve(dir, 'link-graph-limit-test.nitpicker');
+	const HUB = 'https://example.com/hub';
+	const MID = 'https://example.com/mid';
+	const LOW1 = 'https://example.com/low1';
+	const LOW2 = 'https://example.com/low2';
+	const ORPHAN = 'https://example.com/orphan';
+
+	/**
+	 * Writes one internal page that links to `links`.
+	 * @param url - The page URL.
+	 * @param links - The URLs it links to.
+	 */
+	async function writePage(url: string, links: readonly string[]) {
+		await archive.setPage({
+			url: parseUrl(url)!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: url },
+			anchorList: links.map((href) => ({
+				href: parseUrl(href)!,
+				isExternal: false,
+				title: null,
+				textContent: href,
+			})),
+			imageList: [],
+			isSkipped: false,
+		});
+	}
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// In-degrees: hub 3 (low1, low2, orphan), mid 2 (hub, low1), low1 1 (hub),
+		// low2 1 (mid), orphan 0. The orphan also links to itself.
+		await writePage(HUB, [MID, LOW1]);
+		await writePage(MID, [LOW2]);
+		await writePage(LOW1, [HUB, MID]);
+		await writePage(LOW2, [HUB]);
+		await writePage(ORPHAN, [HUB, ORPHAN]);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('counts every node’s in-degree', async () => {
+		const graph = await getLinkGraph(archive);
+		const inDegreeByUrl = Object.fromEntries(graph.nodes.map((n) => [n.url, n.inDegree]));
+		expect(inDegreeByUrl).toStrictEqual({
+			[HUB]: 3,
+			[MID]: 2,
+			[LOW1]: 1,
+			[LOW2]: 1,
+			[ORPHAN]: 0,
+		});
+	});
+
+	it('returns each edge once and leaves the self link out', async () => {
+		const graph = await getLinkGraph(archive);
+		const edges = graph.edges.map((e) => `${e.source} -> ${e.target}`).toSorted();
+		expect(edges).toStrictEqual([
+			`${HUB} -> ${LOW1}`,
+			`${HUB} -> ${MID}`,
+			`${LOW1} -> ${HUB}`,
+			`${LOW1} -> ${MID}`,
+			`${LOW2} -> ${HUB}`,
+			`${MID} -> ${LOW2}`,
+			`${ORPHAN} -> ${HUB}`,
+		]);
+	});
+
+	it('keeps the most linked-to pages under a limit, and only the edges among them', async () => {
+		const graph = await getLinkGraph(archive, { limit: 2 });
+		expect(graph.nodes.map((n) => [n.url, n.inDegree])).toStrictEqual([
+			[HUB, 3],
+			[MID, 2],
+		]);
+		expect(graph.edges).toStrictEqual([{ source: HUB, target: MID }]);
+		expect(graph.truncated).toBe(true);
+	});
+
+	it('returns everything and no truncation when the limit covers every node', async () => {
+		const graph = await getLinkGraph(archive, { limit: 5 });
+		expect(graph.nodes).toHaveLength(5);
+		expect(graph.edges).toHaveLength(7);
+		expect(graph.truncated).toBe(false);
+	});
+
+	it.each([
+		[0, 0],
+		[-1, 0],
+		[1.9, 1],
+	])(
+		'a limit of %s keeps %i nodes and reports truncation',
+		async (limit, expectedNodes) => {
+			const graph = await getLinkGraph(archive, { limit });
+			expect(graph.nodes).toHaveLength(expectedNodes);
+			expect(graph.truncated).toBe(true);
+			expect(graph.edges).toStrictEqual([]);
+		},
+	);
+});

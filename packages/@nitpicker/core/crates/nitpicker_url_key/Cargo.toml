@@ -8,11 +8,14 @@ repository.workspace = true
 
 [dependencies]
 form_urlencoded = { workspace = true }
+nitpicker_union_find = { workspace = true }
 rayon = { workspace = true }
+rustc-hash = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,8 +1,9 @@
 // Loads a built `.node` file directly (no workspace install needed) and checks
 // it against the body-hash golden fixture, then runs one small template
-// classification to its known keys and one URL ranking — a smoke check that
+// classification to its known keys, one URL ranking, one pair of alias keys,
+// one alias grouping and one isolated-components run — a smoke check that
 // the exports work in this build, not a substitute for the template golden
-// records or the URL order tests.
+// records, the URL order tests or the alias parity tests.
 // CI runs this on every prebuilt binary — on the platform it targets —
 // before it can be published.
 // Usage: node verify-prebuilt.mjs <path-to-addon.node>
@@ -89,3 +90,61 @@ if (ranks !== '3 2 1 0') {
 	process.exit(1);
 }
 console.log(`URL sort ranks smoke check passed for ${addonPath}`);
+
+// The scheme, the host's case and a trailing `/index.{ext}` fold into one
+// Tier A key; Tier B also drops the trailing slash.
+const aliasKeys = binding.computeAliasKeys('http://Example.com/about/index.html');
+if (
+	aliasKeys?.tierA !== 'example.com/about/' ||
+	aliasKeys.tierB !== 'example.com/about'
+) {
+	console.error(`MISMATCH alias keys: got ${JSON.stringify(aliasKeys)}`);
+	process.exit(1);
+}
+console.log(`Alias keys smoke check passed for ${addonPath}`);
+
+// Two pages of one group: the shorter URL is the representative (index 1), and
+// a page of its own stays alone.
+const aliasUrls = [
+	'http://example.com/a/index.html',
+	'https://example.com/a/',
+	'https://example.com/b/',
+];
+const aliasUrlBytes = Buffer.from(aliasUrls.join(''), 'utf8');
+const aliasUrlOffsets = new Uint32Array(aliasUrls.length + 1);
+for (const [index, url] of aliasUrls.entries()) {
+	aliasUrlOffsets[index + 1] = aliasUrlOffsets[index] + Buffer.byteLength(url, 'utf8');
+}
+const representatives = [
+	...binding.groupAliasCandidates({
+		urls: aliasUrlBytes,
+		urlOffsets: aliasUrlOffsets,
+		urlIds: Uint32Array.of(1, 2, 3),
+		titleTextIds: Uint32Array.of(1, 1, 1),
+		canonicalUrlIds: Uint32Array.of(4_294_967_295, 4_294_967_295, 4_294_967_295),
+		bodyHashes: new Uint8Array(),
+		hashOffsets: new Uint32Array(4),
+		hashPresent: Uint8Array.of(0, 0, 0),
+	}),
+].join(' ');
+if (representatives !== '1 4294967295 4294967295') {
+	console.error(
+		`MISMATCH alias grouping: expected 1 4294967295 4294967295, got ${representatives}`,
+	);
+	process.exit(1);
+}
+console.log(`Alias grouping smoke check passed for ${addonPath}`);
+
+// Candidates 10, 20, 30 with page 40 redirecting to 30: the edge 20 → 40 is an
+// edge to 30, so all three are one component.
+const isolatedRun = new binding.IsolatedClusterRun(
+	Uint32Array.of(10, 20, 30),
+	Uint32Array.of(40, 30),
+);
+isolatedRun.unionEdges(Uint32Array.of(10, 20, 20, 40));
+const components = [...isolatedRun.labels()].join(' ');
+if (components !== '0 0 0') {
+	console.error(`MISMATCH isolated components: expected 0 0 0, got ${components}`);
+	process.exit(1);
+}
+console.log(`Isolated components smoke check passed for ${addonPath}`);

@@ -4,7 +4,7 @@
 
 ## Rust 化のベンチ基準値（#424）
 
-Rust に移植する処理（#420 のロードマップ）の時間とピーク RSS を、JavaScript 版と Rust 版で同じスクリプトを使って比べるためのベンチ。移植で出力が変わらないことの確認は、下の「テンプレート分類の golden」を参照。
+Rust に移植する処理（#420 のロードマップ）の時間とピーク RSS を、JavaScript 版と Rust 版で同じスクリプトを使って比べるためのベンチ。移植で出力が変わらないことの確認は、下の「テンプレート分類の golden」と「alias・isolated clusters・リンクグラフの golden」を参照。
 
 | スクリプト                          | 計測対象                                                                    | ケース                                                      |
 | ----------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
@@ -12,6 +12,7 @@ Rust に移植する処理（#420 のロードマップ）の時間とピーク 
 | `bench-url-natural-sort.mjs`        | `buildPageNaturalUrlRankMap` と `sortArchiveUrls`                           | `rank-map` / `all-urls`                                     |
 | `bench-isolated-clusters.mjs`       | `computeIsolatedClusters`                                                   | `default`                                                   |
 | `bench-alias-backfill.mjs`          | `backfillAliasOfId`                                                         | `default`                                                   |
+| `bench-get-link-graph.mjs`          | `getLinkGraph`（全ノード・全辺と `limit: 500`）                             | `all` / `limit-500`                                         |
 | `bench-match-selector.mjs`          | `matchSelector`（単純・子孫結合子・`:nth-child()`）                         | `simple` / `compound` / `nth`                               |
 | `bench-search-html.mjs`             | `searchHtml`（リテラル・正規表現 × ヒット多・少）                           | `literal-many` / `literal-few` / `regex-many` / `regex-few` |
 | `bench-body-hash.mjs`               | `computeBodyHash` を全 HTML スナップショットに適用（Rust 版と JS 段階実装） | `rust` / `js`                                               |
@@ -80,4 +81,19 @@ node scripts/template-classification-golden.mjs check <archive.nitpicker> <golde
 - 本番の入口（`classifyArchivePageTemplates`）を、一時ディレクトリに展開したコピーで、CLI と同じく進捗コールバック付きで実行する。比べるのは、保存された `page_templates`（URL → テンプレートキー）と `page_template_clusters` の reason（展開後の JSON 文字列）。アーカイブ本体は変更しない
 - コピーに残っている前回の分類は先に消す。分類したページがすべて保存されていなければ失敗する。分類が 0 件のとき前回の行を比べてしまう事故と、URL を行に戻せず保存されなかったページの見落としを防ぐため
 - 補助関数は `golden-lib/` にある（ユニットテスト付き）
+- `dump` は実装を変える**前に**、信頼できる実装で取る。出力にはクロールした URL が入るので、**リポジトリの外に置く**。`check` が出す差分の例にも URL が入るので、issue や PR に貼らない
+
+## alias・isolated clusters・リンクグラフの golden（#429）
+
+`isolated-alias-golden.mjs` は、コミットできない実アーカイブで、alias の判定（`backfillAliasOfId`）・alias キー（Tier A / B）・isolated clusters（`computeIsolatedClusters`）・リンクグラフ（`getLinkGraph`）の出力が変わっていないことを確かめる。
+
+```sh
+yarn build
+node scripts/isolated-alias-golden.mjs dump <archive.nitpicker> <out.jsonl>     # 今の実装の出力を保存
+node scripts/isolated-alias-golden.mjs check <archive.nitpicker> <golden.jsonl> # 保存した出力と比べる（差分があれば終了コード 1、比較できなければ 2）
+```
+
+- 一時ディレクトリに展開したコピーで viewer-build と同じ順（`backfillBodyHashFromHtmlBlobs` → `backfillAliasOfId` → `computeIsolatedClusters` → `getLinkGraph`）に実行し、結果を 1 行 1 エントリの JSONL（`[カテゴリ, キー, 値]`）で保存する。全 URL のキーを持つので 1 つの JSON 文字列に収まらない。アーカイブ本体は変更しない
+- 比べるのは、alias（メンバー URL → 代表 URL）・`url_refs.url` 全件の Tier A / B キー・isolated の成分の順序と各成分のメンバー（返された順）・リンクグラフのノード（`status|inDegree|source`）と辺（辺の順序は定義がないので、ソートした行の SHA-256 と件数）。`limit: 500` のグラフも同じ形で比べる
+- **inventory のページを持たないアーカイブでは isolated の成分が 0 件で、isolated の出力は比べられない**。成分を持つ実アーカイブがなければ、`query/src/compute-isolated-clusters.parity.spec.ts`（参照実装との突き合わせ）と `compute-isolated-clusters.spec.ts` が根拠になる
 - `dump` は実装を変える**前に**、信頼できる実装で取る。出力にはクロールした URL が入るので、**リポジトリの外に置く**。`check` が出す差分の例にも URL が入るので、issue や PR に貼らない
