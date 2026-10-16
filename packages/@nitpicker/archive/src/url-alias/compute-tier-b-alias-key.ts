@@ -1,5 +1,4 @@
-import { formatAliasKey } from './format-alias-key.js';
-import { parseAliasKeyParts } from './parse-alias-key-parts.js';
+import { computeAliasKeys } from '@nitpicker/core/compute-alias-keys';
 
 /**
  * Computes the Tier B alias key for `url`: like `computeTierAAliasKey`,
@@ -9,6 +8,10 @@ import { parseAliasKeyParts } from './parse-alias-key-parts.js';
  * than Tier A's (a web server can legitimately serve different content at
  * `/foo` and `/foo/`), so callers must additionally require a matching
  * `page_meta.body_hash` before treating a Tier B match as the same page.
+ *
+ * Computed in the native addon like the Tier A key — one call and one parse
+ * per URL, so to group many pages use `groupAliasCandidates` — see
+ * `computeTierAAliasKey` for what stays as the oracle.
  * @param url - The URL string to compute a key for.
  * @returns The Tier B key, or `null` if `url` is not a parseable http(s) URL.
  * @example
@@ -20,13 +23,5 @@ import { parseAliasKeyParts } from './parse-alias-key-parts.js';
  * ```
  */
 export function computeTierBAliasKey(url: string): string | null {
-	const parts = parseAliasKeyParts(url);
-	if (!parts) {
-		return null;
-	}
-	const path =
-		parts.path.length > 1 && parts.path.endsWith('/')
-			? parts.path.slice(0, -1)
-			: parts.path;
-	return formatAliasKey({ ...parts, path });
+	return computeAliasKeys(url)?.tierB ?? null;
 }

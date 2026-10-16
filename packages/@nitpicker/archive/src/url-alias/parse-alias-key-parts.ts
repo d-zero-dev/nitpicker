@@ -9,6 +9,12 @@ const INDEX_SUFFIX_PATTERN = /\/index\.\w+$/i;
  * (a non-http(s) URL should not occur for anything the crawler itself
  * stored, since every `url_refs.url` was already parsed once during
  * crawling).
+ *
+ * Not on any runtime path: `computeTierAAliasKey` / `computeTierBAliasKey`
+ * run the native port (`@nitpicker/core`). This is the parity oracle for
+ * `compute-alias-keys.parity.spec.ts` and for
+ * `core/scripts/generate-alias-keys-golden.mjs` only, and is excluded from the
+ * build (`tsconfig.json`).
  * @param url - The URL string to parse.
  * @returns The extracted parts, or `null` if unparseable / not http(s).
  * @example
