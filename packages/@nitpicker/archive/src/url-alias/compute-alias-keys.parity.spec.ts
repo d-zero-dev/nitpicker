@@ -113,7 +113,7 @@ const EXAMPLES = [
 	'https:/example.com/a',
 	'https:///example.com/a',
 	'https://',
-	'http://a/b/../../..',
+	'http://example.com/b/../../..',
 	'file:///a/b',
 	'ftp://example.com/a',
 	'mailto:a@example.com',
