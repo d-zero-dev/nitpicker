@@ -515,3 +515,275 @@ describe('getLinkGraph: in-degree, edges and limit', () => {
 		},
 	);
 });
+
+describe('getLinkGraph: redirect sources', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(dirname, '__test_fixtures_link_graph_redirect__');
+	const archiveFilePath = path.resolve(dir, 'link-graph-redirect-test.nitpicker');
+	const PAGE = 'https://example.com/page';
+	const OLD = 'https://example.com/old';
+	const NEW = 'https://example.com/new';
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		const common = {
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			imageList: [],
+			isSkipped: false,
+		};
+		// The page links to the redirect source and to its destination.
+		await archive.setPage({
+			...common,
+			url: parseUrl(PAGE)!,
+			meta: { ...META, title: 'Page' },
+			anchorList: [OLD, NEW].map((href) => ({
+				href: parseUrl(href)!,
+				isExternal: false,
+				title: null,
+				textContent: href,
+			})),
+		});
+		await archive.setPage({
+			...common,
+			url: parseUrl(NEW)!,
+			meta: { ...META, title: 'New' },
+			anchorList: [],
+		});
+		// `/old` was requested and redirected to `/new`.
+		await archive.setRedirect({
+			...common,
+			url: parseUrl(OLD)!,
+			redirectPaths: [NEW],
+			html: '',
+			meta: META,
+			anchorList: [],
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('leaves a redirect source out of the nodes', async () => {
+		const graph = await getLinkGraph(archive);
+		expect(graph.nodes.map((node) => node.url).toSorted()).toStrictEqual([NEW, PAGE]);
+	});
+
+	it('drops the edge to a redirect source instead of resolving it to the destination', async () => {
+		const graph = await getLinkGraph(archive);
+		expect(graph.edges).toStrictEqual([{ source: PAGE, target: NEW }]);
+		expect(graph.nodes.find((node) => node.url === NEW)?.inDegree).toBe(1);
+	});
+});
+
+describe('getLinkGraph: edges are those between two nodes', () => {
+	let archive: InstanceType<typeof Archive>;
+	const dir = path.resolve(dirname, '__test_fixtures_link_graph_mixed__');
+	const archiveFilePath = path.resolve(dir, 'link-graph-mixed-test.nitpicker');
+	const H1 = 'https://example.com/h1';
+	const H2 = 'https://example.com/h2';
+	const H3 = 'https://example.com/h3';
+	const H4 = 'https://example.com/h4';
+	const DOC = 'https://example.com/doc.pdf';
+	const OLD = 'https://example.com/old';
+	const EXTERNAL = 'https://example.net/x';
+
+	/**
+	 * Writes one internal page that links to `links`.
+	 * @param url - The page URL.
+	 * @param links - The URLs it links to.
+	 * @param contentType - The page's MIME type.
+	 */
+	async function writePage(
+		url: string,
+		links: readonly string[],
+		contentType = 'text/html',
+	) {
+		await archive.setPage({
+			url: parseUrl(url)!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType,
+			contentLength: 100,
+			responseHeaders: {},
+			html: '<html></html>',
+			meta: { ...META, title: url },
+			anchorList: links.map((href) => ({
+				href: parseUrl(href)!,
+				isExternal: href.startsWith('https://example.net'),
+				title: null,
+				textContent: href,
+			})),
+			imageList: [],
+			isSkipped: false,
+		});
+	}
+
+	/**
+	 * The edges a two-sided join gives: `anchor_edges` joined with
+	 * `content_items` for both ends, each filtered to an internal, scraped,
+	 * HTML page that is neither a redirect source nor an alias member. It is an
+	 * independent oracle for the scan-based read in `getLinkGraph`.
+	 * @returns `source -> target` lines, sorted.
+	 */
+	async function edgesByJoin() {
+		const rows = await archive
+			.getKnex()('anchor_edges as ae')
+			.join('content_items as s', 's.id', 'ae.page_id')
+			.join('content_items as t', 't.id', 'ae.href_page_id')
+			.join('url_refs as su', 'su.id', 's.url_id')
+			.join('url_refs as tu', 'tu.id', 't.url_id')
+			.join('content_type_refs as sc', 'sc.id', 's.content_type_id')
+			.join('content_type_refs as tc', 'tc.id', 't.content_type_id')
+			.where({
+				's.is_external': 0,
+				's.scraped': 1,
+				'sc.raw': 'text/html',
+				't.is_external': 0,
+				't.scraped': 1,
+				'tc.raw': 'text/html',
+			})
+			.whereNull('s.redirect_dest_id')
+			.whereNull('s.alias_of_id')
+			.whereNull('t.redirect_dest_id')
+			.whereNull('t.alias_of_id')
+			.whereRaw('s.id != t.id')
+			.select('su.url as source', 'tu.url as target');
+		return rows.map((row) => `${row.source} -> ${row.target}`).toSorted();
+	}
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(dir, { recursive: true });
+
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: dir });
+		await archive.setConfig({
+			baseUrl: 'https://example.com',
+			name: 'test',
+			version: '0.13.0',
+			recursive: true,
+			interval: 0,
+			image: true,
+			fetchExternal: false,
+			parallels: 1,
+			roots: ['https://example.com'],
+			excludes: [],
+			excludeKeywords: [],
+			excludeUrls: [],
+			maxExcludedDepth: 0,
+			retry: 3,
+			fromList: false,
+			disableQueries: false,
+			userAgent: 'test',
+			ignoreRobots: false,
+		});
+
+		// Every page links to H1 or H2, so each kind of page that is not a node
+		// appears at both ends of an edge. H1 is the one real hub.
+		await writePage(H1, [H2, DOC, EXTERNAL, OLD, H3, H4, H1]);
+		await writePage(H2, [H1, H3]);
+		await writePage(DOC, [H1], 'application/pdf');
+		await writePage(H3, [H1, H2]);
+		await writePage(H4, [H1]);
+		await archive.setRedirect({
+			url: parseUrl(OLD)!,
+			redirectPaths: [H2],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: META,
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
+		});
+		const knex = archive.getKnex();
+		// H3 is an alias member of H1, and H4 was never scraped.
+		await knex.raw(
+			`UPDATE content_items
+			 SET alias_of_id = (
+			   SELECT ci.id FROM content_items ci JOIN url_refs ur ON ur.id = ci.url_id WHERE ur.url = ?
+			 )
+			 WHERE url_id = (SELECT id FROM url_refs WHERE url = ?)`,
+			[H1, H3],
+		);
+		await knex.raw(
+			'UPDATE content_items SET scraped = 0 WHERE url_id = (SELECT id FROM url_refs WHERE url = ?)',
+			[H4],
+		);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.close();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it('keeps only the edges between internal, scraped, HTML pages that are neither redirect sources nor aliases', async () => {
+		const graph = await getLinkGraph(archive);
+		expect(graph.nodes.map((node) => node.url).toSorted()).toStrictEqual([H1, H2]);
+		expect(graph.edges.map((e) => `${e.source} -> ${e.target}`).toSorted()).toStrictEqual(
+			[`${H1} -> ${H2}`, `${H2} -> ${H1}`],
+		);
+	});
+
+	it('does not count the links of a page that is not a node towards in-degree', async () => {
+		const graph = await getLinkGraph(archive);
+		// H3, DOC and H4 also link to H1 and H2, but none of them is a node.
+		expect(
+			Object.fromEntries(graph.nodes.map((node) => [node.url, node.inDegree])),
+		).toStrictEqual({ [H1]: 1, [H2]: 1 });
+	});
+
+	it('returns the same edges as joining both ends against content_items', async () => {
+		const graph = await getLinkGraph(archive);
+		expect(graph.edges.map((e) => `${e.source} -> ${e.target}`).toSorted()).toStrictEqual(
+			await edgesByJoin(),
+		);
+	});
+});
