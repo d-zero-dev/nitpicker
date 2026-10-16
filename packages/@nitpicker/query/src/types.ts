@@ -25,6 +25,7 @@ import type {
 } from '@nitpicker/archive/db-ops/templates/types';
 import type { ErrorKind } from '@nitpicker/archive/error-kind/types';
 import type { PageSource } from '@nitpicker/archive/types';
+import type { Knex } from 'knex';
 
 // The stored label shape is owned by the archive (it writes
 // `page_template_labels`); re-exported so viewer / MCP consumers of
@@ -3385,6 +3386,61 @@ export interface GetLinkGraphOptions {
 	 * reports `truncated` when there are pages).
 	 */
 	limit?: number;
+}
+
+/**
+ * One `anchor_edges` row as `scanAnchorEdges` hands it over: the page that
+ * links and the page it links to, by `content_items.id`.
+ * @example
+ * const row: AnchorEdgeRow = { pageId: 12, hrefId: 40 };
+ */
+export interface AnchorEdgeRow {
+	/** `anchor_edges.page_id`: the page the anchor is on. */
+	pageId: number;
+	/** `anchor_edges.href_page_id`: the page the anchor points at. */
+	hrefId: number;
+}
+
+/**
+ * A growable list of edges between nodes, each held as a pair of `u32` node
+ * indexes (8 bytes an edge). Created by `createEdgeBuffer`.
+ * @example
+ * const edges = createEdgeBuffer();
+ * edges.add(0, 3);
+ * edges.each((from, to) => console.log(from, to)); // 0 3
+ */
+export interface EdgeBuffer {
+	/**
+	 * Appends an edge. Not named `push`, and `each` below not `forEach`: lint
+	 * rules written for arrays rewrite calls to those names (merging
+	 * consecutive `push` calls, turning `forEach` into a `for...of` over
+	 * `entries()`), which breaks a method that takes two numbers.
+	 */
+	add(from: number, to: number): void;
+	/** How many edges the buffer holds. */
+	readonly size: number;
+	/** Calls `callback` with every edge, in the order they were added. */
+	each(callback: (from: number, to: number) => void): void;
+}
+
+/**
+ * Options for `scanAnchorEdges`.
+ * @example
+ * const options: ScanAnchorEdgesOptions = {
+ * 	knex: accessor.getKnex(),
+ * 	onChunk: (rows) => console.log(rows.length),
+ * };
+ */
+export interface ScanAnchorEdgesOptions {
+	/** The archive's knex instance. */
+	knex: Knex;
+	/**
+	 * Called with each chunk of edges, in `(page_id, href_page_id)` order, never
+	 * empty. The next chunk is read once the returned promise (if any) settles.
+	 */
+	onChunk: (rows: readonly AnchorEdgeRow[]) => void | Promise<void>;
+	/** Rows read per chunk. Defaults to 100,000. */
+	chunkSize?: number;
 }
 
 /**
