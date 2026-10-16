@@ -12,6 +12,7 @@ export const BENCH_CASES = Object.freeze({
 	'url-natural-sort': ['rank-map', 'all-urls'],
 	'isolated-clusters': ['default'],
 	'alias-backfill': ['default'],
+	'get-link-graph': ['all', 'limit-500'],
 	'match-selector': ['simple', 'compound', 'nth'],
 	'search-html': ['literal-many', 'literal-few', 'regex-many', 'regex-few'],
 	'body-hash': ['rust', 'js'],
