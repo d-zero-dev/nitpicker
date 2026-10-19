@@ -86,7 +86,7 @@ yarn lint                                          # lint + prettier + cspell + 
 
 - **JSDoc = 公開 API（export）の API ユーザー向け文書**: IDE ホバーで実装を読まない読者に届くため、WHAT / HOW / WHY を適切に書き、`@example` を必須とする。メインの公開 API は README にも載せる
 - **非公開 API の JSDoc は必須にしない**: ただし複雑な内部モジュールの設計 WHY / Why not はファイルレベル JSDoc が推奨置き場
-- **計画相対概念の禁止**: 実装計画に由来する相対概念（Phase/Step 番号、「本 PR」「今回」「旧実装」「導入予定」）を JSDoc・テスト名・ドキュメントに書かない。現在の挙動と意図的な不在（Why not）として自己完結に書く。外部参照は issue / PR 番号のみ可。リトマス試験:「その語彙はコードに実在するか、計画会話にしか存在しないか」
+- **計画相対概念の禁止**: 実装計画に由来する相対概念（Phase/Step 番号、「本 PR」「今回」「旧実装」「導入予定」）を JSDoc・テスト名・ドキュメントに書かない。現在の挙動と意図的な不在（Why not）として自己完結に書く。コードコメント・JSDoc・テスト名に issue / PR 番号も書かず、理由そのものを書く（例外は PR 本文とコミットメッセージ）。リトマス試験:「その語彙はコードに実在するか、計画会話にしか存在しないか」
 - **ドキュメントと実装の矛盾**: 実装詳細の矛盾は実装が正としてドキュメントを直す。ARCHITECTURE.md の不変条件・境界との矛盾は実装が設計違反の可能性を先に調査する（検出ゲートは PR ごとの `/product-manager` チェック）
 
 ## ディレクトリ・構造ルール
@@ -105,6 +105,12 @@ yarn lint                                          # lint + prettier + cspell + 
 - CLI の進捗表示は `console.log` ではなく `Lanes` を使う
 - 禁止パターン（decorator / `Promise.race` の timer 放置 / 派生文字列を作る sort 等）は ARCHITECTURE.md の「不変条件・負の知識」を正とする
 
+## 判断基準
+
+- **変更・修正・レビュー指摘を採用するかは 2 つで決める**: クローラー兼監査ツールとして、対象サイトの実際の状態（ページ・リンク・リソース・HTML・メタデータ）を漏れなく重複なく正確にアーカイブに記録すること、そしてクエリ・レポート・ビューアがその記録と一致すること（Summary の件数と Pages のフィルタ結果の一致、CLI 終了コードの契約など ARCHITECTURE.md の不変条件）。製品の振る舞いでない変更（tooling・docs・CI・skills）では「宣言した意図に対する正しさ」と「既存コードとの一貫性」。実装コスト、diff の大きさ、影響件数、「軽微」は基準ではなく、スキップ・先送り・質問の理由にならない
+- **基準が決めることは聞かずにやる**。質問は、基準が決めないことと、リポジトリ外への書き込みのためにある（質問の種別は `impl` スキルが定める）。Claude は「持ち越す」「スキップする」「そのままにする」を自分で決めない。それらは質問に対するユーザーの回答としてだけ存在し、「あとで」「別 PR で」「意図的に変更しない」と書く応答・PR 本文・コミットは、その質問と回答を指せなければならない
+- **レビュー指摘は直すか、証拠を添えてユーザーに出す**。「false positive」「元からあった」「意図どおり」はユーザーに対して主張することであって、Claude が 1 人で指摘を閉じる手段ではない
+
 ## セキュリティ
 
 - `.env` 等の機密ファイルを読み取り・編集・コミットしない（判断は `.gitignore` を参考にする）
@@ -115,15 +121,17 @@ yarn lint                                          # lint + prettier + cspell + 
 
 ## スキル
 
-| スキル          | パス                                      | 用途                                                            |
-| --------------- | ----------------------------------------- | --------------------------------------------------------------- |
-| Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント整合チェック、PR レビュー           |
-| QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック                              |
-| Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・PR 作成のオーケストレーション         |
-| Grill me        | `.claude/skills/grill-me/SKILL.md`        | 計画・設計の前提を掘り下げて合意形成する                        |
-| Git             | `.claude/skills/git/SKILL.md`             | コミット規約・コミット前コンテンツチェック                      |
-| PR              | `.claude/skills/pr/SKILL.md`              | PR 作成フロー（base 追従・push はユーザー実行・CI 監視）        |
-| npm publish     | `.claude/skills/npm-publish/SKILL.md`     | リリース（dev→main マージ・バージョニング・publish 監視・検証） |
+| スキル          | パス                                      | 用途                                                                       |
+| --------------- | ----------------------------------------- | -------------------------------------------------------------------------- |
+| Product Manager | `.claude/skills/product-manager/SKILL.md` | リポジトリ分析、ドキュメント整合チェック、PR レビュー                      |
+| QA Engineer     | `.claude/skills/qa-engineer/SKILL.md`     | コードレビュー、テスト品質チェック                                         |
+| Impl            | `.claude/skills/impl/SKILL.md`            | 合意済み計画の実装・検証・持ち越しの Issue 化・PR 作成・マージ後の台帳確認 |
+| Grill me        | `.claude/skills/grill-me/SKILL.md`        | 計画・設計の前提を掘り下げて合意形成する                                   |
+| Git             | `.claude/skills/git/SKILL.md`             | コミット規約・コミット前コンテンツチェック・破壊的変更の扱い               |
+| PR              | `.claude/skills/pr/SKILL.md`              | PR 作成フロー（base 追従・本文の節構成・push はユーザー実行・CI 監視）     |
+| Merged          | `.claude/skills/merged/SKILL.md`          | マージ後の手順（外部作者への完了コメント・issue への報告）                 |
+| Create issue    | `.claude/skills/create-issue/SKILL.md`    | 原因まで調べて Issue を起票する（持ち越しの引き継ぎ先）                    |
+| npm publish     | `.claude/skills/npm-publish/SKILL.md`     | リリース（dev→main マージ・バージョニング・publish 監視・検証）            |
 
 ## AI 操作プロトコル
 
