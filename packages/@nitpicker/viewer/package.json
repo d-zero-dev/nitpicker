@@ -63,7 +63,7 @@
 	},
 	"devDependencies": {
 		"@d-zero/shared": "0.23.0",
-		"@playwright/test": "1.63.0",
+		"@playwright/test": "1.64.0",
 		"@storybook/addon-a11y": "10.6.1",
 		"@storybook/react-vite": "10.6.1",
 		"@testing-library/dom": "10.4.2",
