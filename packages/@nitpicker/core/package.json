@@ -44,6 +44,14 @@
 			"import": "./lib/group-alias-candidates.js",
 			"types": "./lib/group-alias-candidates.d.ts"
 		},
+		"./match-js-license-comment-signal": {
+			"import": "./lib/match-js-license-comment-signal.js",
+			"types": "./lib/match-js-license-comment-signal.d.ts"
+		},
+		"./match-structural-technology-signals": {
+			"import": "./lib/match-structural-technology-signals.js",
+			"types": "./lib/match-structural-technology-signals.d.ts"
+		},
 		"./template-exact-page-limit": {
 			"import": "./lib/template-exact-page-limit.js",
 			"types": "./lib/template-exact-page-limit.d.ts"

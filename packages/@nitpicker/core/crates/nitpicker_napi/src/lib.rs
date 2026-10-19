@@ -13,6 +13,8 @@
 mod alias;
 mod isolated_cluster;
 mod slice_by_offsets;
+#[cfg_attr(test, allow(dead_code))]
+mod tech_detect;
 mod template_classification;
 
 use napi::Result;

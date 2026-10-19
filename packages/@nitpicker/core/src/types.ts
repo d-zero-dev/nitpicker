@@ -7,6 +7,10 @@
 export interface NativeBinding {
 	/** See `compute-body-hash.ts`. */
 	computeBodyHash(html: Uint8Array): Buffer;
+	/** See `match-structural-technology-signals.ts`. */
+	matchStructuralTechnologySignals(html: Uint8Array): StructuralTechnologySignal[];
+	/** See `match-js-license-comment-signal.ts`. */
+	matchJsLicenseCommentSignal(script: Uint8Array): StructuralTechnologySignal | null;
 	/** See `compute-url-sort-ranks.ts`. */
 	computeUrlSortRanks(urls: Uint8Array, offsets: Uint32Array): Uint32Array;
 	/** See `compute-alias-keys.ts`. */
@@ -29,6 +33,35 @@ export interface NativeBinding {
 	TEMPLATE_MEMORY_BUDGET: number;
 	/** See `template-exact-page-limit.ts`. */
 	TEMPLATE_EXACT_PAGE_LIMIT: number;
+}
+
+/**
+ * How a structural technology signal was found: a marker element or
+ * attribute in the HTML, a framework's URL path fragment, a scoped-style
+ * attribute convention, a marker too generic to count for much on its own,
+ * or a license banner at the top of a JS file.
+ */
+export type StructuralTechnologySignalType =
+	| 'html-marker'
+	| 'url-pattern'
+	| 'scoped-attr'
+	| 'weak-marker'
+	| 'js-license-comment';
+
+/**
+ * One structural fingerprint definition (in `crates/nitpicker_tech_detect`)
+ * that matched, with the evidence cut from its first match.
+ */
+export interface StructuralTechnologySignal {
+	/** Normalized technology name (`'Next.js'`, `'Vue'`, ...). */
+	readonly technology: string;
+	readonly signalType: StructuralTechnologySignalType;
+	/** The first match, cut to 200 UTF-16 code units. */
+	readonly evidence: string;
+	/** The definition's confidence in isolation, 0-100. */
+	readonly weight: number;
+	/** The category attached to the technology when only this signal fired. */
+	readonly category: string;
 }
 
 /**

@@ -25,6 +25,15 @@ const b = computeBodyHash(Buffer.from('<body><a href="/p/z9y8x7w6">x</a></body>'
 a.equals(b); // true — 動的 ID はマスクしてからハッシュする
 ```
 
+フロントエンドフレームワークの構造シグナル（Next.js の `__NEXT_DATA__`、Vue の `data-v-*` など）は、`matchStructuralTechnologySignals` がページの HTML を 1 回走査して検出します。JS リソースの先頭にあるライセンスコメントは `matchJsLicenseCommentSignal` で照合します。フィンガープリントの一覧は `crates/nitpicker_tech_detect` が正です。
+
+```ts
+import { matchStructuralTechnologySignals } from '@nitpicker/core/match-structural-technology-signals';
+
+matchStructuralTechnologySignals(Buffer.from('<div data-v-1a2b3c4d></div>'));
+// [{ technology: 'Vue', signalType: 'scoped-attr', evidence: ' data-v-1a2b3c4d', weight: 40, category: 'JavaScript frameworks' }]
+```
+
 URL の自然順（`page2` が `page10` の前、大文字小文字・パーセントエンコードで順序が割れない、ホストが先でパスが後）は、`computeUrlSortRanks` が全件まとめて順位にします。URL は 1 回だけパースし、結果は入力順に依存しない全順序です（同じ URL は入力順）。順序の定義は `crates/nitpicker_url_key` の doc が正です。
 
 ```ts
@@ -92,7 +101,8 @@ Rust ツールチェーンが必要です（バージョンはリポジトリル
 
 - Rust のコードは `crates/` 配下の Cargo workspace にあります。napi に依存するのは `nitpicker_napi`（公開関数だけの薄い層）だけで、計算本体の crate は `cargo test` だけでテストできます
 - `yarn test:rust` で Rust のテスト、`yarn lint` で rustfmt と clippy も実行します
-- body hash は既存アーカイブに保存済みの値と byte 単位で一致させています（例外は、本物の body より前に `<bodyguard>` のような `<body` で始まるカスタム要素があるページで、body の開始位置が変わるため値が変わります。#434）。`crates/nitpicker_html_scan/tests/fixtures/body-hash-golden.json` は `@nitpicker/archive` の `src/body-hash/` にある JavaScript 段階実装（parity テストの oracle）から生成した golden fixture です
+- body hash は既存アーカイブに保存済みの値と byte 単位で一致させています（例外は、本物の body より前に `<bodyguard>` のような `<body` で始まるカスタム要素があるページで、body の開始位置が変わるため値が変わります。#434）。`crates/nitpicker_html_scan/tests/fixtures/body-hash-golden.json` は `@nitpicker/archive` の `src/body-hash/` にある JavaScript 段階実装（parity テストの oracle）から生成した golden fixture です。Rust 側は正規化とマスクを 1 パスにまとめていて、段階版の Rust 関数と一致することを `tests/fused_body_hash_properties.rs` で確かめています
+- 構造シグナルの技術検出（`crates/nitpicker_tech_detect`）は、既存アーカイブの `technology_signals` を書いた JavaScript 正規表現と同じシグナル・同じ順序・同じ evidence を返します。正規表現は JS の `u` フラグなしの意味論に合わせ、`\s` は JS が含める非 ASCII の空白（U+00A0・U+FEFF など）まで並べています。走査は、定義ごとの必須リテラルを Aho-Corasick で 1 回探し、見つかった定義だけを正規表現で確かめます。`tests/fixtures/technology-signals-golden.json` は `@nitpicker/archive` の `src/meta/technologies/structural-signal-definitions.ts`（parity テストの oracle）から `scripts/generate-technology-signals-golden.mjs` で生成した golden fixture です
 - テンプレート分類（`crates/nitpicker_template_cluster`）も、既存アーカイブの `templateKey` と reason に一致させています。HTML は htmlparser2 12.0.0 の挙動を移植した `crates/nitpicker_html_parser` で読み、スタイルシートのホストは呼び出し側の `new URL(href).host` を使います。一致の確認は `@nitpicker/archive` の golden（`src/template-classification/golden/`）で行います
 - URL の順序（`crates/nitpicker_url_key`）は、文字列から数値を取り出して 2 件ずつ比べる方式を採りません。その方式は推移律が崩れる（`a9` は `a10` より前、`a10` は `a1x` より前、`a1x` は `a9` より前になる）ためで、順序はバイト列キーの全順序として定義します。基準は、`tests/order_spec.rs`（期待順序の表）と `tests/order_properties.rs`（入力順不変・キーが同じ URL は生の URL 文字列の順・数値順などのプロパティテスト）です。順位は viewer の read model に保存されるので、順序の定義を変えるときは read model の schema version を上げます
 - alias キー（`crates/nitpicker_url_key` の `alias_keys`）は、既存アーカイブの `content_items.alias_of_id` を作った JavaScript 実装のキーと一致させています。`tests/fixtures/alias-keys-golden.json` は `@nitpicker/archive` の `src/url-alias/` にある JavaScript 実装（parity テストの oracle）から `scripts/generate-alias-keys-golden.mjs` で生成した golden fixture で、キーは URL を書かれたまま（WHATWG URL の `pathname` と `search`）読むので、並べ替え用のキーとは別の読み方です。グルーピングと代表選定は、JavaScript の参照実装と突き合わせる parity テスト（`@nitpicker/archive` の `group-alias-candidates.parity.spec.ts`）で固めています

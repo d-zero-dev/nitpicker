@@ -1,24 +1,22 @@
-use sha2::{Digest, Sha256};
-
 use crate::extract_body::extract_body;
-use crate::mask_dynamic_ids::mask_dynamic_ids;
-use crate::normalize_url_like_strings::normalize_url_like_strings;
+use crate::hash_normalized_masked::hash_normalized_masked;
 
 /// SHA-256 of a page's `<body>` after normalizing away incidental variance
 /// (`/index.{ext}` URL forms, embedded dynamic ids) — the value persisted as
 /// `page_meta.body_hash`.
 ///
-/// Normalization runs before masking, in that order, because collapsing
-/// `/index.html` to `/` must happen before the mask sees the text. The four
-/// stages are kept as separate passes, one per JS oracle function in
-/// `@nitpicker/archive`'s `src/body-hash/`, so a parity failure points at a
-/// single stage; fusing them into one pass is tracked in issue #430.
+/// Equal to hashing `mask_dynamic_ids(normalize_url_like_strings(extract_body(html)))`
+/// — normalizing before masking, because collapsing `/index.html` to `/`
+/// must happen before the mask sees the text — but computed without either
+/// intermediate buffer: `extract_body` borrows a slice of `html`, and
+/// `hash_normalized_masked` streams the normalized, masked text straight
+/// into the hasher. The staged functions stay public as the reference the
+/// fused pass is checked against (`tests/fused_body_hash_properties.rs`),
+/// each mirroring one JS oracle function in `@nitpicker/archive`'s
+/// `src/body-hash/`.
 #[must_use]
 pub fn compute_body_hash(html: &[u8]) -> [u8; 32] {
-	let body = extract_body(html);
-	let normalized = normalize_url_like_strings(body);
-	let masked = mask_dynamic_ids(&normalized);
-	Sha256::digest(masked.as_ref()).into()
+	hash_normalized_masked(extract_body(html))
 }
 
 #[cfg(test)]

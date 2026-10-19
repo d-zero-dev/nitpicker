@@ -9,7 +9,7 @@ static DYNAMIC_ID_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 	Regex::new(r"(?i-u)[a-z0-9]{8,}").expect("DYNAMIC_ID_PATTERN is a valid regular expression")
 });
 
-const MASK_PLACEHOLDER: &[u8] = b"__MASKED_ID__";
+pub(crate) const MASK_PLACEHOLDER: &[u8] = b"__MASKED_ID__";
 
 /// Replaces mixed letter-and-digit tokens of 8+ characters with a fixed
 /// placeholder, so bodies that differ only in an embedded dynamic value (a
