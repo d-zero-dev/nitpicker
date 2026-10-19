@@ -19,7 +19,7 @@ const BODY_PATTERN =
  * Not on any runtime path: `computeBodyHash` runs the Rust port
  * (`@nitpicker/core`). This function is the parity oracle for
  * `compute-body-hash.parity.spec.ts` only, excluded from the build
- * (`tsconfig.json`). Folding the stages into one pass is #430.
+ * (`tsconfig.json`). The Rust port runs the stages as one pass.
  *
  * Uses a greedy match (`[\s\S]*`, not `[\s\S]*?`) so a literal `<body>`
  * substring appearing inside the real body (e.g. an inline code sample) does

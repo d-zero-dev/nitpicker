@@ -12,7 +12,7 @@ import {
  * signals.
  *
  * Every entry becomes a signal — Wappalyzer is not limited to the curated
- * frameworks {@link TECHNOLOGY_SIGNAL_DEFINITIONS} tracks; analytics tools,
+ * frameworks the structural fingerprint list tracks; analytics tools,
  * CMSes, and everything else Wappalyzer's fingerprint DB knows about pass
  * through as their own technology (provider name verbatim). Only the
  * curated frameworks get their provider name FOLDED onto the same
