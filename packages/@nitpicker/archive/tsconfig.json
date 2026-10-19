@@ -16,6 +16,8 @@
 		"./src/body-hash/extract-body.ts",
 		"./src/body-hash/mask-dynamic-ids.ts",
 		"./src/body-hash/normalize-url-like-strings.ts",
+		"./src/meta/technologies/match-structural-signals-in-javascript.ts",
+		"./src/meta/technologies/structural-signal-definitions.ts",
 		"./src/url-alias/parse-alias-key-parts.ts",
 		"./src/url-alias/format-alias-key.ts"
 	]

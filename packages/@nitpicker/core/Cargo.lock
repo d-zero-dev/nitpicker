@@ -583,6 +583,7 @@ dependencies = [
 name = "nitpicker_html_scan"
 version = "0.0.0"
 dependencies = [
+ "proptest",
  "regex",
  "serde_json",
  "sha2",
@@ -596,11 +597,21 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "nitpicker_html_scan",
+ "nitpicker_tech_detect",
  "nitpicker_template_cluster",
  "nitpicker_union_find",
  "nitpicker_url_key",
  "rayon",
  "rustc-hash",
+]
+
+[[package]]
+name = "nitpicker_tech_detect"
+version = "0.0.0"
+dependencies = [
+ "aho-corasick",
+ "regex",
+ "serde_json",
 ]
 
 [[package]]

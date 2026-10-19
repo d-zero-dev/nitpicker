@@ -2,19 +2,13 @@ import type { TechnologySignalPartial } from '@nitpicker/archive/meta/technologi
 import type { FollowResponse, RedirectableRequest } from 'follow-redirects';
 import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
 
-import { TECHNOLOGY_SIGNAL_DEFINITIONS } from '@nitpicker/archive/meta/technologies/technology-signal-definitions';
+import { matchJsLicenseCommentSignal } from '@nitpicker/archive/meta/technologies/match-js-license-comment-signal';
 import redirects from 'follow-redirects';
 
 /** Default cap on bytes read from a JS resource before giving up on a match. */
 const DEFAULT_BYTE_LIMIT = 8192;
 /** Default network timeout, shorter than `fetchDestination`'s HEAD budget — this is a best-effort enrichment pass, not the crawl's critical path. */
 const DEFAULT_TIMEOUT_MS = 8000;
-const EVIDENCE_MAX_LENGTH = 200;
-
-/** Definitions this scan tests against — only the `js-license-comment` signal type applies to JS resource bodies (the rest match HTML). */
-const JS_LICENSE_COMMENT_DEFINITIONS = TECHNOLOGY_SIGNAL_DEFINITIONS.filter(
-	(def) => def.signalType === 'js-license-comment',
-);
 
 /** Options for {@link scanJsResourceForLicenseComment}. */
 export interface ScanJsResourceForLicenseCommentOptions {
@@ -28,8 +22,9 @@ export interface ScanJsResourceForLicenseCommentOptions {
 
 /**
  * Reads up to `byteLimit` bytes from a JS resource's leading bytes and tests
- * them against {@link TECHNOLOGY_SIGNAL_DEFINITIONS}' `js-license-comment`
- * patterns (e.g. Vue's leading license-banner comment). Best-effort: any network
+ * them against the structural fingerprint list's `js-license-comment`
+ * definitions (e.g. Vue's leading license-banner comment) through
+ * `matchJsLicenseCommentSignal`. Best-effort: any network
  * failure, timeout, or non-2xx response resolves `null` rather than
  * throwing — a single unreachable JS resource must not abort the enrichment
  * pass over the rest of the archive's resources (see
@@ -63,20 +58,7 @@ export async function scanJsResourceForLicenseComment(
 		() => null,
 	);
 	if (body == null) return null;
-
-	for (const def of JS_LICENSE_COMMENT_DEFINITIONS) {
-		const match = def.pattern.exec(body);
-		if (match) {
-			return {
-				technology: def.technology,
-				signalType: def.signalType,
-				evidence: match[0].slice(0, EVIDENCE_MAX_LENGTH),
-				weight: def.weight,
-				category: def.category ?? null,
-			};
-		}
-	}
-	return null;
+	return matchJsLicenseCommentSignal(body);
 }
 
 /**
@@ -84,21 +66,21 @@ export async function scanJsResourceForLicenseComment(
  * connection once the cap is reached (or the stream ends first). Mirrors
  * `fetchDestination`'s `titleBytesLimit` byte-cap technique (same
  * `follow-redirects` + manual chunk accumulation + `req.destroy()` shape),
- * but generic over "leading bytes as text" rather than title extraction —
+ * but generic over "leading bytes" rather than title extraction —
  * this module has no `PageData` to build.
  * @param url - The absolute URL to fetch.
  * @param byteLimit - Byte cap on the accumulated body.
  * @param timeout - Milliseconds before the request is aborted.
  * @param userAgent - Optional User-Agent header.
- * @returns The accumulated body text, or `null` on a non-2xx response.
+ * @returns The accumulated body bytes, or `null` on a non-2xx response.
  */
 async function readLeadingBytes(
 	url: string,
 	byteLimit: number,
 	timeout: number,
 	userAgent?: string,
-): Promise<string | null> {
-	return new Promise<string | null>((resolve, reject) => {
+): Promise<Buffer | null> {
+	return new Promise<Buffer | null>((resolve, reject) => {
 		const parsed = new URL(url);
 		const request: RequestOptions & { trackRedirects: boolean } = {
 			protocol: parsed.protocol,
@@ -150,14 +132,14 @@ async function readLeadingBytes(
 					clearTimeout(timeoutHandle);
 					destroyed = true;
 					req.destroy();
-					resolve(Buffer.concat(chunks).toString('utf8'));
+					resolve(Buffer.concat(chunks));
 				}
 			});
 			res.on('end', () => {
 				if (settled) return;
 				settled = true;
 				clearTimeout(timeoutHandle);
-				resolve(Buffer.concat(chunks).toString('utf8'));
+				resolve(Buffer.concat(chunks));
 			});
 		};
 

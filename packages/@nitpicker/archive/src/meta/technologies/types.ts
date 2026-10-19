@@ -11,6 +11,8 @@
  * vocabulary does not leak into the db-ops layer's public row types.
  */
 
+import type { StructuralTechnologySignalType } from '@nitpicker/core/types';
+
 /**
  * How a technology signal was detected. `wappalyzer` is beholder's
  * `simple-wappalyzer`-based detection (imprecise on its own for frameworks,
@@ -21,11 +23,7 @@
 export type TechnologySignalType =
 	| 'wappalyzer'
 	| 'meta-generator'
-	| 'html-marker'
-	| 'url-pattern'
-	| 'scoped-attr'
-	| 'weak-marker'
-	| 'js-license-comment';
+	| StructuralTechnologySignalType;
 
 /**
  * One un-combined signal for one technology on one page. The unit that
@@ -62,20 +60,16 @@ export interface PageTechnologyPartial {
 }
 
 /**
- * A single fingerprint definition: one technology matched by one signal
- * type via one regular expression, at one isolated weight. Multiple
- * definitions may share a `technology` (different signal types/patterns)
- * — {@link combineTechnologyConfidence} is what lets those compound.
+ * A structural fingerprint definition as a JavaScript regular expression:
+ * one technology matched by one signal type, at one isolated weight. The
+ * shape of the parity oracle (`structural-signal-definitions.ts`, excluded
+ * from the build) only — detection runs the Rust port in `@nitpicker/core`'s
+ * `crates/nitpicker_tech_detect`, which owns the list.
  */
 export interface TechnologySignalDefinition {
 	technology: string;
-	signalType:
-		| 'html-marker'
-		| 'url-pattern'
-		| 'scoped-attr'
-		| 'weak-marker'
-		| 'js-license-comment';
-	/** Tested against the page's raw HTML string (or, for `js-license-comment`, a JS resource's leading bytes). */
+	signalType: StructuralTechnologySignalType;
+	/** The expression the stored `technology_signals` rows were computed with. */
 	pattern: RegExp;
 	/** This definition's confidence in isolation, 0-100, when `pattern` matches. */
 	weight: number;

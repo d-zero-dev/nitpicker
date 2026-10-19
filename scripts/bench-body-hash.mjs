@@ -11,7 +11,7 @@
  *   parity oracle (extract → normalize → mask → SHA-256, fed a string).
  *   They are excluded from the build, so they are loaded from `src/`
  *   through Node's type stripping (Node 24 or later). The case exists only
- *   as long as those stages do: when #430 deletes them, delete this case
+ *   as long as those stages do: if they are deleted, delete this case
  *   (and its entry in `bench-lib/bench-cases.mjs` and `scripts/README.md`).
  *
  * `timeMs` sums the hash calls only, each timed synchronously. The first
