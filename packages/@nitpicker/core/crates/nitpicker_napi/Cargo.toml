@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 napi = { workspace = true }
 napi-derive = { workspace = true }
 nitpicker_html_scan = { workspace = true }
+nitpicker_tech_detect = { workspace = true }
 nitpicker_template_cluster = { workspace = true }
 nitpicker_union_find = { workspace = true }
 nitpicker_url_key = { workspace = true }

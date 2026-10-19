@@ -132,6 +132,10 @@
 			"import": "./lib/meta/technologies/combine-technology-confidence.js",
 			"types": "./lib/meta/technologies/combine-technology-confidence.d.ts"
 		},
+		"./meta/technologies/match-js-license-comment-signal": {
+			"import": "./lib/meta/technologies/match-js-license-comment-signal.js",
+			"types": "./lib/meta/technologies/match-js-license-comment-signal.d.ts"
+		},
 		"./meta/technologies/technology-signal-definitions": {
 			"import": "./lib/meta/technologies/technology-signal-definitions.js",
 			"types": "./lib/meta/technologies/technology-signal-definitions.d.ts"

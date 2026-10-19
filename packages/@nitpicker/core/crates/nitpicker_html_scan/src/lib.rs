@@ -10,11 +10,18 @@
 //! expressions without the `u` flag match `[a-z]` / `\w` under `i` against
 //! ASCII only, whereas Rust's Unicode mode would also accept U+017F (ſ) and
 //! U+212A (Kelvin sign) and shift token boundaries.
+//!
+//! `compute_body_hash` runs extraction, normalization and masking as one
+//! pass that streams into the hasher. `normalize_url_like_strings` and
+//! `mask_dynamic_ids` are the same stages one at a time: nothing in the
+//! addon calls them, and they stay public as the reference the fused pass
+//! is checked against.
 
 #![forbid(unsafe_code)]
 
 mod compute_body_hash;
 mod extract_body;
+mod hash_normalized_masked;
 mod mask_dynamic_ids;
 mod normalize_url_like_strings;
 

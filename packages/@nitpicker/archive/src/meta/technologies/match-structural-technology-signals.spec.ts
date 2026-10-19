@@ -64,6 +64,31 @@ describe('matchStructuralTechnologySignals', () => {
 		).toEqual([]);
 	});
 
+	it('returns only generator signals for empty HTML', () => {
+		expect(matchStructuralTechnologySignals('', 'Nuxt 3.8')).toEqual([
+			{
+				technology: 'Nuxt',
+				signalType: 'meta-generator',
+				evidence: 'Nuxt 3.8',
+				weight: 85,
+				category: 'JavaScript frameworks',
+				version: '3.8',
+			},
+		]);
+	});
+
+	it('returns the native signal fields unchanged for HTML', () => {
+		expect(matchStructuralTechnologySignals('<astro-island>', null)).toEqual([
+			{
+				technology: 'Astro',
+				signalType: 'html-marker',
+				evidence: '<astro-island',
+				weight: 65,
+				category: 'Static site generator',
+			},
+		]);
+	});
+
 	it('ignores a null/undefined generator', () => {
 		expect(matchStructuralTechnologySignals('<html></html>')).toEqual([]);
 	});

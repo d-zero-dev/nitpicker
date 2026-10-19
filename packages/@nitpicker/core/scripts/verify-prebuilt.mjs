@@ -1,5 +1,6 @@
 // Loads a built `.node` file directly (no workspace install needed) and checks
-// it against the body-hash golden fixture, then runs one small template
+// it against the body-hash and technology-signal golden fixtures and one
+// license banner, then runs one small template
 // classification to its known keys, one URL ranking, one pair of alias keys,
 // one alias grouping and one isolated-components run — a smoke check that
 // the exports work in this build, not a substitute for the template golden
@@ -10,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 const addonPath = process.argv[2];
 if (!addonPath) {
@@ -42,6 +44,48 @@ if (failures > 0) {
 	process.exit(1);
 }
 console.log(`${golden.length} golden cases passed for ${addonPath}`);
+
+const technologyGolden = JSON.parse(
+	readFileSync(
+		new URL(
+			'../crates/nitpicker_tech_detect/tests/fixtures/technology-signals-golden.json',
+			import.meta.url,
+		),
+		'utf8',
+	),
+);
+for (const { name, utf8Hex, signals } of technologyGolden) {
+	const actual = binding.matchStructuralTechnologySignals(Buffer.from(utf8Hex, 'hex'));
+	if (!isDeepStrictEqual(actual, signals)) {
+		failures++;
+		console.error(
+			`MISMATCH ${name}: expected ${JSON.stringify(signals)}, got ${JSON.stringify(actual)}`,
+		);
+	}
+}
+if (failures > 0) {
+	console.error(
+		`${failures}/${technologyGolden.length} technology golden cases failed for ${addonPath}`,
+	);
+	process.exit(1);
+}
+const license = binding.matchJsLicenseCommentSignal(
+	Buffer.from('/*!\n * Vue.js v3.4.21\n */'),
+);
+const expectedLicense = {
+	technology: 'Vue',
+	signalType: 'js-license-comment',
+	evidence: '/*!\n * Vue.js v3',
+	weight: 55,
+	category: 'JavaScript frameworks',
+};
+if (!isDeepStrictEqual(license, expectedLicense)) {
+	console.error(
+		`MISMATCH license banner: expected ${JSON.stringify(expectedLicense)}, got ${JSON.stringify(license)}`,
+	);
+	process.exit(1);
+}
+console.log(`${technologyGolden.length} technology golden cases passed for ${addonPath}`);
 
 // Two layouts in one block split into two clusters.
 const LIST = '<body><main><ul><li><a>x</a></li><li><a>y</a></li></ul></main></body>';

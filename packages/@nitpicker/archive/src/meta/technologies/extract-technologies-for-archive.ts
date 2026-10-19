@@ -25,10 +25,13 @@ export interface ExtractedTechnologies {
  * Crawl-time, synchronous, zero extra network cost — the direct replacement
  * for `extract-tags-for-archive.ts` in the live crawl write path (that file
  * itself is untouched; `scripts/migrate-to-0.10.mjs` still depends on it).
- * JS-license-comment signals are NOT produced here — they require an extra
- * network fetch per JS resource and are added afterward, once per crawl, by
- * `scan-js-resources-for-technology-signals.ts` ("JSスキャン・エンリッチメント",
- * a distinct post-crawl category — see ARCHITECTURE.md).
+ * JS-license-comment signals from external JS files are NOT produced here —
+ * they require an extra network fetch per JS resource and are added
+ * afterward, once per crawl, by `scan-js-resources-for-technology-signals.ts`
+ * ("JSスキャン・エンリッチメント", a distinct post-crawl category — see
+ * ARCHITECTURE.md). A license banner inside the page's own HTML (an inline
+ * `<script>`) is matched here, since the structural list applies every
+ * definition, `js-license-comment` included, to the HTML.
  * @param html - The page's raw HTML string.
  * @param meta - `PageData.meta` (for `generator` and `tags.entries`).
  * @returns Raw signals and their confidence-combined roll-up.

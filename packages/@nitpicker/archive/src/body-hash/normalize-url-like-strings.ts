@@ -9,7 +9,7 @@ const INDEX_SUFFIX_PATTERN = /\/index\.\w+/gi;
  * Not on any runtime path: `computeBodyHash` runs the Rust port
  * (`@nitpicker/core`). This function is the parity oracle for
  * `compute-body-hash.parity.spec.ts` only, excluded from the build
- * (`tsconfig.json`). Folding the stages into one pass is #430.
+ * (`tsconfig.json`). The Rust port runs the stages as one pass.
  *
  * Applied as a blanket string sweep over the whole body — not scoped to
  * `href`/`src` attribute values — because the same trailing-suffix variance

@@ -1,0 +1,701 @@
+[
+	{
+		"name": "empty",
+		"utf8Hex": "",
+		"signals": []
+	},
+	{
+		"name": "plain page",
+		"utf8Hex": "3c68746d6c3e3c686561643e3c7469746c653e743c2f7469746c653e3c2f686561643e3c626f64793e3c703e706c61696e3c2f703e3c2f626f64793e3c2f68746d6c3e",
+		"signals": []
+	},
+	{
+		"name": "next data script",
+		"utf8Hex": "3c73637269707420747970653d226170706c69636174696f6e2f6a736f6e222069643d225f5f4e4558545f444154415f5f223e7b7d3c2f7363726970743e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<script type=\"application/json\" id=\"__NEXT_DATA__\"",
+				"weight": 70,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "next data script uppercase",
+		"utf8Hex": "3c5343524950542049443d225f5f6e6578745f646174615f5f223e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<SCRIPT ID=\"__next_data__\"",
+				"weight": 70,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "next data without whitespace before id",
+		"utf8Hex": "3c73637269707420646174612d783d22312269643d225f5f4e4558545f444154415f5f223e",
+		"signals": []
+	},
+	{
+		"name": "next root div",
+		"utf8Hex": "3c64697620636c6173733d2261222069643d225f5f6e657874223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<div class=\"a\" id=\"__next\"",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "next root div across a closing bracket",
+		"utf8Hex": "3c64697620636c6173733d2261223e782069643d225f5f6e65787422",
+		"signals": []
+	},
+	{
+		"name": "next url pattern",
+		"utf8Hex": "3c736372697074207372633d222f5f6e6578742f7374617469632f612e6a73223e3c2f7363726970743e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "url-pattern",
+				"evidence": "/_next/",
+				"weight": 50,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "next url pattern uppercase is not matched",
+		"utf8Hex": "3c736372697074207372633d222f5f4e4558542f7374617469632f612e6a73223e3c2f7363726970743e",
+		"signals": []
+	},
+	{
+		"name": "astro island",
+		"utf8Hex": "3c617374726f2d69736c616e64207569643d2231223e3c2f617374726f2d69736c616e643e",
+		"signals": [
+			{
+				"technology": "Astro",
+				"signalType": "html-marker",
+				"evidence": "<astro-island",
+				"weight": 65,
+				"category": "Static site generator"
+			}
+		]
+	},
+	{
+		"name": "astro island uppercase",
+		"utf8Hex": "3c415354524f2d49534c414e443e",
+		"signals": [
+			{
+				"technology": "Astro",
+				"signalType": "html-marker",
+				"evidence": "<ASTRO-ISLAND",
+				"weight": 65,
+				"category": "Static site generator"
+			}
+		]
+	},
+	{
+		"name": "astro island prefix of a longer name",
+		"utf8Hex": "3c617374726f2d69736c616e64733e",
+		"signals": []
+	},
+	{
+		"name": "astro island followed by hyphen",
+		"utf8Hex": "3c617374726f2d69736c616e642d783e",
+		"signals": [
+			{
+				"technology": "Astro",
+				"signalType": "html-marker",
+				"evidence": "<astro-island",
+				"weight": 65,
+				"category": "Static site generator"
+			}
+		]
+	},
+	{
+		"name": "astro url pattern",
+		"utf8Hex": "3c6c696e6b20687265663d222f5f617374726f2f612e637373223e",
+		"signals": [
+			{
+				"technology": "Astro",
+				"signalType": "url-pattern",
+				"evidence": "/_astro/",
+				"weight": 50,
+				"category": "Static site generator"
+			}
+		]
+	},
+	{
+		"name": "astro scoped attribute",
+		"utf8Hex": "3c64697620646174612d617374726f2d6369642d6162633132333e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Astro",
+				"signalType": "scoped-attr",
+				"evidence": " data-astro-cid-abc123",
+				"weight": 40,
+				"category": "Static site generator"
+			}
+		]
+	},
+	{
+		"name": "astro scoped attribute uppercase",
+		"utf8Hex": "3c64697620444154412d415354524f2d4349442d4142433132333e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Astro",
+				"signalType": "scoped-attr",
+				"evidence": " DATA-ASTRO-CID-ABC123",
+				"weight": 40,
+				"category": "Static site generator"
+			}
+		]
+	},
+	{
+		"name": "vue scoped attribute 6",
+		"utf8Hex": "3c64697620646174612d762d6162636465663e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "scoped-attr",
+				"evidence": " data-v-abcdef",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue scoped attribute 10",
+		"utf8Hex": "3c64697620646174612d762d616263646566313233343e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "scoped-attr",
+				"evidence": " data-v-abcdef1234",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue scoped attribute 11 is not matched",
+		"utf8Hex": "3c64697620646174612d762d61626364656631323334353e3c2f6469763e",
+		"signals": []
+	},
+	{
+		"name": "vue scoped attribute 5 is not matched",
+		"utf8Hex": "3c64697620646174612d762d61626364653e3c2f6469763e",
+		"signals": []
+	},
+	{
+		"name": "vue scoped attribute followed by hyphen",
+		"utf8Hex": "3c64697620646174612d762d61626364656631322d783e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "scoped-attr",
+				"evidence": " data-v-abcdef12",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue scoped attribute followed by underscore is not matched",
+		"utf8Hex": "3c64697620646174612d762d6162636465665f783e3c2f6469763e",
+		"signals": []
+	},
+	{
+		"name": "vue app root",
+		"utf8Hex": "3c6469762069643d22617070223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "weak-marker",
+				"evidence": " id=\"app\"",
+				"weight": 15,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue app root after a tab",
+		"utf8Hex": "3c6469760969643d22617070223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "weak-marker",
+				"evidence": "\tid=\"app\"",
+				"weight": 15,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue app root after a no-break space",
+		"utf8Hex": "3c646976c2a069643d22617070223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "weak-marker",
+				"evidence": " id=\"app\"",
+				"weight": 15,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue app root after a byte order mark",
+		"utf8Hex": "3c646976efbbbf69643d22617070223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "weak-marker",
+				"evidence": "﻿id=\"app\"",
+				"weight": 15,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue app root after an ideographic space",
+		"utf8Hex": "3c646976e3808069643d22617070223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "weak-marker",
+				"evidence": "　id=\"app\"",
+				"weight": 15,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue app root after a line separator",
+		"utf8Hex": "3c646976e280a869643d22617070223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "weak-marker",
+				"evidence": " id=\"app\"",
+				"weight": 15,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue app root after next line is not matched",
+		"utf8Hex": "3c646976c28569643d22617070223e3c2f6469763e",
+		"signals": []
+	},
+	{
+		"name": "vue app root after zero width space is not matched",
+		"utf8Hex": "3c646976e2808b69643d22617070223e3c2f6469763e",
+		"signals": []
+	},
+	{
+		"name": "vue license banner",
+		"utf8Hex": "3c7363726970743e2f2a210a202a205675652e6a732076332e342e32310a202a2f3c2f7363726970743e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "js-license-comment",
+				"evidence": "/*!\n * Vue.js v3",
+				"weight": 55,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue license banner compact",
+		"utf8Hex": "2f2a212a5675652e6a73207632",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "js-license-comment",
+				"evidence": "/*!*Vue.js v2",
+				"weight": 55,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue license banner uppercase",
+		"utf8Hex": "2f2a21202a205655452e4a53205633",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "js-license-comment",
+				"evidence": "/*! * VUE.JS V3",
+				"weight": 55,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "vue license banner without digit is not matched",
+		"utf8Hex": "2f2a21202a205675652e6a73207658",
+		"signals": []
+	},
+	{
+		"name": "nuxt root div",
+		"utf8Hex": "3c6469762069643d225f5f6e757874223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Nuxt",
+				"signalType": "html-marker",
+				"evidence": "<div id=\"__nuxt\"",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "nuxt url pattern",
+		"utf8Hex": "3c736372697074207372633d222f5f6e7578742f612e6a73223e3c2f7363726970743e",
+		"signals": [
+			{
+				"technology": "Nuxt",
+				"signalType": "url-pattern",
+				"evidence": "/_nuxt/",
+				"weight": 50,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "svelte class",
+		"utf8Hex": "3c7020636c6173733d227469746c65207376656c74652d316132623363223e783c2f703e",
+		"signals": [
+			{
+				"technology": "Svelte",
+				"signalType": "scoped-attr",
+				"evidence": "class=\"title svelte-1a2b3c",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "svelte class 9 is not matched",
+		"utf8Hex": "3c7020636c6173733d227376656c74652d316132623363346435223e783c2f703e",
+		"signals": []
+	},
+	{
+		"name": "svelte class inside a word is not matched",
+		"utf8Hex": "3c7020636c6173733d225f7376656c74652d316132623363223e783c2f703e",
+		"signals": []
+	},
+	{
+		"name": "sveltekit url pattern",
+		"utf8Hex": "3c6c696e6b20687265663d222f5f6170702f696d6d757461626c652f612e6a73223e",
+		"signals": [
+			{
+				"technology": "SvelteKit",
+				"signalType": "url-pattern",
+				"evidence": "/_app/immutable/",
+				"weight": 50,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "remix context",
+		"utf8Hex": "3c7363726970743e77696e646f772e5f5f72656d6978436f6e74657874203d207b7d3b3c2f7363726970743e",
+		"signals": [
+			{
+				"technology": "Remix",
+				"signalType": "html-marker",
+				"evidence": "window.__remixContext =",
+				"weight": 65,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "remix context without spaces",
+		"utf8Hex": "77696e646f772e5f5f72656d6978436f6e746578743d7b7d",
+		"signals": [
+			{
+				"technology": "Remix",
+				"signalType": "html-marker",
+				"evidence": "window.__remixContext=",
+				"weight": 65,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "remix context with a byte order mark",
+		"utf8Hex": "77696e646f772e5f5f72656d6978436f6e74657874efbbbf3d31",
+		"signals": [
+			{
+				"technology": "Remix",
+				"signalType": "html-marker",
+				"evidence": "window.__remixContext﻿=",
+				"weight": 65,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "gatsby root div",
+		"utf8Hex": "3c6469762069643d225f5f5f676174736279223e3c2f6469763e",
+		"signals": [
+			{
+				"technology": "Gatsby",
+				"signalType": "html-marker",
+				"evidence": "<div id=\"___gatsby\"",
+				"weight": 65,
+				"category": "Static site generator"
+			}
+		]
+	},
+	{
+		"name": "gatsby url pattern",
+		"utf8Hex": "3c6c696e6b20687265663d222f706167652d646174612f6170702d646174612e6a736f6e223e",
+		"signals": [
+			{
+				"technology": "Gatsby",
+				"signalType": "url-pattern",
+				"evidence": "/page-data/",
+				"weight": 50,
+				"category": "Static site generator"
+			}
+		]
+	},
+	{
+		"name": "angular version",
+		"utf8Hex": "3c6170702d726f6f74206e672d76657273696f6e3d2231372e302e31223e3c2f6170702d726f6f743e",
+		"signals": [
+			{
+				"technology": "Angular",
+				"signalType": "html-marker",
+				"evidence": " ng-version=\"17.0.1\"",
+				"weight": 65,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "angular version empty is not matched",
+		"utf8Hex": "3c6170702d726f6f74206e672d76657273696f6e3d22223e3c2f6170702d726f6f743e",
+		"signals": []
+	},
+	{
+		"name": "angular content attribute",
+		"utf8Hex": "3c70205f6e67636f6e74656e742d6e672d633132333e3c2f703e",
+		"signals": [
+			{
+				"technology": "Angular",
+				"signalType": "scoped-attr",
+				"evidence": " _ngcontent-ng-c123",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "angular content attribute uppercase",
+		"utf8Hex": "3c70205f4e47434f4e54454e542d4e472d433132333e3c2f703e",
+		"signals": [
+			{
+				"technology": "Angular",
+				"signalType": "scoped-attr",
+				"evidence": " _NGCONTENT-NG-C123",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "url patterns sharing a slash",
+		"utf8Hex": "3c736372697074207372633d222f5f6e6578742f5f617374726f2f5f6e7578742f612e6a73223e3c2f7363726970743e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "url-pattern",
+				"evidence": "/_next/",
+				"weight": 50,
+				"category": "JavaScript frameworks"
+			},
+			{
+				"technology": "Astro",
+				"signalType": "url-pattern",
+				"evidence": "/_astro/",
+				"weight": 50,
+				"category": "Static site generator"
+			},
+			{
+				"technology": "Nuxt",
+				"signalType": "url-pattern",
+				"evidence": "/_nuxt/",
+				"weight": 50,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "literal without its pattern",
+		"utf8Hex": "3c703e69643d225f5f6e6578742220646174612d762d207376656c74652d3c2f703e",
+		"signals": []
+	},
+	{
+		"name": "first match is the evidence",
+		"utf8Hex": "3c7020646174612d762d616161616161313e3c2f703e3c7020646174612d762d626262626262323e3c2f703e",
+		"signals": [
+			{
+				"technology": "Vue",
+				"signalType": "scoped-attr",
+				"evidence": " data-v-aaaaaa1",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "every framework at once",
+		"utf8Hex": "3c6469762069643d225f5f6e657874223e3c2f6469763e3c617374726f2d69736c616e643e3c2f617374726f2d69736c616e643e3c64697620646174612d762d6162636465663e3c2f6469763e3c6469762069643d225f5f6e757874223e3c2f6469763e3c7020636c6173733d227376656c74652d616263646566223e3c2f703e3c6469762069643d225f5f5f676174736279223e3c2f6469763e3c6170702d726f6f74206e672d76657273696f6e3d2231223e3c2f6170702d726f6f743e3c736372697074207372633d222f5f6e6578742f612e6a73223e3c2f7363726970743e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<div id=\"__next\"",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			},
+			{
+				"technology": "Next.js",
+				"signalType": "url-pattern",
+				"evidence": "/_next/",
+				"weight": 50,
+				"category": "JavaScript frameworks"
+			},
+			{
+				"technology": "Astro",
+				"signalType": "html-marker",
+				"evidence": "<astro-island",
+				"weight": 65,
+				"category": "Static site generator"
+			},
+			{
+				"technology": "Vue",
+				"signalType": "scoped-attr",
+				"evidence": " data-v-abcdef",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			},
+			{
+				"technology": "Nuxt",
+				"signalType": "html-marker",
+				"evidence": "<div id=\"__nuxt\"",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			},
+			{
+				"technology": "Svelte",
+				"signalType": "scoped-attr",
+				"evidence": "class=\"svelte-abcdef",
+				"weight": 40,
+				"category": "JavaScript frameworks"
+			},
+			{
+				"technology": "Gatsby",
+				"signalType": "html-marker",
+				"evidence": "<div id=\"___gatsby\"",
+				"weight": 65,
+				"category": "Static site generator"
+			},
+			{
+				"technology": "Angular",
+				"signalType": "html-marker",
+				"evidence": " ng-version=\"1\"",
+				"weight": 65,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "evidence longer than 200 characters",
+		"utf8Hex": "3c64697620787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878782069643d225f5f6e657874223e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<div xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "evidence of 200 characters with a non-bmp character",
+		"utf8Hex": "3c64697620f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f9880f09f98802069643d225f5f6e657874223e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<div 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀�",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "evidence cut between a surrogate pair",
+		"utf8Hex": "3c646976207878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878f09f98802069643d225f5f6e657874223e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<div xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx�",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "evidence with non-ascii text",
+		"utf8Hex": "3c646976207469746c653d22e697a5e69cace8aa9e222069643d225f5f6e657874223e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<div title=\"日本語\" id=\"__next\"",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "lone surrogate in the evidence",
+		"utf8Hex": "3c646976207469746c653d22efbfbd222069643d225f5f6e657874223e",
+		"signals": [
+			{
+				"technology": "Next.js",
+				"signalType": "html-marker",
+				"evidence": "<div title=\"�\" id=\"__next\"",
+				"weight": 60,
+				"category": "JavaScript frameworks"
+			}
+		]
+	},
+	{
+		"name": "long s does not fold into an ascii letter",
+		"utf8Hex": "3c415354524f2d49c5bf4c414e443e",
+		"signals": []
+	},
+	{
+		"name": "kelvin sign does not fold into an ascii letter",
+		"utf8Hex": "3c64697620646174612d762de284aa3162326333643e",
+		"signals": []
+	}
+]

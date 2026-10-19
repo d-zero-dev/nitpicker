@@ -6,7 +6,7 @@ use regex::bytes::{NoExpand, Regex};
 /// `/index.{ext}` anywhere in the text. `\w` is the ASCII word class
 /// (`[0-9A-Za-z_]`) because Unicode mode is off — the same set JS `\w`
 /// matches without the `u` flag.
-static INDEX_SUFFIX_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+pub(crate) static INDEX_SUFFIX_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 	Regex::new(r"(?i-u)/index\.\w+").expect("INDEX_SUFFIX_PATTERN is a valid regular expression")
 });
 

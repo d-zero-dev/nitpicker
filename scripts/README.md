@@ -6,21 +6,21 @@
 
 Rust に移植する処理（#420 のロードマップ）の時間とピーク RSS を、JavaScript 版と Rust 版で同じスクリプトを使って比べるためのベンチ。移植で出力が変わらないことの確認は、下の「テンプレート分類の golden」と「alias・isolated clusters・リンクグラフの golden」を参照。
 
-| スクリプト                          | 計測対象                                                                    | ケース                                                      |
-| ----------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `bench-template-classification.mjs` | `classifyArchivePageTemplates`                                              | `full`                                                      |
-| `bench-url-natural-sort.mjs`        | `buildPageNaturalUrlRankMap` と `sortArchiveUrls`                           | `rank-map` / `all-urls`                                     |
-| `bench-isolated-clusters.mjs`       | `computeIsolatedClusters`                                                   | `default`                                                   |
-| `bench-alias-backfill.mjs`          | `backfillAliasOfId`                                                         | `default`                                                   |
-| `bench-get-link-graph.mjs`          | `getLinkGraph`（全ノード・全辺と `limit: 500`）                             | `all` / `limit-500`                                         |
-| `bench-match-selector.mjs`          | `matchSelector`（単純・子孫結合子・`:nth-child()`）                         | `simple` / `compound` / `nth`                               |
-| `bench-search-html.mjs`             | `searchHtml`（リテラル・正規表現 × ヒット多・少）                           | `literal-many` / `literal-few` / `regex-many` / `regex-few` |
-| `bench-body-hash.mjs`               | `computeBodyHash` を全 HTML スナップショットに適用（Rust 版と JS 段階実装） | `rust` / `js`                                               |
-| `bench-tech-signals.mjs`            | `matchStructuralTechnologySignals` を全 HTML スナップショットに適用         | `default`                                                   |
+| スクリプト                          | 計測対象                                                                                     | ケース                                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `bench-template-classification.mjs` | `classifyArchivePageTemplates`                                                               | `full`                                                      |
+| `bench-url-natural-sort.mjs`        | `buildPageNaturalUrlRankMap` と `sortArchiveUrls`                                            | `rank-map` / `all-urls`                                     |
+| `bench-isolated-clusters.mjs`       | `computeIsolatedClusters`                                                                    | `default`                                                   |
+| `bench-alias-backfill.mjs`          | `backfillAliasOfId`                                                                          | `default`                                                   |
+| `bench-get-link-graph.mjs`          | `getLinkGraph`（全ノード・全辺と `limit: 500`）                                              | `all` / `limit-500`                                         |
+| `bench-match-selector.mjs`          | `matchSelector`（単純・子孫結合子・`:nth-child()`）                                          | `simple` / `compound` / `nth`                               |
+| `bench-search-html.mjs`             | `searchHtml`（リテラル・正規表現 × ヒット多・少）                                            | `literal-many` / `literal-few` / `regex-many` / `regex-few` |
+| `bench-body-hash.mjs`               | `computeBodyHash` を全 HTML スナップショットに適用（Rust 版と JS 段階実装）                  | `rust` / `js`                                               |
+| `bench-tech-signals.mjs`            | `matchStructuralTechnologySignals` を全 HTML スナップショットに適用（Rust 版と JS 正規表現） | `rust` / `js`                                               |
 
 計測対象のスコープ（何を含め、何を `timeMs` から除くか）と各指標の意味は、各スクリプト冒頭のコメントを参照。ケースの一覧は `bench-lib/bench-cases.mjs` が唯一の正（各スクリプトの `--case` 検証と `bench-suite.mjs` の両方がこれを読む）。ケースを足したらこの表も更新する。
 
-- `body-hash` の `js` は、oracle として残している JS 段階実装を測る。JS 段階実装を削除するとき（#430）にこのケースも削除する
+- `body-hash` と `tech-signals` の `js` は、oracle として残している JS 実装（body hash の段階実装、技術検出の正規表現）を測る。その JS 実装を削除するときにこのケースも削除する
 
 ### 実行
 
@@ -37,7 +37,7 @@ node scripts/bench-run.mjs body-hash <archive.nitpicker> --case js # 1 ケース
 - 各 `bench-*.mjs` は単体でも実行でき、`--json` を付けると結果を 1 行の JSON で標準出力に出す（`bench-output/` には保存しない）
 - アーカイブ本体は変更しない。書き込みを伴う計測（`template-classification`・`alias-backfill`）は、OS の一時ディレクトリに展開したコピー（`nitpicker-bench-*`）で行い、終了時に削除する。Ctrl-C などで強制終了した場合は残るので手で消す
 - HTML スナップショットを全件走査する計測（`body-hash`・`tech-signals`）は、ページから参照されているスナップショットだけを対象にする（再クロールで置き換わった古いスナップショットは数えない）
-- `bench-body-hash.mjs --case js` は、ビルド対象外の JS 段階実装を `src/` から Node の型ストリップで読み込むため、Node 24 以上が必要
+- `bench-body-hash.mjs --case js` と `bench-tech-signals.mjs --case js` は、ビルド対象外の JS 実装を `src/` から Node の型ストリップで読み込むため、Node 24 以上が必要
 - 各計測は 1 回だけ実行する。固定費（初回呼び出しの準備など）の影響が小さくなる中・大サイズのアーカイブで値を比べる
 
 ### 結果の形式
