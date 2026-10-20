@@ -4077,16 +4077,28 @@ export interface PageDirectoryPrefix {
  */
 export interface SearchHtmlOptions extends HtmlSnapshotPageFilters {
 	/**
-	 * Search pattern in `strToRegex` syntax: a plain string is matched as an
-	 * escaped literal substring, `/pattern/flags` (flags `g`/`i`/`m`) as a
-	 * regular expression.
+	 * Search pattern: a plain string is matched as a literal substring;
+	 * `/source/flags` is a regular expression in the syntax of Rust's `regex`
+	 * crate (no backreferences or look-around; matching time linear in the
+	 * document). The match unit is a Unicode scalar value, `\d` `\w` `\s`
+	 * `\b` follow Unicode, `.` stops only at `\n`. Flags `i` `m` `s` take
+	 * effect, `g` and `u` are always on, `d` `v` `y` are rejected. A pattern
+	 * that matches the empty string is rejected. See `compileSearchPattern`.
 	 */
 	pattern: string;
+	/**
+	 * Take `pattern` as plain text even when it has the `/…/flags` form, so a
+	 * literal such as `/static/images/` can be searched (default `false`).
+	 */
+	literal?: boolean;
 	/** Maximum number of matching pages to return (default 100; `0` returns only counts). */
 	limit?: number;
 	/** Number of matching pages to skip (default 0). */
 	offset?: number;
-	/** Snippet window size in characters (default 160). */
+	/**
+	 * Snippet window size in Unicode scalar values, a non-negative integer up to
+	 * 4,294,967,295 (default 160; `0` gives an empty snippet). Anything else is a `RangeError`.
+	 */
 	snippetLength?: number;
 	/**
 	 * Called after each scanned chunk with a human-readable status line
@@ -4099,7 +4111,7 @@ export interface SearchHtmlOptions extends HtmlSnapshotPageFilters {
 export interface SearchHtmlItem {
 	/** The page URL. */
 	url: string;
-	/** Number of pattern occurrences in the page's HTML. */
+	/** Number of non-overlapping occurrences of the pattern in the page's HTML. */
 	matchCount: number;
 	/** Whitespace-collapsed window around the first occurrence. */
 	snippet: string;
