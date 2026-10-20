@@ -8,44 +8,23 @@ export interface HtmlSnapshotPageFilters {
 	readonly directory?: string;
 }
 
-/** One distinct stored HTML snapshot, decompressed. */
-export interface HtmlSnapshot {
-	/** Lowercase hex of the snapshot's SHA-256 hash; stable `Map` key. */
-	readonly hash: string;
-	/** The decompressed HTML. */
-	readonly html: string;
-}
-
 /** One distinct stored HTML snapshot as it sits in `page_html_blobs`, not yet decoded. */
 export interface StoredSnapshotBlob {
+	/** Lowercase hex of the snapshot's SHA-256 hash; the key a judge keeps results under. */
+	readonly hash: string;
 	/** The stored bytes. */
 	readonly body: Uint8Array;
 	/** `page_html_blobs.codec`: `zstd` or `none`. */
 	readonly codec: string;
 }
 
-/** What every scan needs, whoever judges the snapshots. */
-interface ScanHtmlSnapshotsBaseParams {
+/** Parameters of {@link import('./scan-html-snapshots.js').scanHtmlSnapshots}. */
+export interface ScanHtmlSnapshotsParams {
 	readonly knex: Knex;
 	/** Page filters; omit to scan every in-scope page. */
 	readonly filters?: HtmlSnapshotPageFilters;
 	/** Receives `Scanning HTML snapshots: <done> / <total>` after each chunk. */
 	readonly onProgress?: (message: string) => void;
-}
-
-/** A scan whose judge reads one decompressed snapshot at a time. */
-export interface ScanHtmlSnapshotsWithMatcherParams extends ScanHtmlSnapshotsBaseParams {
-	/**
-	 * Judges one snapshot. Called once per distinct snapshot, however many
-	 * pages share it; `true` marks every page of the snapshot as matched.
-	 */
-	readonly matches: (snapshot: HtmlSnapshot) => boolean;
-	readonly judgeBatch?: undefined;
-}
-
-/** A scan whose judge takes stored (still encoded) snapshots in batches. */
-export interface ScanHtmlSnapshotsWithBatchJudgeParams extends ScanHtmlSnapshotsBaseParams {
-	readonly matches?: undefined;
 	/**
 	 * Judges a batch of distinct snapshots as stored and resolves with one
 	 * verdict per snapshot, in order; `true` marks every page of the snapshot
@@ -57,15 +36,10 @@ export interface ScanHtmlSnapshotsWithBatchJudgeParams extends ScanHtmlSnapshots
 	) => Promise<readonly boolean[]>;
 }
 
-/** Parameters of {@link import('./scan-html-snapshots.js').scanHtmlSnapshots}. */
-export type ScanHtmlSnapshotsParams =
-	| ScanHtmlSnapshotsWithMatcherParams
-	| ScanHtmlSnapshotsWithBatchJudgeParams;
-
 /** A page whose snapshot matched. */
 export interface MatchedSnapshotPage {
 	readonly pageId: number;
-	/** Lowercase hex hash of the matched snapshot ({@link HtmlSnapshot.hash}). */
+	/** Lowercase hex hash of the matched snapshot ({@link StoredSnapshotBlob.hash}). */
 	readonly hash: string;
 }
 

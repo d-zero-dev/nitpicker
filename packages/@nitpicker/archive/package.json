@@ -120,6 +120,18 @@
 			"import": "./lib/html-snapshot/match-selector-html.js",
 			"types": "./lib/html-snapshot/match-selector-html.d.ts"
 		},
+		"./html-snapshot/search-html-document": {
+			"import": "./lib/html-snapshot/search-html-document.js",
+			"types": "./lib/html-snapshot/search-html-document.d.ts"
+		},
+		"./html-snapshot/search-html-snapshots": {
+			"import": "./lib/html-snapshot/search-html-snapshots.js",
+			"types": "./lib/html-snapshot/search-html-snapshots.d.ts"
+		},
+		"./html-snapshot/validate-search-pattern": {
+			"import": "./lib/html-snapshot/validate-search-pattern.js",
+			"types": "./lib/html-snapshot/validate-search-pattern.d.ts"
+		},
 		"./html-snapshot/match-selector-snapshots": {
 			"import": "./lib/html-snapshot/match-selector-snapshots.js",
 			"types": "./lib/html-snapshot/match-selector-snapshots.d.ts"

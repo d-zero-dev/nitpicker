@@ -134,6 +134,65 @@ describe('query search-html / pages-by-resource / resource-hosts / links (e2e)',
 		expect(stdout).toBe('');
 	});
 
+	it('search-html rejects look-around, which the regex engine does not support, with exit code 1', async () => {
+		const { exitCode, stdout, stderr } = await runCli(
+			['query', FIXTURE, 'search-html', '--pattern', '/(?<=<)html/'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(stdout).toBe('');
+		expect(stderr).toMatch(/look-around/);
+	});
+
+	it('search-html rejects the unsupported flag y with exit code 1', async () => {
+		const { exitCode, stdout, stderr } = await runCli(
+			['query', FIXTURE, 'search-html', '--pattern', '/<html/y'],
+			cwd,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(stdout).toBe('');
+		expect(stderr).toMatch(/Invalid flag "y"/);
+	});
+
+	it('search-html --literal searches /…/flags text as it is instead of rejecting the flag', async () => {
+		const { exitCode, stdout } = await runCli(
+			[
+				'query',
+				FIXTURE,
+				'search-html',
+				'--pattern',
+				'/<html/y',
+				'--literal',
+				'--limit',
+				'0',
+			],
+			cwd,
+		);
+
+		expect(exitCode).toBe(0);
+		expect((JSON.parse(stdout) as { total: number }).total).toBe(0);
+	});
+
+	it('search-html reads the s flag: . crosses a line break only with it', async () => {
+		const total = async (pattern: string) => {
+			const { exitCode, stdout } = await runCli(
+				['query', FIXTURE, 'search-html', '--pattern', pattern, '--limit', '0'],
+				cwd,
+			);
+			expect(exitCode).toBe(0);
+			return (JSON.parse(stdout) as { total: number }).total;
+		};
+
+		// A document is one run of markup with no `\n` in it unless the page had one;
+		// `<html` to `</html>` spans the whole document.
+		const withoutS = await total('/<html.+<\\/html>/');
+		const withS = await total('/<html.+<\\/html>/s');
+		expect(withS).toBeGreaterThan(0);
+		expect(withS).toBeGreaterThanOrEqual(withoutS);
+	});
+
 	it('pages-by-resource requires a resource filter', async () => {
 		const { exitCode } = await runCli(['query', FIXTURE, 'pages-by-resource'], cwd);
 

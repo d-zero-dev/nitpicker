@@ -17,6 +17,13 @@
 //! addon calls them, and they stay public as the reference the fused pass
 //! is checked against.
 //!
+//! `search_html` answers `query search-html`: how often a literal or a
+//! regular expression occurs in a stored document, and the text around the
+//! first occurrence. The pattern is the user's, so it is compiled in Unicode
+//! mode (`compile_search_pattern`) — the opposite of the persisted-value
+//! patterns above — and the contract (Rust `regex` syntax, `i` `m` `s` flags,
+//! scalar-value match unit) is the one `docs/query.md` documents.
+//!
 //! `scan_snapshots` and `html_matches_selector` answer `query match-selector`:
 //! whether a stored document has an element matching a CSS selector list,
 //! judged on the serialized markup by the interpretation rules in
@@ -29,6 +36,7 @@
 #![forbid(unsafe_code)]
 
 mod ascii;
+mod build_snippet;
 mod compute_body_hash;
 mod decode_serialized_attribute_value;
 mod element;
@@ -44,10 +52,13 @@ mod passes_ordered_prefilter;
 mod run_direct_match;
 mod run_selector_state_machine;
 mod scan_snapshots;
+mod search_html;
+mod search_pattern;
 mod selector_plan;
 mod start_tag_attributes;
 mod tag_tokenizer;
 
+pub use build_snippet::build_snippet;
 pub use compute_body_hash::compute_body_hash;
 pub use decode_serialized_attribute_value::decode_serialized_attribute_value;
 pub use extract_body::extract_body;
@@ -56,7 +67,13 @@ pub use mask_dynamic_ids::mask_dynamic_ids;
 pub use matches_nth::matches_nth;
 pub use normalize_url_like_strings::normalize_url_like_strings;
 pub use passes_ordered_prefilter::passes_ordered_prefilter;
-pub use scan_snapshots::{ScanError, SnapshotCodec, StoredSnapshot, scan_snapshots};
+pub use scan_snapshots::{
+	ScanError, SnapshotCodec, StoredSnapshot, judge_snapshots, scan_snapshots,
+};
+pub use search_html::{SearchOutcome, search_html};
+pub use search_pattern::{
+	RegexFlags, SearchKind, SearchPattern, SearchPatternError, compile_search_pattern,
+};
 pub use selector_plan::{
 	Alternative, AttributeOperator, AttributeTest, Combinator, Compound, Conditions, NthTest,
 	SelectorPlan,

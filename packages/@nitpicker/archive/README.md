@@ -1,6 +1,6 @@
 # @nitpicker/archive
 
-`.nitpicker` アーカイブ（tar + SQLite）の読み書きを担う内部パッケージです。スキーマ定義・マイグレーション・`Archive` / `ArchiveAccessor`・tar 展開キャッシュ・concat / split・body hash・URL alias・技術スタック検出のロールアップ・テンプレート分類・保存済み HTML スナップショットのセレクタ照合（`html-snapshot/`。ネイティブの `@nitpicker/core` を呼ぶ薄いラッパーと、その型）・スコープ判定・エラー分類を含みます。
+`.nitpicker` アーカイブ（tar + SQLite）の読み書きを担う内部パッケージです。スキーマ定義・マイグレーション・`Archive` / `ArchiveAccessor`・tar 展開キャッシュ・concat / split・body hash・URL alias・技術スタック検出のロールアップ・テンプレート分類・保存済み HTML スナップショットのセレクタ照合と文字列・正規表現検索（`html-snapshot/`。ネイティブの `@nitpicker/core` を呼ぶ薄いラッパーと、その型）・スコープ判定・エラー分類を含みます。
 
 ヘッドレスブラウザ（puppeteer / `@d-zero/beholder`）や `@d-zero/dealer` には依存しないため、読み取り専用の経路（[@nitpicker/query](../query/README.md)、viewer、mcp-server、report-\*）はクローラーを引き込まずにアーカイブを扱えます。クロール時の書き込みは [@nitpicker/crawler](../crawler/README.md) がこのパッケージ経由で行います。
 

@@ -18,6 +18,7 @@ nitpicker_template_cluster = { workspace = true }
 nitpicker_union_find = { workspace = true }
 nitpicker_url_key = { workspace = true }
 rayon = { workspace = true }
+regex = { workspace = true }
 rustc-hash = { workspace = true }
 
 [build-dependencies]

@@ -1,15 +1,8 @@
 import type { SelectorPlan, SnapshotMatchOutcome, StoredHtmlSnapshot } from './types.js';
 
 import { nativeBinding } from './native-binding.js';
+import { packStoredSnapshots } from './pack-stored-snapshots.js';
 import { toNativeSelectorPlan } from './to-native-selector-plan.js';
-
-/** The native call addresses the batch with `u32` offsets. */
-const MAX_BATCH_BYTES = 4_294_967_295;
-
-/** The codec byte the native call reads for a snapshot stored as it is. */
-const CODEC_NONE = 0;
-/** The codec byte the native call reads for a zstd snapshot. */
-const CODEC_ZSTD = 1;
 
 /** Bit 0 of a verdict byte the native call returns: an element matched. */
 const MATCHED = 1;
@@ -50,35 +43,7 @@ export async function matchSelectorSnapshots(options: {
 	readonly snapshots: readonly StoredHtmlSnapshot[];
 }): Promise<SnapshotMatchOutcome[]> {
 	const { plan, snapshots } = options;
-	const offsets = new Uint32Array(snapshots.length + 1);
-	const codecs = new Uint8Array(snapshots.length);
-	let total = 0;
-	for (const [index, snapshot] of snapshots.entries()) {
-		switch (snapshot.codec) {
-			case 'none': {
-				codecs[index] = CODEC_NONE;
-				break;
-			}
-			case 'zstd': {
-				codecs[index] = CODEC_ZSTD;
-				break;
-			}
-			default: {
-				throw new Error(`Unknown page_html_blobs.codec: ${snapshot.codec}`);
-			}
-		}
-		total += snapshot.body.byteLength;
-		if (total > MAX_BATCH_BYTES) {
-			throw new RangeError(
-				`The batch takes more than ${MAX_BATCH_BYTES} bytes (4 GiB), which the native call cannot address.`,
-			);
-		}
-		offsets[index + 1] = total;
-	}
-	const bodies = new Uint8Array(total);
-	for (const [index, snapshot] of snapshots.entries()) {
-		bodies.set(snapshot.body, offsets[index]);
-	}
+	const { bodies, offsets, codecs } = packStoredSnapshots(snapshots);
 	const flags = await nativeBinding.matchSelectorSnapshots(
 		toNativeSelectorPlan(plan),
 		bodies,

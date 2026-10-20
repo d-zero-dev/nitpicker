@@ -1,13 +1,10 @@
 import type {
-	HtmlSnapshot,
 	MatchedSnapshotPage,
 	ScanHtmlSnapshotsParams,
 	ScanHtmlSnapshotsResult,
 	StoredSnapshotBlob,
 } from './types.js';
 import type { Knex } from 'knex';
-
-import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
 
 import { SQLITE_IN_CHUNK } from '../sqlite-in-chunk.js';
 
@@ -121,25 +118,17 @@ async function findMatchedHashes(
 	rows: readonly BlobRow[],
 ): Promise<Buffer[]> {
 	const matched: Buffer[] = [];
-	if (params.matches) {
-		for (const row of rows) {
-			const { hash } = row;
-			const snapshot: HtmlSnapshot = {
-				// Lazy: most judges never read the key, and this runs once per snapshot.
-				get hash() {
-					return hash.toString('hex');
-				},
-				html: decodeStoredBlob(row.body, row.codec),
-			};
-			if (params.matches(snapshot)) {
-				matched.push(hash);
-			}
-		}
-		return matched;
-	}
 	for (const batch of splitIntoBatches(rows)) {
 		const verdicts = await params
-			.judgeBatch(batch.map(({ body, codec }): StoredSnapshotBlob => ({ body, codec })))
+			.judgeBatch(
+				batch.map(
+					({ hash, body, codec }): StoredSnapshotBlob => ({
+						hash: hash.toString('hex'),
+						body,
+						codec,
+					}),
+				),
+			)
 			.catch((error: unknown) => {
 				throw nameFailedSnapshot(error, batch);
 			});
@@ -177,28 +166,23 @@ async function findMatchedHashes(
  * snapshot cannot match — compare `candidatePages` with the archive's page
  * total to tell "no match" from "nothing was scanned".
  *
- * The judge is either `matches`, which sees one decompressed snapshot at a
- * time, or `judgeBatch`, which sees the stored (still encoded) snapshots of
- * a chunk in batches whose estimated decoded size is bounded by
+ * The judge, `judgeBatch`, sees the stored (still encoded) snapshots of a
+ * chunk in batches whose estimated decoded size is bounded by
  * `SCAN_BATCH_BYTES`, so a native judge can decompress and judge them in
  * parallel without this scan holding the decoded documents; the next chunk is
- * read while a batch judge works on the current one (reading is most of the
- * time), at the price of one more chunk's stored bytes held. A blob row is
- * paired with the hash it came back with: `whereIn` does not return rows in
- * the order the hashes were asked for.
+ * read while the judge works on the current one (reading is most of the
+ * time), at the price of one more chunk's stored bytes held. Each snapshot
+ * carries the hash it was stored under, which is the key a judge keeps its
+ * results by. A blob row is paired with the hash it came back with: `whereIn`
+ * does not return rows in the order the hashes were asked for.
  * @param params - The archive, page filters, snapshot judge and progress callback.
  * @returns Matched pages in page-id order plus scan totals.
  * @example
  * const { matchedPages, scannedSnapshots } = await scanHtmlSnapshots({
  *   knex: accessor.getKnex(),
- *   matches: ({ html }) => html.includes('fonts.example.org'),
+ *   judgeBatch: async (batch) =>
+ *     (await matchSelectorSnapshots({ plan, snapshots: batch })).map((v) => v.matched),
  *   onProgress: (message) => console.error(message),
- * });
- *
- * // A judge that takes stored snapshots in batches (decoding is its job):
- * const { matchedPages } = await scanHtmlSnapshots({
- *   knex: accessor.getKnex(),
- *   judgeBatch: async (batch) => (await matchSelectorSnapshots({ plan, snapshots: batch })).map((v) => v.matched),
  * });
  */
 export async function scanHtmlSnapshots(
@@ -220,10 +204,8 @@ export async function scanHtmlSnapshots(
 
 	const matchedHashes: Buffer[] = [];
 	let scanned = 0;
-	// A batch judge runs off the event loop, so the next chunk is read while the
-	// current one is judged. A `matches` judge runs on this thread: nothing would
-	// overlap, and a second chunk would only sit in memory.
-	const overlap = params.judgeBatch !== undefined;
+	// The judge runs off the event loop, so the next chunk is read while the
+	// current one is judged.
 	/**
 	 * Starts reading the chunk that begins at `from`.
 	 * @param from - Index into the walked hashes.
@@ -241,14 +223,11 @@ export async function scanHtmlSnapshots(
 	for (let start = 0; start < walkedHashes.length; start += SCAN_CHUNK) {
 		const rows = await pending!;
 		const next = start + SCAN_CHUNK;
-		pending = overlap && next < walkedHashes.length ? readNext(next) : undefined;
+		pending = next < walkedHashes.length ? readNext(next) : undefined;
 
 		matchedHashes.push(...(await findMatchedHashes(params, rows)));
 		scanned += Math.min(SCAN_CHUNK, walkedHashes.length - start);
 		onProgress?.(`Scanning HTML snapshots: ${scanned} / ${hashTotal}`);
-		if (!overlap && next < walkedHashes.length) {
-			pending = readNext(next);
-		}
 	}
 
 	const matchedPages: MatchedSnapshotPage[] = [];

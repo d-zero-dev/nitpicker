@@ -421,7 +421,7 @@ export const toolDefinitions: Tool[] = [
 	{
 		name: 'search_html',
 		description:
-			'Search the stored HTML snapshots of all pages for a string or regular expression, without writing to the archive. The search runs on the raw markup `get_page_html` returns, so <script>, <style>, inline style and every attribute are searchable (e.g. `fonts.example.org`, `font-family`, `gtag(`, `/UA-\\d+-\\d+/`). `pattern` is a plain literal substring, or `/regex/flags` (flags g, i, m) for a regular expression. Returns matching pages in page-id order with matchCount and a whitespace-collapsed snippet around the first hit, plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). This is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> search-html --pattern "..." | jq`. Cannot search CSS/JS file bodies (not stored). To find pages by DOM structure (a CSS selector) rather than by text, use `match_selector`.',
+			'Search the stored HTML snapshots of all pages for a string or regular expression, without writing to the archive. The search runs on the raw markup `get_page_html` returns, so <script>, <style>, inline style and every attribute are searchable (e.g. `fonts.example.org`, `font-family`, `gtag(`, `/UA-\\d+-\\d+/`). `pattern` is a plain literal substring, or `/regex/flags` (pass `literal: true` to search text such as `/static/images/` as it is) for a regular expression in Rust `regex` syntax: no backreferences or look-around and no JavaScript-only syntax such as a bare `{` or `[^]` (rejected with an error that says which), `\\<` is a word boundary, matching in time linear in the page; the match unit is a Unicode scalar value (`.` matches an emoji once), `\\d` `\\w` `\\s` `\\b` follow Unicode, `.` stops at `\\r` and `\\n` (not at U+2028), `m` anchors at `\\n`, `\\r` and `\\r\\n`; flags `i` `m` `s` take effect, `g` and `u` are always on, `d` `v` `y` are rejected; `matchCount` counts non-overlapping matches. Returns matching pages in page-id order with matchCount and a snippet around the first hit (cut from the whitespace-collapsed page, snippetLength Unicode scalar values), plus `total`, `scannedSnapshots` and `candidatePages` (in-scope pages with a stored snapshot; if it is 0 or far below the page count, HTML was not stored and "no match" is meaningless). This is a linear scan over every distinct snapshot, so large archives can take tens of seconds: call once with `limit: 0` to size `total`, narrow with urlPattern/directory, and prefer the CLI for bulk extraction: `nitpicker query <file> search-html --pattern "..." | jq`. Cannot search CSS/JS file bodies (not stored). To find pages by DOM structure (a CSS selector) rather than by text, use `match_selector`.',
 		inputSchema: {
 			type: 'object' as const,
 			properties: {
@@ -432,7 +432,12 @@ export const toolDefinitions: Tool[] = [
 				pattern: {
 					type: 'string',
 					description:
-						'Literal substring, or /regex/flags (flags g, i, m) for a regular expression.',
+						'Literal substring, or /regex/flags for a regular expression in Rust regex syntax (flags i, m, s; no backreferences or look-around).',
+				},
+				literal: {
+					type: 'boolean',
+					description:
+						'Take `pattern` as plain text even if it looks like /…/flags, e.g. to find the text `/static/images/` (default: false).',
 				},
 				urlPattern: {
 					type: 'string',
@@ -445,7 +450,8 @@ export const toolDefinitions: Tool[] = [
 				},
 				snippetLength: {
 					type: 'number',
-					description: 'Snippet window size in characters (default: 160)',
+					description:
+						'Snippet window size in Unicode scalar values, a non-negative integer (default: 160; 0 gives an empty snippet).',
 				},
 				limit: {
 					type: 'number',

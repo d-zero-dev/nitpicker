@@ -1,6 +1,6 @@
 # @nitpicker/core
 
-Nitpicker の計算コアを Rust（Node-API、[napi-rs](https://napi.rs/)）で実装したネイティブアドオンです。重い計算をここに集め、[@nitpicker/archive](../archive/README.md) などの TypeScript パッケージから呼び出します。現在は、ページ本文の内容ハッシュ（`page_meta.body_hash`）、HTML の構造シグナルによる技術検出、URL の自然順の順位付け、alias の判定、リンクの連結成分、テンプレート分類（ページのシグナルと HTML から、ページごとのテンプレートキーとクラスタごとの reason まで）、保存済み HTML スナップショットに対する CSS セレクタの照合（`query match-selector`）を提供しています。
+Nitpicker の計算コアを Rust（Node-API、[napi-rs](https://napi.rs/)）で実装したネイティブアドオンです。重い計算をここに集め、[@nitpicker/archive](../archive/README.md) などの TypeScript パッケージから呼び出します。現在は、ページ本文の内容ハッシュ（`page_meta.body_hash`）、HTML の構造シグナルによる技術検出、URL の自然順の順位付け、alias の判定、リンクの連結成分、テンプレート分類（ページのシグナルと HTML から、ページごとのテンプレートキーとクラスタごとの reason まで）、保存済み HTML スナップショットに対する CSS セレクタの照合（`query match-selector`）と文字列・正規表現の検索（`query search-html`）を提供しています。
 
 ## 対応プラットフォーム
 
@@ -76,6 +76,25 @@ const verdicts = await matchSelectorSnapshots({
 	snapshots: rows.map((row) => ({ body: row.body, codec: row.codec })),
 });
 verdicts[0]; // { matched: true, prefiltered: false, tokenized: false }
+```
+
+保存済み HTML スナップショットの文字列・正規表現検索は、`searchHtmlSnapshots` がバッチを受け取り、展開から照合までを同じようにスレッドプールで並列に行って、スナップショットごとの `matchCount`（0 なら不一致）とスニペットを返します。パターンはスナップショットごとではなく 1 回だけコンパイルし、アドオンは直前にコンパイルしたパターンを保持して次のバッチでも使い回します（保持は 1 件だけなので、別のパターンの検索が並行すると入れ替わり、そのぶん再コンパイルします）。1 文書だけを同期で検索する `searchHtmlDocument` はテスト用、アーカイブを開く前にパターンを検証する `validateSearchPattern` は空文字列に一致するかを返し、構文エラーは `InvalidArg` で投げます。パターンは Rust の `regex` crate の構文（後方参照・先読み・後読みなし。照合時間は文書長に比例）で、マッチの単位は Unicode スカラー値、`\d` `\w` `\s` `\b` は Unicode の定義、`.` は `\r` と `\n` に一致せず、`m` の `^` `$` は CRLF を 1 つの行末として扱います。スニペットは、文書全体の空白を畳んでから窓を切ります。バッチの `bodies` は JS のバッファをコピーせず読むので、呼び出し側は promise が決着するまで書き換えないでください。永続化される値ではないので `(?-u)` は使わず、契約は `@nitpicker/cli` の `docs/query.md`（パターンの契約）が正です。
+
+```ts
+import { searchHtmlSnapshots } from '@nitpicker/core/search-html-snapshots';
+
+const outcomes = await searchHtmlSnapshots({
+	pattern: {
+		source: 'fonts.example.org',
+		literal: true,
+		ignoreCase: false,
+		multiLine: false,
+		dotAll: false,
+	},
+	snippetLength: 160,
+	snapshots: rows.map((row) => ({ body: row.body, codec: row.codec })),
+});
+outcomes[0]; // { matchCount: 2, snippet: '…fonts.example.org…' }
 ```
 
 テンプレート分類は、呼び出し側（`@nitpicker/archive` の `resolvePageClusterKeys`）がコーパスを読んで順に渡して実行します。全ページのシグナル（URL パス・スタイルシート・ホスト）を渡してブロック分け（Pass 0）し、続けて全ページの HTML をコーパス順に渡します。計算する呼び出しはアドオン内のスレッドプールで動き、Promise を返します。呼び出しは重ねず、1 つずつ await します。

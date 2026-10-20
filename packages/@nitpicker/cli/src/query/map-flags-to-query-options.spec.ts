@@ -625,6 +625,7 @@ describe('mapFlagsToQueryOptions', () => {
 			pretty: true,
 			urls: 'other-urls.txt',
 			pattern: '/other/i',
+			literal: true,
 			selector: 'p',
 			snippetLength: 77,
 			resourcesLimit: 7,

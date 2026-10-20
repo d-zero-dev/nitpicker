@@ -231,37 +231,13 @@ describe('scanHtmlSnapshots with a batch judge', () => {
 		expect(blobReads).toBe(3);
 	});
 
-	it('does not read ahead for a judge that runs on this thread', async () => {
-		const knex = archive.getKnex();
-		let blobReads = 0;
-		const onQuery = (query: { sql: string }) => {
-			if (query.sql.includes('page_html_blobs')) {
-				blobReads++;
-			}
-		};
-		knex.on('query', onQuery);
-		const readsWhenJudging: number[] = [];
-		try {
-			await scanHtmlSnapshots({
-				knex,
-				matches: () => {
-					readsWhenJudging.push(blobReads);
-					return false;
-				},
-			});
-		} finally {
-			knex.removeListener('query', onQuery);
-		}
-		expect(readsWhenJudging[0]).toBe(1);
-	});
-
 	it('names the hash of the snapshot the judge could not decode', async () => {
 		const hashes: string[] = [];
 		await scanHtmlSnapshots({
 			knex: archive.getKnex(),
-			matches: ({ hash }) => {
-				hashes.push(hash);
-				return false;
+			judgeBatch: (batch) => {
+				hashes.push(...batch.map((blob) => blob.hash));
+				return Promise.resolve(batch.map(() => false));
 			},
 		});
 		const error = await scanHtmlSnapshots({
@@ -288,6 +264,49 @@ describe('scanHtmlSnapshots with a batch judge', () => {
 				judgeBatch: () => Promise.reject(new Error('snapshot 0 could not be decoded')),
 			}),
 		).rejects.toThrow('could not be decoded');
+	});
+
+	it('names each snapshot by the lowercase hex SHA-256 of its stored HTML', async () => {
+		// The key a judge keeps results under and the key the matched pages carry.
+		const hashOfHtml1 =
+			'16de9dfa12664d7331c84ac261051ef5ebe566d03dae3faf5e45825fb04bcdbc';
+		const hashOfHtml3 =
+			'bf0ad876db9d08db1bf278c0f79b107ac010116a89e0bcfb8e58451953e42c70';
+		const hashes = new Map<string, string>();
+		const result = await scanHtmlSnapshots({
+			knex: archive.getKnex(),
+			judgeBatch: (batch) => {
+				for (const blob of batch) {
+					hashes.set(htmlOf(blob), blob.hash);
+				}
+				return Promise.resolve(
+					batch.map((blob) => ['<p>1</p>', '<p>3</p>'].includes(htmlOf(blob))),
+				);
+			},
+		});
+		expect(hashes.get('<p>1</p>')).toBe(hashOfHtml1);
+		expect(hashes.get('<p>3</p>')).toBe(hashOfHtml3);
+		expect(result.matchedPages.map((page) => page.hash).toSorted()).toEqual(
+			[hashOfHtml1, hashOfHtml1, hashOfHtml3].toSorted(),
+		);
+	});
+
+	it('scans and counts only the pages the filters keep', async () => {
+		const messages: string[] = [];
+		const result = await scanHtmlSnapshots({
+			knex: archive.getKnex(),
+			filters: { directory: '/dir' },
+			judgeBatch: (batch) => Promise.resolve(batch.map(() => true)),
+			onProgress: (message) => messages.push(message),
+		});
+
+		expect(result).toMatchObject({
+			matchedSnapshots: 2,
+			scannedSnapshots: 2,
+			candidatePages: 2,
+		});
+		expect(result.matchedPages).toHaveLength(2);
+		expect(messages).toEqual(['Scanning HTML snapshots: 2 / 2']);
 	});
 
 	it('reports nothing and never calls the judge when no page is searchable', async () => {

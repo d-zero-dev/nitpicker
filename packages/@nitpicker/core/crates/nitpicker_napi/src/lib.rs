@@ -14,7 +14,10 @@ mod alias;
 mod isolated_cluster;
 #[cfg_attr(test, allow(dead_code))]
 mod match_selector;
+#[cfg_attr(test, allow(dead_code))]
+mod search_html;
 mod slice_by_offsets;
+mod snapshot_codecs;
 #[cfg_attr(test, allow(dead_code))]
 mod tech_detect;
 mod template_classification;

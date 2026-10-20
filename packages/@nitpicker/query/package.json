@@ -24,6 +24,10 @@
 			"import": "./lib/query.js",
 			"types": "./lib/query.d.ts"
 		},
+		"./compile-search-pattern": {
+			"import": "./lib/compile-search-pattern.js",
+			"types": "./lib/compile-search-pattern.d.ts"
+		},
 		"./categories": {
 			"import": "./lib/categories.js",
 			"types": "./lib/categories.d.ts"
