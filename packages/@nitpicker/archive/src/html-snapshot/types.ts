@@ -96,6 +96,31 @@ export interface StoredHtmlSnapshot {
 	readonly codec: string;
 }
 
+/**
+ * What `query search-html` looks for: a literal substring or a regular
+ * expression (Rust `regex` syntax) with its flags.
+ */
+export interface SearchPattern {
+	/** The literal text, or the regular expression's source. */
+	readonly source: string;
+	/** Match `source` as plain text; the flags are then ignored. */
+	readonly literal: boolean;
+	/** `i`. */
+	readonly ignoreCase: boolean;
+	/** `m`: `^` and `$` match at every `\n`. */
+	readonly multiLine: boolean;
+	/** `s`: `.` matches `\n` too. */
+	readonly dotAll: boolean;
+}
+
+/** What a search found in one document. */
+export interface SnapshotSearchOutcome {
+	/** Non-overlapping matches; 0 when the document does not match. */
+	readonly matchCount: number;
+	/** Whitespace-collapsed window around the first match; empty when there is none. */
+	readonly snippet: string;
+}
+
 /** The verdict on one snapshot of a batch. */
 export interface SnapshotMatchOutcome {
 	readonly matched: boolean;
