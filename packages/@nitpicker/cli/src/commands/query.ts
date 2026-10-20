@@ -10,6 +10,7 @@ import { ArchiveManager, compileSelector } from '@nitpicker/query';
 
 import { createByteProgressLogger } from '../create-byte-progress-logger.js';
 import { formatCliError } from '../format-cli-error.js';
+import { compilePatternFlag } from '../query/compile-pattern-flag.js';
 import { dispatchQuery } from '../query/dispatch-query.js';
 import { VALID_SUB_COMMANDS } from '../query/types.js';
 import { validateDirectoryFlag } from '../query/validate-directory-flag.js';
@@ -57,7 +58,7 @@ export async function query(args: string[], flags: QueryFlags) {
 		: path.resolve(process.cwd(), filePath);
 
 	try {
-		// An invalid or unsupported selector, and an unusable --directory, are
+		// An invalid or unsupported selector or search pattern, and an unusable --directory, are
 		// detected before the archive is extracted: opening a large
 		// `.nitpicker` takes minutes, and a typo should not cost that. (A
 		// missing `--selector` is reported by the flag mapper once the archive
@@ -65,6 +66,9 @@ export async function query(args: string[], flags: QueryFlags) {
 		// and fails here.)
 		if (subCommand === 'match-selector' && flags.selector !== undefined) {
 			compileSelector(flags.selector);
+		}
+		if (subCommand === 'search-html' && flags.pattern !== undefined) {
+			compilePatternFlag(flags.pattern, flags.literal);
 		}
 		validateDirectoryFlag(subCommand, flags.directory);
 

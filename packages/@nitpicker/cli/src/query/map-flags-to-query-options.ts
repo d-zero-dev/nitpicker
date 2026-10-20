@@ -3,8 +3,9 @@ import type { commandDef } from '../commands/query-def.js';
 import type { InferFlags } from '@d-zero/roar';
 import type { ContentTypeCategory } from '@nitpicker/query';
 
-import { strToRegex } from '@d-zero/shared/str-to-regex';
 import { CONTENT_TYPE_CATEGORIES } from '@nitpicker/query';
+
+import { compilePatternFlag } from './compile-pattern-flag.js';
 
 /** Parsed flag values for the query CLI command. */
 type QueryFlags = InferFlags<typeof commandDef.flags>;
@@ -184,19 +185,13 @@ export function mapFlagsToQueryOptions(
 		case 'search-html': {
 			if (!flags.pattern) {
 				throw new Error(
-					'--pattern is required for the search-html sub-command. Use a plain string, or /regex/flags.',
+					'--pattern is required for the search-html sub-command. Use a plain string, or /regex/flags (Rust regex syntax; flags i, m, s).',
 				);
 			}
-			try {
-				strToRegex(flags.pattern);
-			} catch (error) {
-				throw new Error(
-					`Invalid --pattern value: ${flags.pattern} (${error instanceof Error ? error.message : String(error)})`,
-					{ cause: error },
-				);
-			}
+			compilePatternFlag(flags.pattern, flags.literal);
 			return {
 				pattern: flags.pattern,
+				literal: flags.literal,
 				urlPattern: flags.urlPattern,
 				directory: flags.directory,
 				snippetLength: flags.snippetLength,

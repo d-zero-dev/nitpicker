@@ -105,11 +105,15 @@ export const commandDef = {
 		pattern: {
 			type: 'string',
 			valueName: 'string|/regex/flags',
-			desc: 'search-html: text to find in the stored HTML. A plain string is a literal substring; /pattern/flags (g, i, m) is a regular expression',
+			desc: 'search-html: text to find in the stored HTML. A plain string is a literal substring; /pattern/flags is a regular expression in Rust regex syntax (no backreferences or look-around, and no JavaScript-only syntax such as a bare { or [^]; Unicode scalar values; . stops at \r and \n; flags i, m, s apply, g and u are always on, d v y are rejected)',
+		},
+		literal: {
+			type: 'boolean',
+			desc: 'search-html: take --pattern as plain text even if it looks like /…/flags (e.g. to find the text /static/images/)',
 		},
 		snippetLength: {
 			type: 'number',
-			desc: 'search-html: snippet window size in characters. Defaults to 160.',
+			desc: 'search-html: snippet window size in Unicode scalar values, a non-negative integer (0 gives an empty snippet). Defaults to 160.',
 		},
 		selector: {
 			type: 'string',
@@ -311,8 +315,16 @@ export const commandDef = {
 		},
 		'search-html': {
 			desc: 'Search the stored HTML snapshots of all pages for a string or /regex/ (raw markup incl. <script>, <style> and attributes)',
-			usage: '<file> search-html --pattern <string|/regex/flags> [options]',
-			flags: ['pattern', 'urlPattern', 'directory', 'snippetLength', 'limit', 'offset'],
+			usage: '<file> search-html --pattern <string|/regex/flags> [--literal] [options]',
+			flags: [
+				'pattern',
+				'literal',
+				'urlPattern',
+				'directory',
+				'snippetLength',
+				'limit',
+				'offset',
+			],
 		},
 		'match-selector': {
 			desc: 'List pages whose stored HTML snapshot has an element matching a CSS selector (single-pass subset: no sibling combinators, :last-child or :has())',
