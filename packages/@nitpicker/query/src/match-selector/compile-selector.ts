@@ -14,6 +14,7 @@ import { AttributeAction, parse, SelectorType } from 'css-what';
 
 import { CASE_INSENSITIVE_ATTRIBUTE_NAMES } from './case-insensitive-attribute-names.js';
 import { parseAnPlusB } from './parse-an-plus-b.js';
+import { toAsciiLowerCase } from './to-ascii-lower-case.js';
 import { UnsupportedSelectorError } from './unsupported-selector-error.js';
 
 /** Bits of a 32-bit state set, minus the sign bit and one spare. */
@@ -68,7 +69,7 @@ function compileAttribute(token: AttributeSelector, selector: string): Attribute
 	if (operator === undefined) {
 		throw new UnsupportedSelectorError(selector, 'the [attr!=value] operator');
 	}
-	const name = token.name.toLowerCase();
+	const name = toAsciiLowerCase(token.name);
 	// An explicit `s` flag (`false`) keeps the comparison case-sensitive.
 	const ignoreCase =
 		token.ignoreCase === true ||
@@ -142,7 +143,7 @@ function compileCompound(options: {
 				if (token.namespace !== null) {
 					throw new UnsupportedSelectorError(selector, 'namespaced type selectors');
 				}
-				tag = token.name.toLowerCase();
+				tag = toAsciiLowerCase(token.name);
 				break;
 			}
 			case SelectorType.Universal: {
@@ -299,7 +300,8 @@ function compileComplex(tokens: readonly Selector[], selector: string): ComplexS
  * Anything needing markup that comes after the element (`+`, `~`,
  * `:last-child`, `:has()`, ...) is rejected rather than approximated.
  *
- * Tag and attribute names are folded to lower case. Attribute values and
+ * Tag and attribute names are folded to lower case, ASCII letters only (as
+ * HTML's own names are compared). Attribute values and
  * class / id tokens are case-sensitive unless the selector carries the
  * `i` flag, except the attributes HTML defines as case-insensitive.
  * @param selector - The selector list as typed by the user.
@@ -312,6 +314,12 @@ export function compileSelector(selector: string): CompiledSelector {
 	const source = selector.trim();
 	if (source === '') {
 		throw new UnsupportedSelectorError(selector, 'the selector is empty');
+	}
+	if (!source.isWellFormed()) {
+		// Stored markup is UTF-8, which has no lone surrogates; crossing to the
+		// native matcher would also turn one into U+FFFD and match a document
+		// whose invalid bytes were read as U+FFFD.
+		throw new UnsupportedSelectorError(selector, 'it contains a lone surrogate');
 	}
 	let parsed: Selector[][];
 	try {

@@ -5,7 +5,7 @@ import { matchHtml } from './test-helpers/match-html.js';
 
 type Case = [selector: string, html: string, expected: boolean];
 
-/** Cases decided by one start tag (the regular expression stage). */
+/** Cases decided by one start tag (the start-tag stage). */
 const COMPOUND_CASES: Case[] = [
 	['img', '<p><img></p>', true],
 	['img', '<p></p>', false],
@@ -212,7 +212,7 @@ describe('htmlMatchesSelector', () => {
 		});
 	});
 
-	describe('the stack stage agrees with the regular expression stage', () => {
+	describe('the stack stage agrees with the start-tag stage', () => {
 		it.each(COMPOUND_CASES)('%s on %s → %s', (selector, html, expected) => {
 			expect(matchHtmlWithTokenizer(selector, html).matched).toBe(expected);
 		});

@@ -7,11 +7,12 @@
  * - **end to end**: `matchSelector` over the whole archive (SQLite read +
  *   zstd decode + matching), with the per-stage counters it returns
  * - **staged vs stack only**: the same selector over an in-memory sample
- *   of decoded snapshots, once through the staged path (regular
- *   expression scan, ordered-literal prefilter, open-element stack) and
- *   once forced onto the open-element stack, so the cost of each stage and
- *   the agreement of the two exact stages are visible. Decoding is
- *   excluded and timed on its own as the baseline.
+ *   of decoded snapshots, once through the staged path (ordered-literal
+ *   prefilter, start-tag read, open-element stack) and once forced onto the
+ *   open-element stack, so the cost of each stage and the agreement of the
+ *   two exact stages are visible. Decoding is excluded and timed on its
+ *   own as the baseline. Each document crosses to the native matcher on
+ *   its own here, so these timings include that call overhead.
  *
  * `--verify N` additionally compares the first N sampled snapshots with
  * jsdom's `querySelector` after **re-parsing** the markup. That is a
@@ -51,13 +52,13 @@
 import process from 'node:process';
 
 import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
+import { matchSelectorHtml } from '@nitpicker/archive/html-snapshot/match-selector-html';
 import { matchSelector } from '@nitpicker/query';
 
 // The stage comparison forces selectors onto the open-element stack, which the
 // public API does not expose, so (like the other bench scripts) this reads the
 // built `lib/` modules directly.
 import { compileSelector } from '../packages/@nitpicker/query/lib/match-selector/compile-selector.js';
-import { htmlMatchesSelector } from '../packages/@nitpicker/query/lib/match-selector/html-matches-selector.js';
 import { planSelectorMatch } from '../packages/@nitpicker/query/lib/match-selector/plan-selector-match.js';
 
 import { countInternalPages } from './bench-lib/count-internal-pages.mjs';
@@ -229,14 +230,16 @@ async function printStageComparison({ accessor, selectors, sample, verify }) {
 		const plan = planSelectorMatch(compileSelector(selector));
 		const stackOnly = {
 			...plan,
-			directRegExp: null,
-			tokenizedAlternatives: plan.allAlternatives,
+			alternatives: plan.alternatives.map((alternative) => ({
+				...alternative,
+				direct: false,
+			})),
 		};
 		const { ms: stagedMs, value: stagedResults } = await measureMs(() =>
-			documents.map((html) => htmlMatchesSelector({ plan, html }).matched),
+			documents.map((html) => matchSelectorHtml({ plan, html }).matched),
 		);
 		const { ms: stackMs, value: stackResults } = await measureMs(() =>
-			documents.map((html) => htmlMatchesSelector({ plan: stackOnly, html }).matched),
+			documents.map((html) => matchSelectorHtml({ plan: stackOnly, html }).matched),
 		);
 		const stagedMatches = stagedResults.filter(Boolean).length;
 		const stackMatches = stackResults.filter(Boolean).length;
@@ -259,7 +262,7 @@ async function printStageComparison({ accessor, selectors, sample, verify }) {
 			let templateDifferences = 0;
 			let otherDifferences = 0;
 			for (const html of documents.slice(0, verify)) {
-				const ours = htmlMatchesSelector({ plan, html }).matched;
+				const ours = matchSelectorHtml({ plan, html }).matched;
 				let reference;
 				try {
 					reference = new JSDOM(html).window.document.querySelector(selector) !== null;

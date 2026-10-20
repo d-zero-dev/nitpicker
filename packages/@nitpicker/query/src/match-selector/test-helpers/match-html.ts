@@ -1,7 +1,8 @@
-import type { HtmlMatchOutcome } from '../types.js';
+import type { HtmlMatchOutcome } from '@nitpicker/archive/html-snapshot/types';
+
+import { matchSelectorHtml } from '@nitpicker/archive/html-snapshot/match-selector-html';
 
 import { compileSelector } from '../compile-selector.js';
-import { htmlMatchesSelector } from '../html-matches-selector.js';
 import { planSelectorMatch } from '../plan-selector-match.js';
 
 /**
@@ -11,7 +12,7 @@ import { planSelectorMatch } from '../plan-selector-match.js';
  * @returns The match outcome.
  */
 export function matchHtml(selector: string, html: string): HtmlMatchOutcome {
-	return htmlMatchesSelector({
+	return matchSelectorHtml({
 		plan: planSelectorMatch(compileSelector(selector)),
 		html,
 	});

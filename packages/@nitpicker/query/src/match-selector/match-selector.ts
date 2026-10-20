@@ -1,11 +1,12 @@
 import type { MatchSelectorOptions, MatchSelectorResult } from '../types.js';
 import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
+import { matchSelectorSnapshots } from '@nitpicker/archive/html-snapshot/match-selector-snapshots';
+
 import { resolvePageUrls } from '../html-snapshot-scan/resolve-page-urls.js';
 import { scanHtmlSnapshots } from '../html-snapshot-scan/scan-html-snapshots.js';
 
 import { compileSelector } from './compile-selector.js';
-import { htmlMatchesSelector } from './html-matches-selector.js';
 import { planSelectorMatch } from './plan-selector-match.js';
 
 /**
@@ -14,9 +15,11 @@ import { planSelectorMatch } from './plan-selector-match.js';
  *
  * Design: the selector is validated first (an unsupported one fails before
  * the archive is touched), then planned for three stages of increasing
- * cost — a regular expression over start tags for single-compound
- * selectors, an ordered-literal prefilter, and an open-element stack for
- * combinators and sibling-position tests. See `htmlMatchesSelector`.
+ * cost — an ordered-literal prefilter, a read of the start tags alone for
+ * single-compound selectors, and an open-element stack for combinators and
+ * sibling-position tests. The stages run natively (`@nitpicker/core`, via
+ * `matchSelectorSnapshots`), which also decompresses each stored snapshot,
+ * in parallel, a batch at a time.
  * The scan is `scanHtmlSnapshots`, shared with `searchHtml` so both search
  * the same pages: it walks the **distinct hashes** of the in-scope pages,
  * so identical HTML is decompressed and judged once however many pages
@@ -57,15 +60,17 @@ export async function matchSelector(
 		await scanHtmlSnapshots({
 			knex,
 			filters: options,
-			matches: ({ html }) => {
-				const outcome = htmlMatchesSelector({ plan, html });
-				if (outcome.prefiltered) {
-					prefiltered++;
+			judgeBatch: async (snapshots) => {
+				const outcomes = await matchSelectorSnapshots({ plan, snapshots });
+				for (const outcome of outcomes) {
+					if (outcome.prefiltered) {
+						prefiltered++;
+					}
+					if (outcome.tokenized) {
+						tokenized++;
+					}
 				}
-				if (outcome.tokenized) {
-					tokenized++;
-				}
-				return outcome.matched;
+				return outcomes.map((outcome) => outcome.matched);
 			},
 			onProgress: options.onProgress,
 		});
