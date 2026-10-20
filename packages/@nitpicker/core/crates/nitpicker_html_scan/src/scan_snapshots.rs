@@ -45,8 +45,8 @@ impl fmt::Display for ScanError {
 
 impl std::error::Error for ScanError {}
 
-/// Judges every snapshot of a batch against a selector plan, in parallel on
-/// rayon's pool, and returns one outcome per snapshot in input order.
+/// Decodes every snapshot of a batch and reads each with `judge`, in parallel
+/// on rayon's pool, returning one result per snapshot in input order.
 ///
 /// Each snapshot is decoded, judged and dropped by the task that took it, so
 /// no more decoded documents are alive than there are threads. A document is
@@ -57,11 +57,12 @@ impl std::error::Error for ScanError {}
 ///
 /// The first snapshot (by position) whose zstd data is corrupt. A snapshot
 /// that cannot be decoded is never judged "no match": the scan has failed.
-pub fn scan_snapshots(
-	plan: &SelectorPlan,
-	snapshots: &[StoredSnapshot],
-) -> Result<Vec<HtmlMatchOutcome>, ScanError> {
-	let outcomes: Vec<Result<HtmlMatchOutcome, ScanError>> = snapshots
+pub fn judge_snapshots<T, F>(snapshots: &[StoredSnapshot], judge: F) -> Result<Vec<T>, ScanError>
+where
+	T: Send,
+	F: Fn(&str) -> T + Sync,
+{
+	let outcomes: Vec<Result<T, ScanError>> = snapshots
 		.par_iter()
 		.enumerate()
 		.map(|(index, snapshot)| {
@@ -76,16 +77,32 @@ pub fn scan_snapshots(
 					})?)
 				}
 			};
-			let text = String::from_utf8_lossy(&decoded);
-			Ok(html_matches_selector(plan, text.as_bytes()))
+			Ok(judge(&String::from_utf8_lossy(&decoded)))
 		})
 		.collect();
 	outcomes.into_iter().collect()
 }
 
+/// Judges every snapshot of a batch against a selector plan, in parallel on
+/// rayon's pool, and returns one outcome per snapshot in input order.
+///
+/// See [`judge_snapshots`] for how a snapshot is decoded.
+///
+/// # Errors
+///
+/// The first snapshot (by position) whose zstd data is corrupt.
+pub fn scan_snapshots(
+	plan: &SelectorPlan,
+	snapshots: &[StoredSnapshot],
+) -> Result<Vec<HtmlMatchOutcome>, ScanError> {
+	judge_snapshots(snapshots, |text| {
+		html_matches_selector(plan, text.as_bytes())
+	})
+}
+
 #[cfg(test)]
 mod tests {
-	use super::{SnapshotCodec, StoredSnapshot, scan_snapshots};
+	use super::{SnapshotCodec, StoredSnapshot, judge_snapshots, scan_snapshots};
 	use crate::selector_plan::{Alternative, Compound, Conditions, SelectorPlan};
 
 	fn plan_for(tag: &str) -> SelectorPlan {
@@ -159,6 +176,43 @@ mod tests {
 			},
 		];
 		let error = scan_snapshots(&plan_for("img"), &snapshots).unwrap_err();
+		assert_eq!(error.index, 1);
+	}
+
+	#[test]
+	fn judge_snapshots_returns_results_in_input_order_whatever_the_thread() {
+		let bodies: Vec<Vec<u8>> = (0..200)
+			.map(|index| format!("document {index}").into_bytes())
+			.collect();
+		let snapshots: Vec<StoredSnapshot> = bodies
+			.iter()
+			.map(|body| StoredSnapshot {
+				body,
+				codec: SnapshotCodec::None,
+			})
+			.collect();
+		let lengths = judge_snapshots(&snapshots, str::len).unwrap();
+		let expected: Vec<usize> = bodies.iter().map(Vec::len).collect();
+		assert_eq!(lengths, expected);
+	}
+
+	#[test]
+	fn judge_snapshots_names_the_first_corrupt_snapshot() {
+		let snapshots = [
+			StoredSnapshot {
+				body: b"fine",
+				codec: SnapshotCodec::None,
+			},
+			StoredSnapshot {
+				body: b"not zstd",
+				codec: SnapshotCodec::Zstd,
+			},
+			StoredSnapshot {
+				body: b"also not zstd",
+				codec: SnapshotCodec::Zstd,
+			},
+		];
+		let error = judge_snapshots(&snapshots, str::len).unwrap_err();
 		assert_eq!(error.index, 1);
 	}
 

@@ -13,10 +13,11 @@ use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use nitpicker_html_scan::{
 	Alternative, AttributeOperator, AttributeTest, Combinator, Compound, Conditions,
-	HtmlMatchOutcome, NthTest, SelectorPlan, SnapshotCodec, StoredSnapshot,
+	HtmlMatchOutcome, NthTest, SelectorPlan, StoredSnapshot,
 };
 
 use crate::slice_by_offsets::slice_by_offsets;
+use crate::snapshot_codecs::to_snapshot_codecs;
 
 /// One attribute condition of a selector.
 #[napi(object)]
@@ -258,6 +259,10 @@ pub fn match_selector_html(plan: SelectorPlanInput, html: &[u8]) -> Result<HtmlM
 /// snapshot, in order: bit 0 matched, bit 1 rejected by the prefilter alone,
 /// bit 2 judged on the open-element stack.
 ///
+/// The work runs on another thread after this call returns, and reads
+/// `bodies` in place: the caller must not write to that buffer until the
+/// promise settles (the JS wrapper packs a fresh one for every call).
+///
 /// # Errors
 ///
 /// `InvalidArg` when the plan, the offsets or a codec is malformed. The
@@ -267,30 +272,20 @@ pub fn match_selector_html(plan: SelectorPlanInput, html: &[u8]) -> Result<HtmlM
 pub fn match_selector_snapshots<'env>(
 	env: &'env Env,
 	plan: SelectorPlanInput,
-	bodies: &[u8],
+	bodies: Uint8Array,
 	offsets: &[u32],
 	codecs: &[u8],
 ) -> Result<Object<'env>> {
 	let plan = to_plan(plan)?;
-	let codecs: Vec<SnapshotCodec> = codecs
-		.iter()
-		.map(|&codec| match codec {
-			0 => Ok(SnapshotCodec::None),
-			1 => Ok(SnapshotCodec::Zstd),
-			other => Err(invalid(format!("unknown snapshot codec: {other}"))),
-		})
-		.collect::<Result<_>>()?;
-	let cut = slice_by_offsets(bodies, offsets)?;
+	let codecs = to_snapshot_codecs(codecs)?;
+	let cut = slice_by_offsets(&bodies, offsets)?;
 	if cut.len() != codecs.len() {
 		return Err(invalid("every snapshot needs exactly one codec".to_owned()));
 	}
-	// The batch outlives this call (the work runs on another thread), so it
-	// is copied out of the JS buffer, once; each snapshot is a range of the copy.
 	let ranges: Vec<std::ops::Range<usize>> = offsets
 		.windows(2)
 		.map(|pair| pair[0] as usize..pair[1] as usize)
 		.collect();
-	let owned_bodies = bodies.to_vec();
 
 	let (deferred, promise) = env.create_deferred()?;
 	rayon::spawn(move || {
@@ -299,7 +294,7 @@ pub fn match_selector_snapshots<'env>(
 				.into_iter()
 				.zip(&codecs)
 				.map(|(range, &codec)| StoredSnapshot {
-					body: &owned_bodies[range],
+					body: &bodies[range],
 					codec,
 				})
 				.collect();

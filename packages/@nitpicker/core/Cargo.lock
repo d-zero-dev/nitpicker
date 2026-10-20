@@ -633,6 +633,7 @@ dependencies = [
  "nitpicker_union_find",
  "nitpicker_url_key",
  "rayon",
+ "regex",
  "rustc-hash",
 ]
 

@@ -60,6 +60,18 @@
 			"import": "./lib/match-structural-technology-signals.js",
 			"types": "./lib/match-structural-technology-signals.d.ts"
 		},
+		"./search-html-document": {
+			"import": "./lib/search-html-document.js",
+			"types": "./lib/search-html-document.d.ts"
+		},
+		"./search-html-snapshots": {
+			"import": "./lib/search-html-snapshots.js",
+			"types": "./lib/search-html-snapshots.d.ts"
+		},
+		"./validate-search-pattern": {
+			"import": "./lib/validate-search-pattern.js",
+			"types": "./lib/validate-search-pattern.d.ts"
+		},
 		"./template-exact-page-limit": {
 			"import": "./lib/template-exact-page-limit.js",
 			"types": "./lib/template-exact-page-limit.d.ts"

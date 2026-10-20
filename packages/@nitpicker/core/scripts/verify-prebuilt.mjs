@@ -2,8 +2,8 @@
 // it against the body-hash and technology-signal golden fixtures and one
 // license banner, then runs one small template
 // classification to its known keys, one URL ranking, one pair of alias keys,
-// one alias grouping, one isolated-components run and one match-selector batch
-// over a zstd-compressed snapshot — a smoke check that
+// one alias grouping, one isolated-components run, one match-selector batch
+// and one search-html batch over a zstd-compressed snapshot — a smoke check that
 // the exports work in this build, not a substitute for the template golden
 // records, the URL order tests or the alias parity tests.
 // CI runs this on every prebuilt binary — on the platform it targets —
@@ -276,3 +276,60 @@ if (!single.matched || !single.tokenized || single.elementsVisited !== 2) {
 	process.exit(1);
 }
 console.log(`Match-selector smoke check passed for ${addonPath}`);
+
+// The same two snapshots searched for `img` (literal) and `/<A\s/i` (regular
+// expression): the regex engine and the zstd decoder are linked into this
+// build, and the contract's edges answer — a pattern the engine cannot run is
+// refused with `InvalidArg`.
+const literalImg = {
+	source: 'img',
+	literal: true,
+	ignoreCase: false,
+	multiLine: false,
+	dotAll: false,
+};
+const anchorStart = {
+	source: String.raw`<A\s`,
+	literal: false,
+	ignoreCase: true,
+	multiLine: false,
+	dotAll: false,
+};
+const imgSearch = await binding.searchHtmlSnapshots(
+	literalImg,
+	20,
+	snapshotBodies,
+	snapshotOffsets,
+	snapshotCodecs,
+);
+const anchorSearch = await binding.searchHtmlSnapshots(
+	anchorStart,
+	20,
+	snapshotBodies,
+	snapshotOffsets,
+	snapshotCodecs,
+);
+const searched = `${imgSearch.matchCounts} ${anchorSearch.matchCounts}`;
+if (
+	searched !== '1,0 0,1' ||
+	imgSearch.snippets[0] !== '<p><img alt=""></p>' ||
+	anchorSearch.snippets[1] !== '<nav><a href="/">x</'
+) {
+	console.error(
+		`MISMATCH search-html snapshots: expected counts "1,0 0,1", got "${searched}" ${JSON.stringify([imgSearch.snippets, anchorSearch.snippets])}`,
+	);
+	process.exit(1);
+}
+let lookaroundRefused = false;
+try {
+	binding.validateSearchPattern({ ...anchorStart, source: '(?=a)a' });
+} catch (error) {
+	lookaroundRefused = error.code === 'InvalidArg';
+}
+if (!lookaroundRefused || binding.validateSearchPattern(anchorStart)) {
+	console.error(
+		'MISMATCH search-html pattern: look-around must be refused with InvalidArg',
+	);
+	process.exit(1);
+}
+console.log(`Search-html smoke check passed for ${addonPath}`);

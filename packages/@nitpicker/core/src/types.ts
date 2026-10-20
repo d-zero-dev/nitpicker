@@ -20,6 +20,22 @@ export interface NativeBinding {
 		offsets: Uint32Array,
 		codecs: Uint8Array,
 	): Promise<Uint8Array>;
+	/** See `validate-search-pattern.ts`. */
+	validateSearchPattern(pattern: NativeSearchPattern): boolean;
+	/** See `search-html-document.ts`. */
+	searchHtmlDocument(
+		pattern: NativeSearchPattern,
+		html: Uint8Array,
+		snippetLength: number,
+	): SnapshotSearchOutcome;
+	/** See `search-html-snapshots.ts`. */
+	searchHtmlSnapshots(
+		pattern: NativeSearchPattern,
+		snippetLength: number,
+		bodies: Uint8Array,
+		offsets: Uint32Array,
+		codecs: Uint8Array,
+	): Promise<{ matchCounts: number[]; snippets: string[] }>;
 	/** See `compute-url-sort-ranks.ts`. */
 	computeUrlSortRanks(urls: Uint8Array, offsets: Uint32Array): Uint32Array;
 	/** See `compute-alias-keys.ts`. */
@@ -154,6 +170,31 @@ export interface StoredHtmlSnapshot {
 	readonly body: Uint8Array;
 	/** `page_html_blobs.codec`: `zstd` or `none`; anything else is rejected. */
 	readonly codec: string;
+}
+
+/**
+ * What `query search-html` looks for: a literal substring or a regular
+ * expression (Rust `regex` syntax) with its flags.
+ */
+export interface NativeSearchPattern {
+	/** The literal text, or the regular expression's source. */
+	readonly source: string;
+	/** Match `source` as plain text; the flags are then ignored. */
+	readonly literal: boolean;
+	/** `i`. */
+	readonly ignoreCase: boolean;
+	/** `m`: `^` and `$` match at every `\n`. */
+	readonly multiLine: boolean;
+	/** `s`: `.` matches `\n` too. */
+	readonly dotAll: boolean;
+}
+
+/** What a search found in one document. */
+export interface SnapshotSearchOutcome {
+	/** Non-overlapping matches; 0 when the document does not match. */
+	readonly matchCount: number;
+	/** Whitespace-collapsed window around the first match; empty when there is none. */
+	readonly snippet: string;
 }
 
 /** The verdict on one snapshot of a batch. */
