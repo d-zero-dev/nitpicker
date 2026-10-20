@@ -257,11 +257,11 @@ npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'table:not([
 
 **対応するセレクタ**: 複合セレクタ（`*` / タグ / `.class` / `#id` / `[attr]` `[attr=v]` `[attr~=v]` `[attr|=v]` `[attr^=v]` `[attr$=v]` `[attr*=v]`、`i` / `s` フラグ付き）、子孫結合子（`a b`）、子結合子（`a > b`）、`:first-child` `:nth-child(An+B)` `:first-of-type` `:nth-of-type(An+B)`、`:not(複合セレクタ)`、カンマ区切りリスト。
 
-**対応しないセレクタ**: 要素より後ろのマークアップが分からないと判定できないもの（`+` `~` 結合子、`:last-child` `:only-child` `:nth-last-*` `:has()`）、`:is()` `:where()`、`:root` `:empty` などの状態系疑似クラス、疑似要素、名前空間、`:nth-child()` の `of S`、`:not()` に渡すリスト・結合子・入れ子の `:not()`。これらは近似せず、対応文法の一覧つきのエラー（exit code 1）で拒否します。
+**対応しないセレクタ**: 要素より後ろのマークアップが分からないと判定できないもの（`+` `~` 結合子、`:last-child` `:only-child` `:nth-last-*` `:has()`）、`:is()` `:where()`、`:root` `:empty` などの状態系疑似クラス、疑似要素、名前空間、`:nth-child()` の `of S`、`:not()` に渡すリスト・結合子・入れ子の `:not()`。これらは近似せず、対応文法の一覧つきのエラー（exit code 1）で拒否します。保存HTMLはUTF-8でペアにならないサロゲートを持てないため、そのような文字を含むセレクタ（コピー&ペーストで途切れた絵文字など）も同じエラーで拒否します。
 
 結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ。`--url-pattern` / `--directory` の絞り込みも同じ意味）で、絞り込むと `candidatePages` / `scannedSnapshots` / `total` は絞り込み後のページだけを数えます。絞り込みなしで `candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。stderrに進捗が出ます。
 
-`prefilteredSnapshots` と `tokenizedSnapshots` は判定の経路を示します。どのセレクタも、まず必要なリテラルが順に現れるかを `indexOf` で確認し、現れない文書はマークアップを一度も走査せずに却下します（`prefilteredSnapshots`）。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav` など）は正規表現1本で判定します。結合子・`:nth-*`・`<` `>` を含む属性値のセレクタと、`<template` を含む文書は開タグスタックで評価し、`tokenizedSnapshots` に数えます。
+`prefilteredSnapshots` と `tokenizedSnapshots` は判定の経路を示します。必要なリテラル（id・クラス・属性値・`<タグ名`・属性名のうち、1つの複合セレクタにつき1つ）を導出できるセレクタは、まずそれらが順に現れるかを確認し、現れない文書はマークアップを一度も読まずに却下します（`prefilteredSnapshots`）。リテラルを導出できないセレクタ（`:not(.zz) > :not(.yy)` のように `:not()` だけで作ったものなど）はこの確認を通りません。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav` など）は、開始タグを順に読んで判定します。結合子・`:nth-*`・`<` `>` を含む属性値のセレクタと、`<template` を含む文書は開タグスタックで評価し、`tokenizedSnapshots` に数えます。判定は各スナップショットの展開から並列に行います。
 
 MCPツール `match_selector` も同じ関数を呼び、同じ結果を返します（`selector` / `url-pattern` / `directory` / `limit` / `offset` に相当する引数を取ります）。非対応のセレクタは対応文法の一覧つきのエラー（`isError`）で拒否されます。
 
@@ -269,9 +269,9 @@ MCPツール `match_selector` も同じ関数を呼び、同じ結果を返し�
 
 1. `<!--` から最初の `-->` まで、`<![CDATA[` から最初の `]]>` まで、`<!` から最初の `>` まではタグではない
 2. `script` `style` `xmp` `iframe` `noembed` `noframes` `plaintext` `noscript` は、開始タグだけを要素として判定し、`</名前` に続く空白・`/`・`>` までの内容はタグではない（終了タグが無ければ文書末尾まで。`plaintext` は常に末尾まで）。名前だけで判定し、`svg` 内などの名前空間は見ない。`noscript` はスクリプト有効で直列化されるため、中身はテキストとして扱う
-3. それ以外の開始タグ・終了タグを対応づけて木を作る。HTML5の暗黙閉じ規則は適用しない（`<p><div></div></p>` は `p > div` に一致する）。void要素と `/>` は子を持たない。スタック先頭と名前が違う終了タグは無視し、閉じられていない要素は書かれたとおり開いたままにする（`<div><b></div><p>` では `p` は `b` の子になる）。引用符つき属性値の中の `<` はタグの始まりではない
+3. それ以外の開始タグ・終了タグを対応づけて木を作る。HTML5の暗黙閉じ規則は適用しない（`<p><div></div></p>` は `p > div` に一致する）。void要素と `/>` は子を持たない。スタック先頭と名前が違う終了タグは無視し、閉じられていない要素は書かれたとおり開いたままにする（`<div><b></div><p>` では `p` は `b` の子になる）。開始タグの属性はHTMLのトークナイザと同じ規則で読み（名前は空白・`/`・`>`・`=` まで、値は二重引用符・単一引用符、または引用符なしで空白・`>` まで）、引用符つき属性値の中の `<` `>` はタグの始まり・終わりではない。属性名に `"` を含んでもよい（ソースの引用符が欠けたページは、ブラウザがそう直列化する）。`>` で閉じられない開始タグはタグではなくテキストとして扱う
 4. `<template>` の子孫は探索しない（`querySelectorAll` が到達しないため）。`template` 要素自身は判定対象
-5. 属性値は `&amp;` `&lt;` `&gt;` `&quot;` `&nbsp;` だけを復号する。タグ名と属性名は大文字小文字を区別しない（DOMはHTML要素だけを区別しない扱いにするので、SVGの `linearGradient` は `lineargradient` でも一致する。DOMより広く一致する側に倒している）。属性値は `i` フラグがなければ区別するが、HTMLが区別しないと定める属性（`type` `rel` `lang` `target` `method` など）は `s` フラグがない限り区別しない。`~=` の区切りはASCII空白のみ。この規則は直列化出力の形（属性値は二重引用符、重複属性なし、`<br>` のように閉じる `/` を属性に書かない）を前提にし、それ以外の形では正規表現とスタックの結果が食い違いうる
+5. 属性値は `&amp;` `&lt;` `&gt;` `&quot;` `&nbsp;` だけを復号する。タグ名と属性名は大文字小文字を区別しない（DOMはHTML要素だけを区別しない扱いにするので、SVGの `linearGradient` は `lineargradient` でも一致する。DOMより広く一致する側に倒している）。属性値は `i` フラグがなければ区別するが、HTMLが区別しないと定める属性（`type` `rel` `lang` `target` `method` など）は `s` フラグがない限り区別しない。`~=` の区切りはASCII空白のみ。属性名が重複しているときは最初のものを使う（HTMLパーサと同じ）。タグ名・属性名・`i` フラグでの値の比較は、どれもASCIIの大文字小文字だけを無視する（`K`（ケルビン記号 U+212A）は `k` に一致しない）。直列化出力でないHTMLは対象外で、不正なUTF-8は U+FFFD として読む
 
 ### `images`
 
