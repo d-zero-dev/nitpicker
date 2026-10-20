@@ -2,7 +2,8 @@
 // it against the body-hash and technology-signal golden fixtures and one
 // license banner, then runs one small template
 // classification to its known keys, one URL ranking, one pair of alias keys,
-// one alias grouping and one isolated-components run — a smoke check that
+// one alias grouping, one isolated-components run and one match-selector batch
+// over a zstd-compressed snapshot — a smoke check that
 // the exports work in this build, not a substitute for the template golden
 // records, the URL order tests or the alias parity tests.
 // CI runs this on every prebuilt binary — on the platform it targets —
@@ -192,3 +193,86 @@ if (components !== '0 0 0') {
 	process.exit(1);
 }
 console.log(`Isolated components smoke check passed for ${addonPath}`);
+
+// A zstd-compressed snapshot and a plain one, judged against `img[alt]` (one
+// start tag decides) and `nav > a` (the open-element stack): the zstd decoder
+// is linked into this build, and both stages answer. Bit 0 matched, bit 1
+// prefiltered, bit 2 judged on the stack.
+const imgAlt = {
+	alternatives: [
+		{
+			compounds: [
+				{
+					tag: 'img',
+					attributes: [{ name: 'alt', operator: 'exists', value: '', ignoreCase: false }],
+					nth: [],
+					negations: [],
+				},
+			],
+			combinators: [],
+			prefilterLiterals: ['<img'],
+			direct: true,
+		},
+	],
+	needsChildIndex: false,
+	needsTypeIndex: false,
+};
+const navChild = {
+	alternatives: [
+		{
+			compounds: [
+				{ tag: 'nav', attributes: [], nth: [], negations: [] },
+				{ tag: 'a', attributes: [], nth: [], negations: [] },
+			],
+			combinators: ['child'],
+			prefilterLiterals: ['<nav', '<a'],
+			direct: false,
+		},
+	],
+	needsChildIndex: false,
+	needsTypeIndex: false,
+};
+// `<p><img alt=""></p>` as zstd (`zlib.zstdCompressSync`); kept as bytes so this
+// script needs no compressor.
+const zstdSnapshot = Buffer.from(
+	'28b52ffd20139900003c703e3c696d6720616c743d22223e3c2f703e',
+	'hex',
+);
+const plainSnapshot = Buffer.from('<nav><a href="/">x</a></nav>');
+const snapshotBodies = Buffer.concat([zstdSnapshot, plainSnapshot]);
+const snapshotOffsets = Uint32Array.of(
+	0,
+	zstdSnapshot.length,
+	zstdSnapshot.length + plainSnapshot.length,
+);
+const snapshotCodecs = Uint8Array.of(1, 0);
+const imgVerdicts = [
+	...(await binding.matchSelectorSnapshots(
+		imgAlt,
+		snapshotBodies,
+		snapshotOffsets,
+		snapshotCodecs,
+	)),
+].join(' ');
+const navVerdicts = [
+	...(await binding.matchSelectorSnapshots(
+		navChild,
+		snapshotBodies,
+		snapshotOffsets,
+		snapshotCodecs,
+	)),
+].join(' ');
+// img[alt]: the zstd snapshot matches (1), the plain one lacks `<img` (prefiltered, 2).
+// nav > a: the zstd one lacks `<nav` (prefiltered, 2), the plain one matches on the stack (1 | 4).
+if (imgVerdicts !== '1 2' || navVerdicts !== '2 5') {
+	console.error(
+		`MISMATCH match-selector snapshots: expected "1 2" and "2 5", got "${imgVerdicts}" and "${navVerdicts}"`,
+	);
+	process.exit(1);
+}
+const single = binding.matchSelectorHtml(navChild, Buffer.from('<nav><a>x</a></nav>'));
+if (!single.matched || !single.tokenized || single.elementsVisited !== 2) {
+	console.error(`MISMATCH match-selector html: got ${JSON.stringify(single)}`);
+	process.exit(1);
+}
+console.log(`Match-selector smoke check passed for ${addonPath}`);

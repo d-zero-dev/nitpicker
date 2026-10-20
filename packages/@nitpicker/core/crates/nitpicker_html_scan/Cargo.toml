@@ -7,8 +7,11 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+memchr = { workspace = true }
+rayon = { workspace = true }
 regex = { workspace = true }
 sha2 = { workspace = true }
+zstd = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -12,6 +12,8 @@
 #[cfg_attr(test, allow(dead_code))]
 mod alias;
 mod isolated_cluster;
+#[cfg_attr(test, allow(dead_code))]
+mod match_selector;
 mod slice_by_offsets;
 #[cfg_attr(test, allow(dead_code))]
 mod tech_detect;
