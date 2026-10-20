@@ -626,6 +626,45 @@ describe('createServer', () => {
 		expect(missing.content[0]!.text).toContain('Missing required argument: pattern');
 	});
 
+	it('search_html の description と pattern は正規表現の契約（Rust regex 構文・対応 flags）を示す', () => {
+		const searchHtml = toolDefinitions.find((tool) => tool.name === 'search_html');
+		expect(searchHtml?.description).toContain('Rust `regex` syntax');
+		expect(searchHtml?.description).toContain('no backreferences or look-around');
+		expect(searchHtml?.description).toContain('Unicode scalar value');
+		expect(searchHtml?.description).toContain('`d` `v` `y` are rejected');
+		const pattern = (
+			searchHtml?.inputSchema.properties as Record<string, { description: string }>
+		).pattern;
+		expect(pattern?.description).toContain('Rust regex syntax');
+	});
+
+	it('search_html は literal を渡すと /…/flags 形のテキストをそのまま探す', async () => {
+		const searchHtml = toolDefinitions.find((tool) => tool.name === 'search_html');
+		expect(Object.keys(searchHtml?.inputSchema.properties as object)).toContain(
+			'literal',
+		);
+		const asRegex = await callTool(server, 'search_html', {
+			archiveId,
+			pattern: '/<h1>about<.h1>/i',
+		});
+		expect(JSON.parse(asRegex.content[0]!.text).total).toBe(1);
+		const asText = await callTool(server, 'search_html', {
+			archiveId,
+			pattern: '/<h1>about<.h1>/i',
+			literal: true,
+		});
+		expect(JSON.parse(asText.content[0]!.text).total).toBe(0);
+	});
+
+	it('search_html は未対応の構文（後読み）を isError でクライアントに返す', async () => {
+		const result = await callTool(server, 'search_html', {
+			archiveId,
+			pattern: '/(?<=a)b/',
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]!.text).toMatch(/look-around/);
+	});
+
 	it('match_selector はセレクタに一致する要素を持つページを返し、selector 必須', async () => {
 		const result = await callTool(server, 'match_selector', {
 			archiveId,

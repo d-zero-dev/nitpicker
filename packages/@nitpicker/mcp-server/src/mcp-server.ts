@@ -467,6 +467,7 @@ export function createServer() {
 						return jsonResult(
 							await searchHtml(accessor, {
 								pattern: requireString(args, 'pattern'),
+								literal: optionalBoolean(args, 'literal'),
 								urlPattern: optionalString(args, 'urlPattern'),
 								directory: optionalString(args, 'directory'),
 								snippetLength: optionalNumber(args, 'snippetLength'),
