@@ -116,6 +116,18 @@
 			"import": "./lib/filesystem/copy-file-with-progress.js",
 			"types": "./lib/filesystem/copy-file-with-progress.d.ts"
 		},
+		"./html-snapshot/match-selector-html": {
+			"import": "./lib/html-snapshot/match-selector-html.js",
+			"types": "./lib/html-snapshot/match-selector-html.d.ts"
+		},
+		"./html-snapshot/match-selector-snapshots": {
+			"import": "./lib/html-snapshot/match-selector-snapshots.js",
+			"types": "./lib/html-snapshot/match-selector-snapshots.d.ts"
+		},
+		"./html-snapshot/types": {
+			"import": "./lib/html-snapshot/types.js",
+			"types": "./lib/html-snapshot/types.d.ts"
+		},
 		"./is-within-outage-window": {
 			"import": "./lib/is-within-outage-window.js",
 			"types": "./lib/is-within-outage-window.d.ts"

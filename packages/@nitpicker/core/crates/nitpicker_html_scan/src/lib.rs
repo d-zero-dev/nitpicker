@@ -16,16 +16,48 @@
 //! `mask_dynamic_ids` are the same stages one at a time: nothing in the
 //! addon calls them, and they stay public as the reference the fused pass
 //! is checked against.
+//!
+//! `scan_snapshots` and `html_matches_selector` answer `query match-selector`:
+//! whether a stored document has an element matching a CSS selector list,
+//! judged on the serialized markup by the interpretation rules in
+//! `docs/query.md` (not by an HTML parser — see `tag_tokenizer`). Unlike the
+//! body hash nothing here is persisted, so there is no golden: that contract
+//! is the answer, and what the matcher is checked against is the DOM the
+//! markup was serialized from (`@nitpicker/query`'s oracle spec). Case folding
+//! is ASCII-only throughout, as HTML's tag and attribute names are.
 
 #![forbid(unsafe_code)]
 
+mod ascii;
 mod compute_body_hash;
+mod decode_serialized_attribute_value;
+mod element;
 mod extract_body;
 mod hash_normalized_masked;
+mod html_matches_selector;
 mod mask_dynamic_ids;
+mod matches_attribute_test;
+mod matches_compound;
+mod matches_nth;
 mod normalize_url_like_strings;
+mod passes_ordered_prefilter;
+mod run_direct_match;
+mod run_selector_state_machine;
+mod scan_snapshots;
+mod selector_plan;
+mod start_tag_attributes;
+mod tag_tokenizer;
 
 pub use compute_body_hash::compute_body_hash;
+pub use decode_serialized_attribute_value::decode_serialized_attribute_value;
 pub use extract_body::extract_body;
+pub use html_matches_selector::{HtmlMatchOutcome, html_matches_selector};
 pub use mask_dynamic_ids::mask_dynamic_ids;
+pub use matches_nth::matches_nth;
 pub use normalize_url_like_strings::normalize_url_like_strings;
+pub use passes_ordered_prefilter::passes_ordered_prefilter;
+pub use scan_snapshots::{ScanError, SnapshotCodec, StoredSnapshot, scan_snapshots};
+pub use selector_plan::{
+	Alternative, AttributeOperator, AttributeTest, Combinator, Compound, Conditions, NthTest,
+	SelectorPlan,
+};

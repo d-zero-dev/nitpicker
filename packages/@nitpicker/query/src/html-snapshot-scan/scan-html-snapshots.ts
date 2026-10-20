@@ -3,14 +3,25 @@ import type {
 	MatchedSnapshotPage,
 	ScanHtmlSnapshotsParams,
 	ScanHtmlSnapshotsResult,
+	StoredSnapshotBlob,
 } from './types.js';
+import type { Knex } from 'knex';
 
 import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
 
 import { SQLITE_IN_CHUNK } from '../sqlite-in-chunk.js';
 
 import { createHtmlSnapshotCandidateQuery } from './create-html-snapshot-candidate-query.js';
+import { estimateDecodedBytes } from './estimate-decoded-bytes.js';
+import { SCAN_BATCH_BYTES } from './scan-batch-bytes.js';
 import { SCAN_CHUNK } from './scan-chunk.js';
+
+/** A `page_html_blobs` row of a walked hash. */
+interface BlobRow {
+	readonly hash: Buffer;
+	readonly body: Uint8Array;
+	readonly codec: string;
+}
 
 /**
  * Normalises a hash BLOB to a `Buffer`. libsql returns BLOB columns as
@@ -25,6 +36,128 @@ function toBuffer(hash: Uint8Array | ArrayBuffer): Buffer {
 }
 
 /**
+ * Splits rows into consecutive batches, closing a batch once the estimated
+ * decoded size of its snapshots reaches `SCAN_BATCH_BYTES` (a snapshot that
+ * alone exceeds it gets a batch of its own).
+ * @param rows - The rows to split, in order.
+ * @returns The batches, in order.
+ */
+function splitIntoBatches(rows: readonly BlobRow[]): BlobRow[][] {
+	const batches: BlobRow[][] = [];
+	let current: BlobRow[] = [];
+	let bytes = 0;
+	for (const row of rows) {
+		current.push(row);
+		bytes += estimateDecodedBytes(row);
+		if (bytes >= SCAN_BATCH_BYTES) {
+			batches.push(current);
+			current = [];
+			bytes = 0;
+		}
+	}
+	if (current.length > 0) {
+		batches.push(current);
+	}
+	return batches;
+}
+
+/**
+ * Reads the blob rows of a chunk of hashes, in whatever order the database
+ * returns them (each row carries its own hash).
+ * @param knex - The archive's connection.
+ * @param hashes - The hashes to read.
+ * @returns The rows of those hashes.
+ */
+async function readBlobRows(knex: Knex, hashes: readonly Buffer[]): Promise<BlobRow[]> {
+	const rows = (await knex('page_html_blobs')
+		.whereIn('hash', hashes as Buffer[])
+		.select('hash', 'body', 'codec')) as {
+		hash: Uint8Array;
+		body: Uint8Array;
+		codec: string;
+	}[];
+	return rows.map((row) => ({
+		hash: toBuffer(row.hash),
+		// An `ArrayBuffer` from the driver, or a view of the right bytes: `Buffer.from`
+		// shares the memory either way.
+		body: toBuffer(row.body),
+		codec: row.codec,
+	}));
+}
+
+/**
+ * Adds the hash of the snapshot a judge could not decode to its error, so a
+ * corrupt blob can be traced to its row: the judge reports the position in the
+ * batch (`snapshot <n> could not be decoded`), which means nothing outside it.
+ * @param error - What the judge rejected with.
+ * @param batch - The rows the judge was given, in order.
+ * @returns The error, naming the snapshot's hash when the judge named a position.
+ */
+function nameFailedSnapshot(error: unknown, batch: readonly BlobRow[]): unknown {
+	if (!(error instanceof Error)) {
+		return error;
+	}
+	const position = /snapshot (\d+) could not be decoded/.exec(error.message)?.[1];
+	const row = position === undefined ? undefined : batch[Number(position)];
+	if (row === undefined) {
+		return error;
+	}
+	return new Error(
+		`${error.message} (page_html_blobs hash ${row.hash.toString('hex')})`,
+		{
+			cause: error,
+		},
+	);
+}
+
+/**
+ * The hashes of the rows the scan's judge marks as matching.
+ * @param params - The scan's parameters, which hold the judge.
+ * @param rows - The blob rows of one chunk.
+ * @returns The matching rows' hashes, in row order.
+ */
+async function findMatchedHashes(
+	params: ScanHtmlSnapshotsParams,
+	rows: readonly BlobRow[],
+): Promise<Buffer[]> {
+	const matched: Buffer[] = [];
+	if (params.matches) {
+		for (const row of rows) {
+			const { hash } = row;
+			const snapshot: HtmlSnapshot = {
+				// Lazy: most judges never read the key, and this runs once per snapshot.
+				get hash() {
+					return hash.toString('hex');
+				},
+				html: decodeStoredBlob(row.body, row.codec),
+			};
+			if (params.matches(snapshot)) {
+				matched.push(hash);
+			}
+		}
+		return matched;
+	}
+	for (const batch of splitIntoBatches(rows)) {
+		const verdicts = await params
+			.judgeBatch(batch.map(({ body, codec }): StoredSnapshotBlob => ({ body, codec })))
+			.catch((error: unknown) => {
+				throw nameFailedSnapshot(error, batch);
+			});
+		if (verdicts.length !== batch.length) {
+			throw new Error(
+				`The snapshot judge returned ${verdicts.length} verdicts for ${batch.length} snapshots.`,
+			);
+		}
+		for (const [index, row] of batch.entries()) {
+			if (verdicts[index]) {
+				matched.push(row.hash);
+			}
+		}
+	}
+	return matched;
+}
+
+/**
  * Judges every distinct stored HTML snapshot of the searchable pages and
  * expands the matching snapshots to their pages. The shared scan behind
  * `searchHtml` and `matchSelector`.
@@ -32,13 +165,27 @@ function toBuffer(hash: Uint8Array | ArrayBuffer): Buffer {
  * Design: there is no FTS index and snapshots are zstd BLOBs, so this is a
  * linear scan. `page_html_blobs` is content-addressable (identical HTML is
  * stored once), so the scan walks the **distinct hashes** of the candidate
- * pages (`createHtmlSnapshotCandidateQuery`) in `SCAN_CHUNK`-row keyset
- * chunks and decompresses each snapshot once however many pages share it;
- * snapshots no candidate page references are never read. Only the matched
- * hashes are retained, and page ids are resolved afterwards in
- * `SQLITE_IN_CHUNK` batches. Pages without a stored snapshot cannot match —
- * compare `candidatePages` with the archive's page total to tell "no match"
- * from "nothing was scanned".
+ * pages (`createHtmlSnapshotCandidateQuery`), listed once in hash order, and
+ * reads their blobs `SCAN_CHUNK` at a time. The list is held whole (32 bytes
+ * a snapshot) rather than walked by keyset: that re-ran the candidate join,
+ * `DISTINCT` and `ORDER BY` for every chunk, which cost more than the list.
+ * Each chunk's rows are read in full before they are split into batches, as
+ * the blobs of a chunk always were, so each snapshot is judged once
+ * however many pages share it; snapshots no candidate page references are
+ * never read. Only the matched hashes are retained, and page ids are
+ * resolved afterwards in `SQLITE_IN_CHUNK` batches. Pages without a stored
+ * snapshot cannot match — compare `candidatePages` with the archive's page
+ * total to tell "no match" from "nothing was scanned".
+ *
+ * The judge is either `matches`, which sees one decompressed snapshot at a
+ * time, or `judgeBatch`, which sees the stored (still encoded) snapshots of
+ * a chunk in batches whose estimated decoded size is bounded by
+ * `SCAN_BATCH_BYTES`, so a native judge can decompress and judge them in
+ * parallel without this scan holding the decoded documents; the next chunk is
+ * read while a batch judge works on the current one (reading is most of the
+ * time), at the price of one more chunk's stored bytes held. A blob row is
+ * paired with the hash it came back with: `whereIn` does not return rows in
+ * the order the hashes were asked for.
  * @param params - The archive, page filters, snapshot judge and progress callback.
  * @returns Matched pages in page-id order plus scan totals.
  * @example
@@ -47,17 +194,25 @@ function toBuffer(hash: Uint8Array | ArrayBuffer): Buffer {
  *   matches: ({ html }) => html.includes('fonts.example.org'),
  *   onProgress: (message) => console.error(message),
  * });
+ *
+ * // A judge that takes stored snapshots in batches (decoding is its job):
+ * const { matchedPages } = await scanHtmlSnapshots({
+ *   knex: accessor.getKnex(),
+ *   judgeBatch: async (batch) => (await matchSelectorSnapshots({ plan, snapshots: batch })).map((v) => v.matched),
+ * });
  */
 export async function scanHtmlSnapshots(
 	params: ScanHtmlSnapshotsParams,
 ): Promise<ScanHtmlSnapshotsResult> {
-	const { knex, filters, matches, onProgress } = params;
+	const { knex, filters, onProgress } = params;
 	const candidates = () => createHtmlSnapshotCandidateQuery(knex, filters);
 
-	const [hashTotalRow] = await candidates().countDistinct<{ count: number | string }[]>({
-		count: 'phr.hash',
-	});
-	const hashTotal = Number(hashTotalRow?.count ?? 0);
+	const walkedHashes = (
+		(await candidates().distinct('phr.hash as hash').orderBy('phr.hash')) as {
+			hash: Uint8Array;
+		}[]
+	).map((row) => toBuffer(row.hash));
+	const hashTotal = walkedHashes.length;
 	const [pageTotalRow] = await candidates().countDistinct<{ count: number | string }[]>({
 		count: 'ci.id',
 	});
@@ -65,44 +220,35 @@ export async function scanHtmlSnapshots(
 
 	const matchedHashes: Buffer[] = [];
 	let scanned = 0;
-	let lastHash: Buffer | null = null;
-	for (;;) {
-		const chunkQuery = candidates()
-			.distinct('phr.hash as hash')
-			.orderBy('phr.hash')
-			.limit(SCAN_CHUNK);
-		if (lastHash) {
-			chunkQuery.where('phr.hash', '>', lastHash);
-		}
-		const hashes = ((await chunkQuery) as { hash: Uint8Array }[]).map((row) =>
-			toBuffer(row.hash),
-		);
-		if (hashes.length === 0) {
-			break;
-		}
-		const blobs = (await knex('page_html_blobs')
-			.whereIn('hash', hashes)
-			.select('hash', 'body', 'codec')) as {
-			hash: Uint8Array;
-			body: Uint8Array;
-			codec: string;
-		}[];
-		for (const blob of blobs) {
-			const hash = toBuffer(blob.hash);
-			const snapshot: HtmlSnapshot = {
-				// Lazy: most judges never read the key, and this runs once per snapshot.
-				get hash() {
-					return hash.toString('hex');
-				},
-				html: decodeStoredBlob(blob.body, blob.codec),
-			};
-			if (matches(snapshot)) {
-				matchedHashes.push(hash);
-			}
-		}
-		scanned += hashes.length;
-		lastHash = hashes.at(-1)!;
+	// A batch judge runs off the event loop, so the next chunk is read while the
+	// current one is judged. A `matches` judge runs on this thread: nothing would
+	// overlap, and a second chunk would only sit in memory.
+	const overlap = params.judgeBatch !== undefined;
+	/**
+	 * Starts reading the chunk that begins at `from`.
+	 * @param from - Index into the walked hashes.
+	 * @returns The chunk's blob rows.
+	 */
+	const readNext = (from: number): Promise<BlobRow[]> => {
+		const read = readBlobRows(knex, walkedHashes.slice(from, from + SCAN_CHUNK));
+		// A read that fails while an earlier chunk is still being judged must not
+		// surface as an unhandled rejection; the loop awaits it (and throws) next.
+		read.catch(() => {});
+		return read;
+	};
+	let pending: Promise<BlobRow[]> | undefined =
+		walkedHashes.length > 0 ? readNext(0) : undefined;
+	for (let start = 0; start < walkedHashes.length; start += SCAN_CHUNK) {
+		const rows = await pending!;
+		const next = start + SCAN_CHUNK;
+		pending = overlap && next < walkedHashes.length ? readNext(next) : undefined;
+
+		matchedHashes.push(...(await findMatchedHashes(params, rows)));
+		scanned += Math.min(SCAN_CHUNK, walkedHashes.length - start);
 		onProgress?.(`Scanning HTML snapshots: ${scanned} / ${hashTotal}`);
+		if (!overlap && next < walkedHashes.length) {
+			pending = readNext(next);
+		}
 	}
 
 	const matchedPages: MatchedSnapshotPage[] = [];

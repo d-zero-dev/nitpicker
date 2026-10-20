@@ -171,4 +171,26 @@ describe('compileSelector', () => {
 		expect(compileSelector(list(64)).alternatives).toHaveLength(64);
 		expect(() => compileSelector(list(65))).toThrow(UnsupportedSelectorError);
 	});
+
+	it('folds tag and attribute names by ASCII case only', () => {
+		const compound = compileSelector('DIV[Data-X], LINK[LINK]').alternatives;
+		expect(compound[0]!.compounds[0]).toMatchObject({
+			tag: 'div',
+			attributes: [{ name: 'data-x' }],
+		});
+		// U+212A KELVIN SIGN is not `K`: `toLowerCase` would turn this into `link`.
+		expect(compound[1]!.compounds[0]).toMatchObject({
+			tag: 'linK',
+			attributes: [{ name: 'linK' }],
+		});
+	});
+
+	it('rejects a lone surrogate, which no stored (UTF-8) document can contain', () => {
+		const attempt = () => compileSelector('a[title="\uD800"]');
+		expect(attempt).toThrow(UnsupportedSelectorError);
+		expect(attempt).toThrow(
+			expect.objectContaining({ reason: expect.stringContaining('lone surrogate') }),
+		);
+		expect(compileSelector('a[title="😀"]').alternatives).toHaveLength(1);
+	});
 });

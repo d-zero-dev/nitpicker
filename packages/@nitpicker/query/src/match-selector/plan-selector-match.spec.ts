@@ -12,31 +12,35 @@ function plan(selector: string) {
 }
 
 describe('planSelectorMatch', () => {
-	it('sends a single compound to the regular expression only', () => {
-		const { directRegExp, tokenizedAlternatives, allAlternatives } = plan('img[alt]');
-		expect(directRegExp).toBeInstanceOf(RegExp);
-		expect(tokenizedAlternatives).toHaveLength(0);
-		expect(allAlternatives).toHaveLength(1);
+	it('marks a single compound as decided by one start tag', () => {
+		const { alternatives } = plan('img[alt]');
+		expect(alternatives).toHaveLength(1);
+		expect(alternatives[0]!.direct).toBe(true);
 	});
 
-	it('keeps the literals of every alternative the regular expression covers', () => {
-		const { directPrefilterLiterals } = plan('img[alt], #main, *');
-		expect(directPrefilterLiterals).toEqual([['<img'], ['main'], null]);
+	it('keeps the prefilter literals of every alternative', () => {
+		const { alternatives } = plan('img[alt], #main, *');
+		expect(alternatives.map((alternative) => alternative.prefilterLiterals)).toEqual([
+			['<img'],
+			['main'],
+			null,
+		]);
 	});
 
-	it('sends a chain to the open-element stack only', () => {
-		const { directRegExp, tokenizedAlternatives } = plan('nav a');
-		expect(directRegExp).toBeNull();
-		expect(tokenizedAlternatives).toHaveLength(1);
-		expect(tokenizedAlternatives[0]!.prefilterLiterals).toEqual(['<nav', '<a']);
+	it('leaves a chain to the open-element stack', () => {
+		const { alternatives } = plan('nav a');
+		expect(alternatives[0]!.direct).toBe(false);
+		expect(alternatives[0]!.prefilterLiterals).toEqual(['<nav', '<a']);
+		expect(alternatives[0]!.combinators).toEqual(['descendant']);
 	});
 
 	it('splits a list between the stages', () => {
-		const { directRegExp, tokenizedAlternatives, allAlternatives } =
-			plan('img, nav a, video');
-		expect(directRegExp).toBeInstanceOf(RegExp);
-		expect(tokenizedAlternatives).toHaveLength(1);
-		expect(allAlternatives).toHaveLength(3);
+		const { alternatives } = plan('img, nav a, video');
+		expect(alternatives.map((alternative) => alternative.direct)).toEqual([
+			true,
+			false,
+			true,
+		]);
 	});
 
 	it.each([
@@ -44,10 +48,17 @@ describe('planSelectorMatch', () => {
 		['li:nth-child(2)'],
 		['li:not(:first-child)'],
 		['a[title="x>y"]'],
-	])('sends %s to the open-element stack', (selector) => {
-		const { directRegExp, tokenizedAlternatives } = plan(selector);
-		expect(directRegExp).toBeNull();
-		expect(tokenizedAlternatives).toHaveLength(1);
+	])('leaves %s to the open-element stack', (selector) => {
+		expect(plan(selector).alternatives[0]!.direct).toBe(false);
+	});
+
+	it('carries the compounds as the matcher reads them', () => {
+		const { alternatives } = plan('a[href^="/p/" i]:not(.x)');
+		expect(alternatives[0]!.compounds[0]).toMatchObject({
+			tag: 'a',
+			attributes: [{ name: 'href', operator: 'prefix', value: '/p/', ignoreCase: true }],
+			negations: [{ tag: null }],
+		});
 	});
 
 	it('records which sibling positions are needed', () => {

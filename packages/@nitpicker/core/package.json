@@ -48,6 +48,14 @@
 			"import": "./lib/match-js-license-comment-signal.js",
 			"types": "./lib/match-js-license-comment-signal.d.ts"
 		},
+		"./match-selector-html": {
+			"import": "./lib/match-selector-html.js",
+			"types": "./lib/match-selector-html.d.ts"
+		},
+		"./match-selector-snapshots": {
+			"import": "./lib/match-selector-snapshots.js",
+			"types": "./lib/match-selector-snapshots.d.ts"
+		},
 		"./match-structural-technology-signals": {
 			"import": "./lib/match-structural-technology-signals.js",
 			"types": "./lib/match-structural-technology-signals.d.ts"
