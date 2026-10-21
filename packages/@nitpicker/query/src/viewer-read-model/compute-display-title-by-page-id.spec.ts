@@ -3,6 +3,7 @@ import type { DisplayTitleSourceRow } from './compute-display-title-by-page-id.j
 import { describe, expect, it } from 'vitest';
 
 import { computeDisplayTitleByPageId } from './compute-display-title-by-page-id.js';
+import { computePageDirKeys } from './compute-page-dir-keys.js';
 
 /**
  *
@@ -78,5 +79,22 @@ describe('computeDisplayTitleByPageId', () => {
 		// site-b's page never shares an origin with site-a's index title, so
 		// nothing matches and the title is left untouched.
 		expect(result.get(2)).toBe('Post 1 | Blog A | Site A');
+	});
+
+	it('gives the same result from precomputed directory keys, without reading the URLs again', () => {
+		const rows = [
+			row(1, 'https://example.com/blog/', 'Blog | Site'),
+			row(2, 'https://example.com/blog/post-1', 'Post 1 | Blog | Site'),
+			row(3, 'https://example.com/blog/post-2', null),
+		];
+		const dirKeys = computePageDirKeys(rows);
+		// The keys are all that is read: URLs that would not parse change nothing.
+		const unparseable = rows.map((r) => row(r.id, 'not a url', r.title));
+		const actual = computeDisplayTitleByPageId(unparseable, dirKeys);
+		expect([...actual]).toEqual([
+			[1, 'Blog | Site'],
+			[2, 'Post 1'],
+			[3, null],
+		]);
 	});
 });

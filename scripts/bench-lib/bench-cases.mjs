@@ -17,4 +17,5 @@ export const BENCH_CASES = Object.freeze({
 	'search-html': ['literal-many', 'literal-few', 'regex-many', 'regex-few'],
 	'body-hash': ['rust', 'js'],
 	'tech-signals': ['rust', 'js'],
+	'read-model-build': ['full', 'floor'],
 });

@@ -54,4 +54,82 @@ describe('buildPageUrlRankMap', () => {
 		buildPageUrlRankMap(input);
 		expect(input).toEqual(original);
 	});
+
+	it('ranks a URL before every longer URL it is a prefix of', () => {
+		const map = buildPageUrlRankMap([
+			{ id: 1, url: 'https://example.com/ab' },
+			{ id: 2, url: 'https://example.com/a' },
+			{ id: 3, url: 'https://example.com/a\u{10000}' },
+		]);
+		expect(map.get(2)).toBe(0);
+		expect(map.get(1)).toBe(1);
+		expect(map.get(3)).toBe(2);
+	});
+
+	it('treats a lone surrogate as U+FFFD, as the UTF-8 encoding does', () => {
+		// `Buffer.from` encodes a lone surrogate as U+FFFD (EF BF BD), so it
+		// sorts after U+E000 (EE 80 80) and ties with a real U+FFFD, where the
+		// ascending page id decides.
+		const map = buildPageUrlRankMap([
+			{ id: 1, url: `https://example.com/${String.fromCodePoint(65_533)}` },
+			{ id: 2, url: 'https://example.com/\uD800' },
+			{ id: 3, url: `https://example.com/${String.fromCodePoint(57_344)}` },
+		]);
+		expect(map.get(3)).toBe(0);
+		expect(map.get(1)).toBe(1);
+		expect(map.get(2)).toBe(2);
+	});
+
+	it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+		'orders random strings exactly as their UTF-8 bytes compare (seed %i)',
+		(seedNumber) => {
+			// A small deterministic generator, mixing ASCII, characters at every
+			// UTF-8 length boundary (U+7F/U+80, U+7FF/U+800, U+D7FF, U+E000, U+FFFF,
+			// U+10000, U+10FFFF), the replacement character and lone surrogates, so
+			// the allocation-free comparison is checked against the byte-wise oracle
+			// it must agree with. Strings are up to 8 characters long, so many share
+			// prefixes and many are equal.
+			let seed = Math.imul(seedNumber, 2_654_435_761) >>> 0;
+			const next = (limit: number): number => {
+				seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+				return seed % limit;
+			};
+			const alphabet = [
+				'a',
+				'b',
+				'\u{7F}',
+				'\u{80}',
+				'é',
+				'\u{7FF}',
+				'\u{800}',
+				'あ',
+				'\u{D7FF}',
+				'\u{E000}',
+				'\u{FFFF}',
+				'\u{FFFD}',
+				'\u{10000}',
+				'\u{1F600}',
+				'\u{10FFFF}',
+				'\uD800',
+				'\uDBFF',
+				'\uDC00',
+				'\uDFFF',
+			];
+			const rows = Array.from({ length: 600 }, (_, index) => ({
+				id: index + 1,
+				url: Array.from({ length: next(9) }, () => alphabet[next(alphabet.length)]!).join(
+					'',
+				),
+			}));
+			const oracle = rows.toSorted((a, b) => {
+				const byBytes = Buffer.compare(
+					Buffer.from(a.url, 'utf8'),
+					Buffer.from(b.url, 'utf8'),
+				);
+				return byBytes === 0 ? a.id - b.id : byBytes;
+			});
+			const map = buildPageUrlRankMap(rows);
+			expect(oracle.map((row) => map.get(row.id))).toEqual(oracle.map((_, rank) => rank));
+		},
+	);
 });

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 /**
- * Benchmarks `/api/summary`'s `viewer_summary` read-model fast path (issue
- * #104) on a synthetic archive with hundreds of thousands of content
- * records — no real customer archive is ever read or referenced.
+ * Benchmarks `/api/summary`'s `viewer_summary` read-model fast path on a
+ * synthetic archive with tens of thousands of content records — no real
+ * customer archive is ever read or referenced. The archive is seeded through
+ * the real write path (`Archive.setPage`, as a live crawl writes it), because
+ * a fresh archive has no `pages` table to insert into: the writer uses the
+ * `content_items` / `page_meta` entity tables, which is also what
+ * `buildViewerReadModel` reads.
  *
  * Records:
  *
@@ -31,7 +35,7 @@
  *
  *     yarn build && node scripts/bench-viewer-summary-read-model.mjs
  *
- * Sizes default to {400,000}; override via `BENCH_SIZES=…` (comma
+ * Sizes default to {50,000}; override via `BENCH_SIZES=…` (comma
  * separated). Always disk-backed (never `:memory:`) — the whole point is
  * measuring realistic cold-cache I/O, which an in-memory DB can't produce.
  */
@@ -43,10 +47,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-import knex from 'knex';
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import Archive from '@nitpicker/archive/archive';
 
-import { initSchema } from '../packages/@nitpicker/archive/lib/init-schema.js';
-import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 import { getSummary } from '../packages/@nitpicker/query/lib/get-summary.js';
 import { getViewerSummary } from '../packages/@nitpicker/query/lib/get-viewer-summary.js';
 import { buildViewerReadModel } from '../packages/@nitpicker/query/lib/viewer-read-model/build-viewer-read-model.js';
@@ -54,7 +57,7 @@ import { createApp } from '../packages/@nitpicker/viewer/lib/create-app.js';
 
 const SIZES = process.env.BENCH_SIZES
 	? process.env.BENCH_SIZES.split(',').map((s) => Number(s.trim()))
-	: [400_000];
+	: [50_000];
 
 /** Repeated warm requests per phase, for p50/p95. */
 const WARM_ITERATIONS = 30;
@@ -63,13 +66,14 @@ const WARM_ITERATIONS = 30;
 const CONFIG = { baseUrl: 'https://example.com', roots: ['https://example.com'] };
 
 /**
- * Materialises a disk-backed synthetic archive DB with `n` `pages` rows
- * spanning the dimensions `getSummary` aggregates over — status mix
- * (200/301/404/500/null), a minority external / non-HTML population,
- * matching real-world skew (mostly-HTML, mostly-200, mostly-internal).
- * @param {number} n - The number of rows to insert.
- * @returns {Promise<{db: import('knex').Knex, dbFilePath: string, cleanupDir: string}>}
- *   The seeded Knex instance and its backing file/dir (for size + cleanup).
+ * Materialises a disk-backed synthetic archive with `n` pages, seeded through
+ * `Archive.setPage`, spanning the dimensions `getSummary` aggregates over —
+ * status mix (200/301/404/500/null), a minority external / non-HTML
+ * population, matching real-world skew (mostly-HTML, mostly-200,
+ * mostly-internal).
+ * @param {number} n - The number of pages to seed.
+ * @returns {Promise<{archive: import('@nitpicker/archive/archive').default, db: import('knex').Knex, dbFilePath: string, cleanupDir: string}>}
+ *   The seeded, still-open archive, its Knex instance, and its backing file/dir (for size + cleanup).
  */
 async function makeDb(n) {
 	const cleanupDir = path.join(
@@ -78,14 +82,31 @@ async function makeDb(n) {
 	);
 	rmSync(cleanupDir, { recursive: true, force: true });
 	mkdirSync(cleanupDir, { recursive: true });
-	const dbFilePath = path.join(cleanupDir, 'db.sqlite');
 
-	const db = knex({
-		client: LibsqlDialect,
-		connection: { filename: dbFilePath },
-		useNullAsDefault: true,
+	const archive = await Archive.create({
+		filePath: path.join(cleanupDir, 'archive.nitpicker'),
+		cwd: cleanupDir,
 	});
-	await initSchema(db);
+	await archive.setConfig({
+		baseUrl: 'https://example.com',
+		name: 'bench-viewer-summary',
+		version: '0.13.0',
+		recursive: true,
+		interval: 0,
+		image: true,
+		fetchExternal: false,
+		parallels: 1,
+		roots: ['https://example.com'],
+		excludes: [],
+		excludeKeywords: [],
+		excludeUrls: [],
+		maxExcludedDepth: 0,
+		retry: 3,
+		fromList: false,
+		disableQueries: false,
+		userAgent: 'bench',
+		ignoreRobots: false,
+	});
 
 	const STATUSES = [200, 200, 200, 200, 301, 404, 500, null];
 	const CONTENT_TYPES = [
@@ -102,41 +123,49 @@ async function makeDb(n) {
 		null,
 	];
 
-	// libsql tops out around a few hundred bound values per multi-row
-	// INSERT before erroring on parameter count — 100 keeps this well
-	// under that while still amortising round-trips (matches
-	// bench-viewer-pages-read-model.mjs's CHUNK convention).
-	const CHUNK = 100;
-	const rows = [];
 	for (let i = 0; i < n; i++) {
 		const padded = String(i).padStart(8, '0');
-		rows.push({
-			url: `https://example.com/page-${padded}`,
-			scraped: 1,
-			isTarget: 1,
-			isExternal: i % 10 === 0 ? 1 : 0,
-			isSkipped: 0,
-			redirectDestId: null,
-			status: STATUSES[i % STATUSES.length],
-			statusText: 'OK',
+		const status = STATUSES[i % STATUSES.length];
+		await archive.setPage({
+			url: parseUrl(`https://example.com/page-${padded}`),
+			redirectPaths: [],
+			isExternal: i % 10 === 0,
+			isTarget: true,
+			status,
+			statusText: status ? 'OK' : '',
 			contentType: CONTENT_TYPES[i % CONTENT_TYPES.length],
 			contentLength: 1000,
-			title: i % 20 === 0 ? null : `Page ${padded}`,
-			description: i % 7 === 0 ? null : `Synthetic page ${padded} for bench`,
-			og_title: `OG Page ${padded}`,
-			source: 'crawled',
-			tag_count: 0,
-			jsonld_count: 0,
+			responseHeaders: {},
+			html: `<html><head><title>Page ${padded}</title></head><body>Page ${padded}</body></html>`,
+			mainContents: null,
+			scrollHeight: null,
+			meta: {
+				lang: null,
+				title: i % 20 === 0 ? null : `Page ${padded}`,
+				description: i % 7 === 0 ? null : `Synthetic page ${padded} for bench`,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': `OG Page ${padded}`,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList: [],
+			isSkipped: false,
 		});
-		if (rows.length >= CHUNK) {
-			await db('pages').insert(rows);
-			rows.length = 0;
-		}
 	}
-	if (rows.length > 0) {
-		await db('pages').insert(rows);
-	}
-	return { db, dbFilePath, cleanupDir };
+
+	// `Archive.create`'s working directory is `<cwd>/._nitpicker-<basename>`.
+	const dbFilePath = path.join(cleanupDir, '._nitpicker-archive', 'db.sqlite');
+	return { archive, db: archive.getKnex(), dbFilePath, cleanupDir };
 }
 
 /**
@@ -219,7 +248,7 @@ async function runHttpPhase(label, accessorStub) {
 
 for (const n of SIZES) {
 	console.log(`\n══════════ ${n.toLocaleString()} rows ══════════`);
-	const { db, dbFilePath, cleanupDir } = await makeDb(n);
+	const { archive, db, dbFilePath, cleanupDir } = await makeDb(n);
 	try {
 		const seedSizeBytes = statSync(dbFilePath).size;
 		console.log(`  seeded DB size: ${(seedSizeBytes / 1024 / 1024).toFixed(1)} MiB`);
@@ -298,7 +327,7 @@ for (const n of SIZES) {
 			'\nNote: HTTP "warm" numbers are dominated by the viewer-process LRU (`summary-cache.ts`), which caches the result after the first hit regardless of backend — the "direct call" and "HTTP cold" rows are what actually isolate the read model\'s contribution.',
 		);
 	} finally {
-		await db.destroy();
+		await archive.releaseHandle();
 		rmSync(cleanupDir, { recursive: true, force: true });
 	}
 }

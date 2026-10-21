@@ -2,9 +2,12 @@ import type { Knex } from 'knex';
 
 import { computeUrlSortRanks } from '@nitpicker/archive/url-sort/compute-url-sort-ranks';
 
-import { getResourceReferrerEdges } from '../get-resource-referrer-edges.js';
+import { getResourceReferrerPageEdges } from '../get-resource-referrer-page-edges.js';
+import { resolvePageUrls } from '../html-snapshot-scan/resolve-page-urls.js';
 
 import { canonicalizeUrlWithQueryPairs } from './canonicalize-url-with-query-pairs.js';
+import { PageIdSet } from './page-id-set.js';
+import { requireSampledPageUrl } from './require-sampled-page-url.js';
 
 /** `resource_items` rows read per keyset chunk, by default. */
 const READ_CHUNK_SIZE = 5000;
@@ -67,13 +70,20 @@ interface ResourceGroupAccumulator {
 	 * rather than referrer URL strings: the set of pages that can
 	 * reference a resource is bounded by the archive's own (finite,
 	 * already-known) page count, unlike {@link paramValues}' per-request
-	 * tracker values, which have no such bound. A resource referenced by
-	 * every page on a 500K-page site costs ~4MB here, not the tens of MB a
-	 * `Set<string>` of full URLs would.
+	 * tracker values, which have no such bound. {@link PageIdSet} is a hash
+	 * set while a group has few referrers and a bitmap once it has many, so a
+	 * resource referenced by every page on a 500K-page site costs 64KB here,
+	 * not the megabytes of a `Set<number>` (or the tens of MB of a
+	 * `Set<string>` of full URLs).
 	 */
-	readonly referrerPageIds: Set<number>;
-	/** Sample referrer URLs for the note, capped at {@link MAX_REFERRER_NOTE_SAMPLES}. */
-	readonly referrerUrlSamples: string[];
+	readonly referrerPageIds: PageIdSet;
+	/**
+	 * Page ids of the first {@link MAX_REFERRER_NOTE_SAMPLES} distinct referrers,
+	 * in the order they were first seen. Ids, not URLs: the URLs of the pages
+	 * that end up in a note are looked up once, after the scan, so a page that
+	 * is a sample of thousands of groups is one string, not thousands.
+	 */
+	readonly referrerSamplePageIds: number[];
 	readonly paramValues: Map<string, ParamValueTracker>;
 }
 
@@ -221,12 +231,14 @@ function buildReferrerNote(
  * run).
  *
  * For each `resource_items` chunk, a follow-up call to
- * `getResourceReferrerEdges` (the same join `report-export`'s
- * `getResourceReferrerUrlsByResourceIds` uses) resolves that chunk's
- * `resource_ref_edges` (referring `page_id` + URL) so referrer pages can be
- * merged into each group's {@link ResourceGroupAccumulator.referrerPageIds}
+ * `getResourceReferrerPageEdges` (the join `report-export`'s
+ * `getResourceReferrerUrlsByResourceIds` uses, minus the URL column) resolves
+ * that chunk's `resource_ref_edges` (referring `page_id`) so referrer pages
+ * can be merged into each group's {@link ResourceGroupAccumulator.referrerPageIds}
  * — the same two-step shape `computeAnchorFactRows` uses for per-page
- * tallies.
+ * tallies. A group keeps only the ids of its first sampled referrers; the
+ * URLs the notes show are looked up once, after the scan, for the distinct
+ * sampled pages.
  * @param trx - An open Knex transaction (a plain `Knex` instance also works, e.g. in tests).
  * @param chunkSize - Maximum `resource_items` rows read per chunk. Must be positive.
  * @param onProgress - Called after each keyset chunk with the
@@ -260,6 +272,13 @@ export async function computeResourceGroupRows(
 		});
 		maxId = maxRow?.max ?? 0;
 	}
+
+	// Sizes every group's referrer bitmap (see `PageIdSet`): one more than the
+	// largest page id, an O(1) index-tail read.
+	const [maxPageRow] = await trx('content_items').max<{ max: number | null }[]>({
+		max: 'id',
+	});
+	const pageIdCapacity = (maxPageRow?.max ?? 0) + 1;
 
 	const entries = new Map<string, ResourceGroupAccumulator>();
 
@@ -325,8 +344,8 @@ export async function computeResourceGroupRows(
 					contentLengthMin: row.contentLength,
 					contentLengthMax: row.contentLength,
 					count: 0,
-					referrerPageIds: new Set<number>(),
-					referrerUrlSamples: [],
+					referrerPageIds: new PageIdSet(pageIdCapacity),
+					referrerSamplePageIds: [],
 					paramValues: new Map<string, ParamValueTracker>(),
 				};
 				entries.set(key, entry);
@@ -339,21 +358,32 @@ export async function computeResourceGroupRows(
 		}
 
 		const chunkIds = rows.map((row) => row.id);
-		const edgeRows = await getResourceReferrerEdges(trx, chunkIds);
+		const edgeRows = await getResourceReferrerPageEdges(trx, chunkIds);
 		for (const edge of edgeRows) {
 			const key = groupKeyByResourceId.get(edge.resourceId);
 			if (key === undefined) {
 				continue;
 			}
 			const entry = entries.get(key)!;
-			if (!entry.referrerPageIds.has(edge.pageId)) {
-				entry.referrerPageIds.add(edge.pageId);
-				if (entry.referrerUrlSamples.length < MAX_REFERRER_NOTE_SAMPLES) {
-					entry.referrerUrlSamples.push(edge.pageUrl);
-				}
+			if (
+				entry.referrerPageIds.add(edge.pageId) &&
+				entry.referrerSamplePageIds.length < MAX_REFERRER_NOTE_SAMPLES
+			) {
+				entry.referrerSamplePageIds.push(edge.pageId);
 			}
 		}
 	}
+
+	// The notes' sample URLs, looked up once for every sampled page across all
+	// groups (see `referrerSamplePageIds`). The edge query joined each page's
+	// `content_items` and `url_refs` rows, so every sampled id resolves.
+	const sampledPageIds = new Set<number>();
+	for (const entry of entries.values()) {
+		for (const pageId of entry.referrerSamplePageIds) {
+			sampledPageIds.add(pageId);
+		}
+	}
+	const urlByPageId = await resolvePageUrls(trx, [...sampledPageIds]);
 
 	// Natural URL order — the same order the pages and resources lists use.
 	const groupEntries = [...entries.values()];
@@ -372,7 +402,9 @@ export async function computeResourceGroupRows(
 		count: entry.count,
 		referrer_count: entry.referrerPageIds.size,
 		referrer_note: buildReferrerNote(
-			entry.referrerUrlSamples,
+			entry.referrerSamplePageIds.map((pageId) =>
+				requireSampledPageUrl(urlByPageId, pageId),
+			),
 			entry.referrerPageIds.size,
 		),
 		query_pattern: formatQueryPattern(entry.paramValues),

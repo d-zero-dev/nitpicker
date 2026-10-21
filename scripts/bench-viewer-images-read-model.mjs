@@ -32,10 +32,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-import knex from 'knex';
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import Archive from '@nitpicker/archive/archive';
 
-import { initSchema } from '../packages/@nitpicker/archive/lib/init-schema.js';
-import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 import { listImages } from '../packages/@nitpicker/query/lib/list-images.js';
 import { listViewerImages } from '../packages/@nitpicker/query/lib/list-viewer-images.js';
 import { buildViewerReadModel } from '../packages/@nitpicker/query/lib/viewer-read-model/build-viewer-read-model.js';
@@ -48,19 +47,18 @@ const SIZES = process.env.BENCH_SIZES
 /** Fixed config payload every seeded archive reports via `accessor.getConfig()`. */
 const CONFIG = { baseUrl: 'https://example.com', roots: ['https://example.com'] };
 
-/** Rows per multi-row `INSERT` — libsql tops out around a few hundred bound values. */
-const CHUNK = 200;
-
 /** Images per page — a realistic ratio driving `images` well past `pages` in row count. */
 const IMAGES_PER_PAGE = 8;
 
 /**
- * Materialises a disk-backed synthetic archive DB with `n` `images` rows (a
- * realistic mix: ~10% missing alt, ~5% missing dimensions, ~2% oversized)
- * spread across `n / IMAGES_PER_PAGE` `pages` rows.
- * @param {number} n - The number of image rows to insert.
- * @returns {Promise<{db: import('knex').Knex, dbFilePath: string, cleanupDir: string}>}
- *   The seeded Knex instance and its backing file/dir (for size + cleanup).
+ * Materialises a disk-backed synthetic archive with `n` images (a realistic
+ * mix: ~10% missing alt, ~5% missing dimensions, ~2% oversized) spread across
+ * `n / IMAGES_PER_PAGE` pages, seeded through the real write path
+ * (`Archive.setPage` with an `imageList`, as a live crawl writes it — a fresh
+ * archive has no `pages` / `images` tables to insert into).
+ * @param {number} n - The number of images to seed.
+ * @returns {Promise<{archive: import('@nitpicker/archive/archive').default, db: import('knex').Knex, dbFilePath: string, cleanupDir: string}>}
+ *   The seeded, still-open archive, its Knex instance, and its backing file/dir (for size + cleanup).
  */
 async function makeDb(n) {
 	const cleanupDir = path.join(
@@ -69,68 +67,98 @@ async function makeDb(n) {
 	);
 	rmSync(cleanupDir, { recursive: true, force: true });
 	mkdirSync(cleanupDir, { recursive: true });
-	const dbFilePath = path.join(cleanupDir, 'db.sqlite');
 
-	const db = knex({
-		client: LibsqlDialect,
-		connection: { filename: dbFilePath },
-		useNullAsDefault: true,
+	const archive = await Archive.create({
+		filePath: path.join(cleanupDir, 'archive.nitpicker'),
+		cwd: cleanupDir,
 	});
-	await initSchema(db);
+	await archive.setConfig({
+		baseUrl: 'https://example.com',
+		name: 'bench-viewer-images',
+		version: '0.13.0',
+		recursive: true,
+		interval: 0,
+		image: true,
+		fetchExternal: false,
+		parallels: 1,
+		roots: ['https://example.com'],
+		excludes: [],
+		excludeKeywords: [],
+		excludeUrls: [],
+		maxExcludedDepth: 0,
+		retry: 3,
+		fromList: false,
+		disableQueries: false,
+		userAgent: 'bench',
+		ignoreRobots: false,
+	});
 
 	const pageCount = Math.ceil(n / IMAGES_PER_PAGE);
-	const pageIds = [];
-	let pageRows = [];
-	for (let i = 0; i < pageCount; i++) {
-		pageRows.push({
-			url: `https://example.com/page-${i}`,
-			scraped: 1,
-			isTarget: 1,
+	for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+		// Image `i` belongs to page `i % pageCount`, so page `p` holds
+		// p, p + pageCount, p + 2 * pageCount, ... below `n`.
+		//
+		// Bucket layout per 100-image cycle: [0,10) missing alt, [10,15)
+		// missing dimensions, [15,17) oversized, [17,100) unremarkable.
+		const imageList = [];
+		for (let i = pageIndex; i < n; i += pageCount) {
+			const bucket = i % 100;
+			const missingAlt = bucket < 10;
+			const missingDimensions = bucket >= 10 && bucket < 15;
+			const oversized = bucket >= 15 && bucket < 17;
+			imageList.push({
+				src: `https://example.com/image-${i}.png`,
+				currentSrc: `https://example.com/image-${i}.png`,
+				alt: missingAlt ? '' : `Image ${i}`,
+				width: missingDimensions ? 0 : 100,
+				height: missingDimensions ? 0 : 100,
+				naturalWidth: oversized ? 5000 : 100,
+				naturalHeight: oversized ? 5000 : 100,
+				isLazy: bucket % 2 === 0,
+				viewportWidth: 1280,
+				sourceCode: `<img src="image-${i}.png">`,
+			});
+		}
+		await archive.setPage({
+			url: parseUrl(`https://example.com/page-${pageIndex}`),
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
 			contentType: 'text/html',
-			isExternal: 0,
+			contentLength: 1000,
+			responseHeaders: {},
+			html: '',
+			mainContents: null,
+			scrollHeight: null,
+			meta: {
+				lang: null,
+				title: `Page ${pageIndex}`,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList: [],
+			imageList,
+			isSkipped: false,
 		});
-		if (pageRows.length >= CHUNK) {
-			const inserted = await db('pages').insert(pageRows).returning('id');
-			pageIds.push(...inserted.map((row) => row.id));
-			pageRows = [];
-		}
-	}
-	if (pageRows.length > 0) {
-		const inserted = await db('pages').insert(pageRows).returning('id');
-		pageIds.push(...inserted.map((row) => row.id));
 	}
 
-	// Bucket layout per 100-row cycle: [0,10) missing alt, [10,15) missing
-	// dimensions, [15,17) oversized, [17,100) unremarkable.
-	let imageRows = [];
-	for (let i = 0; i < n; i++) {
-		const bucket = i % 100;
-		const missingAlt = bucket < 10;
-		const missingDimensions = bucket >= 10 && bucket < 15;
-		const oversized = bucket >= 15 && bucket < 17;
-		imageRows.push({
-			pageId: pageIds[i % pageIds.length],
-			src: `https://example.com/image-${i}.png`,
-			currentSrc: `https://example.com/image-${i}.png`,
-			alt: missingAlt ? '' : `Image ${i}`,
-			width: missingDimensions ? 0 : 100,
-			height: missingDimensions ? 0 : 100,
-			naturalWidth: oversized ? 5000 : 100,
-			naturalHeight: oversized ? 5000 : 100,
-			isLazy: bucket % 2 === 0 ? 1 : 0,
-			viewportWidth: 1280,
-			sourceCode: `<img src="image-${i}.png">`,
-		});
-		if (imageRows.length >= CHUNK) {
-			await db('images').insert(imageRows);
-			imageRows = [];
-		}
-	}
-	if (imageRows.length > 0) {
-		await db('images').insert(imageRows);
-	}
-
-	return { db, dbFilePath, cleanupDir };
+	// `Archive.create`'s working directory is `<cwd>/._nitpicker-<basename>`.
+	const dbFilePath = path.join(cleanupDir, '._nitpicker-archive', 'db.sqlite');
+	return { archive, db: archive.getKnex(), dbFilePath, cleanupDir };
 }
 
 /**
@@ -158,7 +186,7 @@ function makeApp(accessorStub, archiveId) {
 
 for (const n of SIZES) {
 	console.log(`\n══════════ ${n.toLocaleString()} images ══════════`);
-	const { db, dbFilePath, cleanupDir } = await makeDb(n);
+	const { archive, db, dbFilePath, cleanupDir } = await makeDb(n);
 	try {
 		const seedSizeBytes = statSync(dbFilePath).size;
 		console.log(`  seeded DB size: ${(seedSizeBytes / 1024 / 1024).toFixed(1)} MiB`);
@@ -245,7 +273,7 @@ for (const n of SIZES) {
 		);
 		console.log(`\nread-model build time: ${buildMs.toFixed(0)}ms`);
 	} finally {
-		await db.destroy();
+		await archive.releaseHandle();
 		rmSync(cleanupDir, { recursive: true, force: true });
 	}
 }

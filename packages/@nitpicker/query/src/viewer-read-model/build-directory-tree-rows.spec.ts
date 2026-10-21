@@ -376,4 +376,61 @@ describe('buildDirectoryTreeRows', () => {
 			direct_page_count: 1,
 		});
 	});
+
+	describe('node ids and order', () => {
+		it('numbers nodes 1.. in creation order and gives every child a larger id than its parent', () => {
+			const { nodes } = buildDirectoryTreeRows([
+				row({ id: 1, url: 'https://a.example/x/y/z/page' }),
+				row({ id: 2, url: 'https://b.example/q/page' }),
+				row({ id: 3, url: 'https://a.example/x/other/page' }),
+			]);
+			expect(nodes.map((n) => n.node_id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+			// Every child is created after its parent: a.example's tree is
+			// 1 → 2 → 3 → 4, b.example's is 5 → 6, and /x/other/ (7) hangs off 2.
+			expect(nodes.map((n) => n.parent_node_id)).toEqual([null, 1, 2, 3, null, 5, 2]);
+			expect(nodes.map((n) => `${n.root_key}${n.path}`)).toEqual([
+				'a.example/',
+				'a.example/x/',
+				'a.example/x/y/',
+				'a.example/x/y/z/',
+				'b.example/',
+				'b.example/q/',
+				'a.example/x/other/',
+			]);
+		});
+
+		it('sums a deep chain and a wide fan-out into every ancestor exactly once', () => {
+			const rows: DirectoryTreeSourceRow[] = [];
+			let id = 1;
+			for (let i = 0; i < 6; i++) {
+				const dir = Array.from({ length: i }, (_, d) => `d${d}`).join('/');
+				rows.push(row({ id: id++, url: `https://example.com/${dir}${dir ? '/' : ''}p` }));
+			}
+			for (let i = 0; i < 4; i++) {
+				rows.push(row({ id: id++, url: `https://example.com/d0/leaf${i}/p` }));
+			}
+			const { nodes } = buildDirectoryTreeRows(rows);
+			const byPath = new Map(nodes.map((n) => [n.path, n]));
+			expect(byPath.get('/')).toMatchObject({
+				direct_page_count: 1,
+				descendant_page_count: 10,
+				descendant_html_page_count: 10,
+				direct_child_dir_count: 1,
+			});
+			expect(byPath.get('/d0/')).toMatchObject({
+				direct_page_count: 1,
+				descendant_page_count: 9,
+				direct_child_dir_count: 5,
+			});
+			expect(byPath.get('/d0/d1/d2/d3/d4/')).toMatchObject({ descendant_page_count: 1 });
+		});
+
+		it("keeps a segment containing '::' distinct from a nested path", () => {
+			const { nodes } = buildDirectoryTreeRows([
+				row({ id: 1, url: 'https://example.com/a::b/page' }),
+				row({ id: 2, url: 'https://example.com/a/b/page' }),
+			]);
+			expect(nodes.map((n) => n.path)).toEqual(['/', '/a::b/', '/a/', '/a/b/']);
+		});
+	});
 });

@@ -2,6 +2,7 @@ import type { Knex } from 'knex';
 
 import { eachSplitted } from '@nitpicker/archive/utils/array/each-splitted';
 
+import { buildResourceReferrerEdgeQuery } from './build-resource-referrer-edge-query.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
 
 /** One `resource_ref_edges` row resolved to its referring page's id and URL. */
@@ -40,15 +41,14 @@ export async function getResourceReferrerEdges(
 	}
 	const result: ResourceReferrerEdge[] = [];
 	await eachSplitted(resourceIds, SQLITE_IN_CHUNK, async (chunk) => {
-		const rows: ResourceReferrerEdge[] = await knex('resource_ref_edges as rre')
-			.join('content_items as ci', 'ci.id', 'rre.page_id')
-			.join('url_refs as ur', 'ur.id', 'ci.url_id')
-			.whereIn('rre.resource_id', chunk)
-			.select(
-				'rre.resource_id as resourceId',
-				'rre.page_id as pageId',
-				'ur.url as pageUrl',
-			);
+		const rows: ResourceReferrerEdge[] = await buildResourceReferrerEdgeQuery(
+			knex,
+			chunk,
+		).select(
+			'rre.resource_id as resourceId',
+			'rre.page_id as pageId',
+			'ur.url as pageUrl',
+		);
 		// Avoid `push(...rows)`: on large real archives this chunk array can
 		// be large enough to overflow V8's argument-spread limit even though
 		// the underlying data itself fits in memory.

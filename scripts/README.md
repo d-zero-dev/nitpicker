@@ -17,6 +17,7 @@ Rust に移植する処理（#420 のロードマップ）の時間とピーク 
 | `bench-search-html.mjs`             | `searchHtml`（リテラル・正規表現 × ヒット多・少）                                            | `literal-many` / `literal-few` / `regex-many` / `regex-few` |
 | `bench-body-hash.mjs`               | `computeBodyHash` を全 HTML スナップショットに適用（Rust 版と JS 段階実装）                  | `rust` / `js`                                               |
 | `bench-tech-signals.mjs`            | `matchStructuralTechnologySignals` を全 HTML スナップショットに適用（Rust 版と JS 正規表現） | `rust` / `js`                                               |
+| `bench-read-model-build.mjs`        | `buildViewerReadModel`（SQL 時間と JS 時間に分割。フェーズごとの内訳つき）                   | `full` / `floor`                                            |
 
 計測対象のスコープ（何を含め、何を `timeMs` から除くか）と各指標の意味は、各スクリプト冒頭のコメントを参照。ケースの一覧は `bench-lib/bench-cases.mjs` が唯一の正（各スクリプトの `--case` 検証と `bench-suite.mjs` の両方がこれを読む）。ケースを足したらこの表も更新する。
 
@@ -37,6 +38,7 @@ node scripts/bench-run.mjs body-hash <archive.nitpicker> --case js # 1 ケース
 - 各 `bench-*.mjs` は単体でも実行でき、`--json` を付けると結果を 1 行の JSON で標準出力に出す（`bench-output/` には保存しない）
 - アーカイブ本体は変更しない。書き込みを伴う計測（`template-classification`・`alias-backfill`）は、OS の一時ディレクトリに展開したコピー（`nitpicker-bench-*`）で行い、終了時に削除する。Ctrl-C などで強制終了した場合は残るので手で消す
 - HTML スナップショットを全件走査する計測（`body-hash`・`tech-signals`）は、ページから参照されているスナップショットだけを対象にする（再クロールで置き換わった古いスナップショットは数えない）
+- `read-model-build` の `full` は read model をビルドして、フェーズごとの最大 RSS・`heapUsed`・外部メモリも記録する（`rssByPhase` などは、フェーズの開始時点と進捗コールバックが呼ばれた時点の値の最大。進捗コールバックの無いフェーズの途中のピークは取れない）。時間を SQL（knex の `query` から `query-response` までの区間の和集合）と JS（残り）に分ける。libsql は SQL の実行と行のオブジェクト化を 1 回の同期ネイティブ呼び出しで行うので、行のオブジェクト化は SQL 側に入る。そのぶん `jsRatio` は JS 割合の下限値になる。`floor` はアーカイブのコピーを開くだけでビルドしないケースで、そのピーク RSS はビルドの変更で減らせない下限（Node 本体・モジュール読み込み・アーカイブを開く分）。実装同士は `full` と `floor` のピーク RSS の差で比べ、生の値も併記する
 - `bench-body-hash.mjs --case js` と `bench-tech-signals.mjs --case js` は、ビルド対象外の JS 実装を `src/` から Node の型ストリップで読み込むため、Node 24 以上が必要
 - 各計測は 1 回だけ実行する。固定費（初回呼び出しの準備など）の影響が小さくなる中・大サイズのアーカイブで値を比べる
 
@@ -97,3 +99,17 @@ node scripts/isolated-alias-golden.mjs check <archive.nitpicker> <golden.jsonl> 
 - 比べるのは、alias（メンバー URL → 代表 URL）・`url_refs.url` 全件の Tier A / B キー・isolated の成分の順序と各成分のメンバー（返された順）・リンクグラフのノード（`status|inDegree|source`）と辺（辺の順序は定義がないので、ソートした行の SHA-256 と件数）。`limit: 500` のグラフも同じ形で比べる
 - **inventory のページを持たないアーカイブでは isolated の成分が 0 件で、isolated の出力は比べられない**。成分を持つ実アーカイブがなければ、`query/src/compute-isolated-clusters.parity.spec.ts`（参照実装との突き合わせ）と `compute-isolated-clusters.spec.ts` が根拠になる
 - `dump` は実装を変える**前に**、信頼できる実装で取る。出力にはクロールした URL が入るので、**リポジトリの外に置く**。`check` が出す差分の例にも URL が入るので、issue や PR に貼らない
+
+## viewer read model の golden
+
+`viewer-read-model-golden.mjs` は、コミットできない実アーカイブで、`buildViewerReadModel` が作る全 `viewer_*` テーブルの内容が変わっていないことを確かめる。
+
+```sh
+yarn build
+node scripts/viewer-read-model-golden.mjs dump <archive.nitpicker> <out.jsonl>     # 今の実装の出力を保存
+node scripts/viewer-read-model-golden.mjs check <archive.nitpicker> <golden.jsonl> # 保存した出力と比べる（差分があれば終了コード 1、比較できなければ 2）
+```
+
+- 一時ディレクトリに展開したコピーで `buildViewerReadModel` を実行し、`sqlite_master` から列挙した全 `viewer_*` テーブル（あとからテーブルを足しても、このスクリプトの変更は要らない）を、テーブルが行を保持する順序で読む。rowid テーブルは rowid 順（挿入順は出力の一部）、`WITHOUT ROWID` テーブルは主キー順。`viewer_read_model_meta.built_at` はビルドのたびに変わるので比べない
+- テーブルごとに、行数と 10,000 行ごとの SHA-256 を 1 行 1 エントリの JSONL（`[テーブル, キー, 値]`）で保存する。行そのものは持たない（最大のテーブルは数百万行で、クロールした URL を含むため）。`check` は食い違ったテーブルについて行数と、最初の数エントリのキー（`chunk:<先頭の行番号>`）だけを出す。行の中身は出さない
+- `dump` は実装を変える**前に**、信頼できる実装で取る。出力にはクロールした URL のハッシュしか入らないが、アーカイブを特定できる情報なので**リポジトリの外に置く**

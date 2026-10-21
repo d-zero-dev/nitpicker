@@ -1295,6 +1295,21 @@ describe('buildViewerReadModel', () => {
 				{ insertedRows: 750, totalRows: 750 },
 			]);
 		});
+
+		it('converts and inserts every source row, including those past the first 500-row chunk', async () => {
+			await buildViewerReadModel(archive);
+			const rows = await archive
+				.getKnex()('viewer_pages')
+				.select('url', 'inbound_link_count', 'natural_url_rank', 'path_sort_key')
+				.orderBy('page_id');
+			expect(rows).toHaveLength(750);
+			expect(new Set(rows.map((row) => row.natural_url_rank)).size).toBe(750);
+			// The last row was converted in the second chunk.
+			const last = rows.at(-1)!;
+			expect(last.url).toMatch(/^https:\/\/example\.com\/multi-chunk-\d+$/);
+			expect(last.inbound_link_count).toBe(0);
+			expect(last.path_sort_key).toBe(new URL(last.url).pathname);
+		});
 	});
 
 	describe('empty archive', () => {
@@ -3140,5 +3155,243 @@ describe('buildViewerReadModel: fromList page scope', () => {
 		// The Summary internal count and the Page List's internal row count are
 		// the same number (no 404 rows in this fixture).
 		expect(summary.internal_pages).toBe(internalPageRows);
+	});
+});
+
+describe('buildViewerReadModel: counters, directory keys and technology aggregates written from the build wiring', () => {
+	const workingDir = path.resolve(__dirname, '__test_fixtures_build_read_model_wiring__');
+	const archiveFilePath = path.resolve(workingDir, 'wiring-test.nitpicker');
+	let archive: InstanceType<typeof Archive>;
+
+	/**
+	 * @param url - The page URL.
+	 * @param title - The page title.
+	 * @param links - Internal link targets of the page.
+	 * @returns The `setPage` argument for a plain crawled HTML page.
+	 */
+	function htmlPage(url: string, title: string, links: string[] = []) {
+		return {
+			url: parseUrl(url)!,
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status: 200,
+			statusText: 'OK',
+			contentType: 'text/html',
+			contentLength: 100,
+			responseHeaders: {},
+			html: '',
+			meta: { ...META, title },
+			anchorList: links.map((href) => ({
+				href: parseUrl(href)!,
+				isExternal: false,
+				title: null,
+				textContent: 'link',
+			})),
+			imageList: [],
+			isSkipped: false,
+		};
+	}
+
+	/**
+	 * @param url - A page URL already written to the archive.
+	 * @returns That page's `content_items.id`.
+	 */
+	async function pageIdOf(url: string): Promise<number> {
+		const row = await archive
+			.getKnex()('content_items')
+			.join('url_refs', 'content_items.url_id', 'url_refs.id')
+			.where('url_refs.url', url)
+			.first('content_items.id as id');
+		return row.id;
+	}
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		// Home links to the blog index and to /about; the blog index links to
+		// /about and back home; /docs/guide links to /about. So /about has 3
+		// referring pages, the blog index 1, home 1, the docs page 0.
+		await archive.setPage(
+			htmlPage('https://example.com', 'Home | Site', [
+				'https://example.com/blog/',
+				'https://example.com/about',
+			]),
+		);
+		await archive.setPage(
+			htmlPage('https://example.com/blog/', 'Blog | Site', [
+				'https://example.com/about',
+				'https://example.com/',
+			]),
+		);
+		await archive.setPage(
+			htmlPage('https://example.com/blog/post-1', 'Post 1 | Blog | Site'),
+		);
+		await archive.setPage(
+			htmlPage('https://example.com/docs/guide', 'Guide | Site', [
+				'https://example.com/about',
+			]),
+		);
+		await archive.setPage(htmlPage('https://example.com/about', 'About | Site'));
+
+		const home = await pageIdOf('https://example.com');
+		const post = await pageIdOf('https://example.com/blog/post-1');
+		const guide = await pageIdOf('https://example.com/docs/guide');
+		// Two technologies on pages under different first directories.
+		await archive
+			.getKnex()('page_technologies')
+			.insert([
+				{
+					pageId: post,
+					technology: 'Astro',
+					category: null,
+					version: null,
+					confidence: 70,
+					signalCount: 1,
+				},
+				{
+					pageId: guide,
+					technology: 'Astro',
+					category: 'SSG',
+					version: null,
+					confidence: 91,
+					signalCount: 1,
+				},
+				{
+					pageId: guide,
+					technology: 'React',
+					category: 'JS',
+					version: null,
+					confidence: 100,
+					signalCount: 1,
+				},
+				{
+					pageId: home,
+					technology: 'Astro',
+					category: null,
+					version: null,
+					confidence: 80,
+					signalCount: 1,
+				},
+			]);
+
+		await buildViewerReadModel(archive);
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('writes each page its distinct-referrer count as inbound_link_count', async () => {
+		const rows = await archive
+			.getKnex()('viewer_pages')
+			.select('url', 'inbound_link_count')
+			.orderBy('url');
+		expect(rows.map((row) => [row.url, row.inbound_link_count])).toEqual([
+			['https://example.com', 1],
+			['https://example.com/about', 3],
+			['https://example.com/blog/', 1],
+			['https://example.com/blog/post-1', 0],
+			['https://example.com/docs/guide', 0],
+		]);
+	});
+
+	it('writes a directory index page its directory total as dir_index_inbound_link_count, and null for other pages', async () => {
+		const rows = await archive
+			.getKnex()('viewer_pages')
+			.select('url', 'dir_index_inbound_link_count')
+			.orderBy('url');
+		expect(rows.map((row) => [row.url, row.dir_index_inbound_link_count])).toEqual([
+			['https://example.com', 1],
+			['https://example.com/about', null],
+			['https://example.com/blog/', 1],
+			['https://example.com/blog/post-1', null],
+			['https://example.com/docs/guide', null],
+		]);
+	});
+
+	it('strips the directory index title from a child page title as display_title', async () => {
+		const rows = await archive
+			.getKnex()('viewer_pages')
+			.select('url', 'display_title')
+			.orderBy('url');
+		const displayTitleByUrl = new Map(rows.map((row) => [row.url, row.display_title]));
+		expect(displayTitleByUrl.get('https://example.com/blog/post-1')).toBe('Post 1');
+		expect(displayTitleByUrl.get('https://example.com/blog/')).toBe('Blog | Site');
+	});
+
+	it("writes each graph node's in-degree from the graph edges, 0 for a page nothing links to", async () => {
+		const rows = await archive
+			.getKnex()('viewer_graph_nodes')
+			.select('url', 'indegree')
+			.orderBy('url');
+		expect(rows.map((row) => [row.url, row.indegree])).toEqual([
+			['https://example.com', 1],
+			['https://example.com/about', 3],
+			['https://example.com/blog/', 1],
+			['https://example.com/blog/post-1', 0],
+			['https://example.com/docs/guide', 0],
+		]);
+	});
+
+	it('aggregates page_technologies into viewer_technology_summary: distinct pages, first non-null category, rounded mean confidence', async () => {
+		const rows = await archive
+			.getKnex()('viewer_technology_summary')
+			.select('technology', 'category', 'detected_page_count', 'avg_confidence')
+			.orderBy('technology');
+		expect(rows).toEqual([
+			{
+				technology: 'Astro',
+				category: 'SSG',
+				detected_page_count: 3,
+				avg_confidence: 80,
+			},
+			{
+				technology: 'React',
+				category: 'JS',
+				detected_page_count: 1,
+				avg_confidence: 100,
+			},
+		]);
+	});
+
+	it('aggregates page_technologies into viewer_technology_directory_stats by first-path-segment directory', async () => {
+		const rows = await archive
+			.getKnex()('viewer_technology_directory_stats')
+			.select('root_key', 'directory', 'technology', 'page_count')
+			.orderBy(['directory', 'technology']);
+		expect(rows).toEqual([
+			{
+				root_key: 'https://example.com',
+				directory: 'https://example.com/',
+				technology: 'Astro',
+				page_count: 1,
+			},
+			{
+				root_key: 'https://example.com',
+				directory: 'https://example.com/blog/',
+				technology: 'Astro',
+				page_count: 1,
+			},
+			{
+				root_key: 'https://example.com',
+				directory: 'https://example.com/docs/',
+				technology: 'Astro',
+				page_count: 1,
+			},
+			{
+				root_key: 'https://example.com',
+				directory: 'https://example.com/docs/',
+				technology: 'React',
+				page_count: 1,
+			},
+		]);
 	});
 });
