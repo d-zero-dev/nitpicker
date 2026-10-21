@@ -7,6 +7,8 @@ import type {
 
 import { classifyContentType } from '../classify-content-type.js';
 
+import { propagateDescendantCounts } from './propagate-descendant-counts.js';
+
 /**
  * Structure-relevant fields extracted from one {@link DirectoryTreeSourceRow}
  * by {@link parsePageRow}.
@@ -61,10 +63,24 @@ function parsePageRow(row: DirectoryTreeSourceRow): ParsedPageRow | null {
 	};
 }
 
+/** The identity/position fields of a directory node that is about to be created (everything but its id). */
+interface NewDirectoryNodeFields {
+	/** The parent's `node_id`, or `null` for a root. */
+	parentNodeId: number | null;
+	/** The host this node's tree belongs to. */
+	rootKey: string;
+	/** The node's depth (root is `0`). */
+	depth: number;
+	/** The node's own path segment (`''` for the root). */
+	name: string;
+	/** The node's full path from the root (`'/'` for the root). */
+	path: string;
+}
+
 /**
  * Creates a fresh directory node row with every count column zeroed —
  * counts are filled in later by the page-attachment loop and
- * {@link propagateDescendantCounts}.
+ * `propagateDescendantCounts`.
  * @param params - The node's identity/position fields.
  * @param params.nodeId - The sequential id to assign.
  * @param params.parentNodeId - The parent's `node_id`, or `null` for a root.
@@ -74,14 +90,9 @@ function parsePageRow(row: DirectoryTreeSourceRow): ParsedPageRow | null {
  * @param params.path - The node's full path from the root (`'/'` for the root).
  * @returns A new, empty {@link DirectoryNodeInsertRow}.
  */
-function createEmptyNode(params: {
-	nodeId: number;
-	parentNodeId: number | null;
-	rootKey: string;
-	depth: number;
-	name: string;
-	path: string;
-}): DirectoryNodeInsertRow {
+function createEmptyNode(
+	params: NewDirectoryNodeFields & { nodeId: number },
+): DirectoryNodeInsertRow {
 	return {
 		node_id: params.nodeId,
 		parent_node_id: params.parentNodeId,
@@ -107,22 +118,36 @@ function createEmptyNode(params: {
  * walking each row's segment chain.
  */
 interface DirectoryTreeBuilderState {
-	/** The next unused sequential `node_id` to assign. */
-	nextNodeId: number;
-	/** Every node created so far, keyed by `` `${host}::${path}` `` for O(1) get-or-create. */
-	nodesByKey: Map<string, DirectoryNodeInsertRow>;
+	/**
+	 * Every node created so far, in creation order. `nodes[i].node_id` is
+	 * always `i + 1`, so a `parent_node_id` indexes this array directly.
+	 */
+	nodes: DirectoryNodeInsertRow[];
+	/**
+	 * Child lookup per node, parallel to `nodes` (same index): segment
+	 * → child node: a trie, so finding a child needs only the segment. Why not
+	 * one map keyed by the concatenated `(host, path)`: that builds, and keeps
+	 * alive as a key, a full path string for every node just to find it again.
+	 */
+	childrenByIndex: Map<string, DirectoryNodeInsertRow>[];
+	/** Depth-0 node per host (`root_key`). */
+	rootByHost: Map<string, DirectoryNodeInsertRow>;
 }
 
 /**
- * Builds the `nodesByKey` lookup key for one host/path pair. `::` is not a
- * valid character in a URL host or an already-percent-encoded pathname
- * segment, so it cannot collide across different `(host, path)` pairs.
- * @param host - The host (root_key).
- * @param path - The node's full path.
- * @returns The composite lookup key.
+ * Appends a node to the state, numbering it with the next sequential id.
+ * @param state - The shared builder state, mutated in place.
+ * @param fields - The node's identity/position fields (everything but `nodeId`).
+ * @returns The new node.
  */
-function toNodeKey(host: string, path: string): string {
-	return `${host}::${path}`;
+function appendNode(
+	state: DirectoryTreeBuilderState,
+	fields: NewDirectoryNodeFields,
+): DirectoryNodeInsertRow {
+	const node = createEmptyNode({ ...fields, nodeId: state.nodes.length + 1 });
+	state.nodes.push(node);
+	state.childrenByIndex.push(new Map());
+	return node;
 }
 
 /**
@@ -136,20 +161,18 @@ function getOrCreateRootNode(
 	state: DirectoryTreeBuilderState,
 	host: string,
 ): DirectoryNodeInsertRow {
-	const key = toNodeKey(host, '/');
-	const existing = state.nodesByKey.get(key);
+	const existing = state.rootByHost.get(host);
 	if (existing) {
 		return existing;
 	}
-	const root = createEmptyNode({
-		nodeId: state.nextNodeId++,
+	const root = appendNode(state, {
 		parentNodeId: null,
 		rootKey: host,
 		depth: 0,
 		name: '',
 		path: '/',
 	});
-	state.nodesByKey.set(key, root);
+	state.rootByHost.set(host, root);
 	return root;
 }
 
@@ -171,84 +194,25 @@ function getOrCreateDirectoryNode(
 	dirSegments: readonly string[],
 ): DirectoryNodeInsertRow {
 	let current = getOrCreateRootNode(state, host);
-	let path = '/';
 	for (const segment of dirSegments) {
-		path = `${path}${segment}/`;
-		const key = toNodeKey(host, path);
-		let node = state.nodesByKey.get(key);
+		const children = state.childrenByIndex[current.node_id - 1]!;
+		let node = children.get(segment);
 		if (!node) {
-			node = createEmptyNode({
-				nodeId: state.nextNodeId++,
+			node = appendNode(state, {
 				parentNodeId: current.node_id,
 				rootKey: host,
 				depth: current.depth + 1,
 				name: segment,
-				path,
+				// A node's `path` is its parent's path plus its own segment; the
+				// root's is `/`, so no separate path accumulator is needed.
+				path: `${current.path}${segment}/`,
 			});
-			state.nodesByKey.set(key, node);
+			children.set(segment, node);
 			current.direct_child_dir_count += 1;
 		}
 		current = node;
 	}
 	return current;
-}
-
-/**
- * Folds each node's own (direct-only, as set by the page-attachment loop)
- * `internal_descendant_page_count`/`descendant_html_page_count` up into its
- * parent — processing nodes from deepest to shallowest so that, by the time a
- * node is folded into ITS parent, it already holds its full subtree total
- * (every descendant at every depth is added exactly once, since a node's
- * children are always exactly one depth below it and are therefore always
- * processed in an earlier iteration of this same pass). Also finalises
- * `descendant_page_count` (the sum of the internal/external pair) and
- * `has_children` on every node. Mutates every row in `nodes` in place.
- *
- * `external_descendant_page_count` is not folded because it is structurally
- * always `0` — `buildDirectoryTreeRows` drops external rows before any node
- * exists, so no node ever carries a nonzero value to fold. The column itself
- * is retained (at `0`) to keep the read-model table and the
- * `DirectoryTreeNode` API shape stable.
- *
- * `direct_html_page_count` is NOT folded here — unlike
- * `descendant_html_page_count` (seeded with each node's own direct-HTML
- * count, then accumulated into a subtree total exactly like
- * `internal_descendant_page_count`), it must stay a direct-only count for
- * the caller, so it is left untouched by this pass.
- *
- * `has_children` is deliberately `direct_child_dir_count > 0` alone, NOT
- * `direct_child_dir_count + direct_page_count > 0` — every node this builder
- * creates ends up with at least one direct page or one child directory (a
- * node only exists because some page's path walk passed through or ended at
- * it), so a "has ANY child or page" definition would always be `true` and
- * carry no information. The viewer tree UI's expand arrow only ever reveals
- * child DIRECTORIES via `/api/directory-tree/children` (direct pages come
- * from the separate `/api/directory-tree/pages` panel, not additional tree
- * rows), so `has_children` answers exactly the question that UI needs: does
- * this node have anything to expand into.
- * @param nodes - Every node across every host's tree. On entry,
- *   `internal_descendant_page_count`/`descendant_html_page_count` must hold
- *   only each node's OWN direct counts.
- */
-function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): void {
-	const byId = new Map(nodes.map((node) => [node.node_id, node]));
-	const byDepthDescending = nodes.toSorted((a, b) => b.depth - a.depth);
-	for (const node of byDepthDescending) {
-		if (node.parent_node_id === null) {
-			continue;
-		}
-		const parent = byId.get(node.parent_node_id);
-		if (!parent) {
-			continue;
-		}
-		parent.internal_descendant_page_count += node.internal_descendant_page_count;
-		parent.descendant_html_page_count += node.descendant_html_page_count;
-	}
-	for (const node of nodes) {
-		node.descendant_page_count =
-			node.internal_descendant_page_count + node.external_descendant_page_count;
-		node.has_children = node.direct_child_dir_count > 0 ? 1 : 0;
-	}
 }
 
 /**
@@ -330,10 +294,12 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
  * inserts the result with these explicit `node_id` values, which SQLite's
  * `INTEGER PRIMARY KEY` accepts exactly like caller-supplied `rowid`s.
  *
- * Memory profile: the entire forest is built in memory before returning
- * (no streaming/chunked variant) — the same tradeoff `buildViewerReadModel`
- * already accepts for `viewer_pages`'s insert-row array, consistent with
- * this read model's build-time budget: builds run once at crawl end and may
+ * Memory profile: the entire forest and the page-membership rows are built in
+ * memory before returning (no streaming/chunked variant) — one node per
+ * directory and one small row per page, not per URL string. Rows are parsed
+ * and attached one at a time, so no second array of parsed rows exists, and
+ * the node lookup is a trie (a segment → child map per node) rather than a
+ * map keyed by every node's full path. Builds run once at crawl end and may
  * take minutes, not milliseconds — only reads have a latency contract.
  * @param rows - Every listable page row — the same `sourceRows` array
  *   `buildViewerReadModel` already loads to populate `viewer_pages`.
@@ -343,28 +309,28 @@ function propagateDescendantCounts(nodes: readonly DirectoryNodeInsertRow[]): vo
 export function buildDirectoryTreeRows(
 	rows: readonly DirectoryTreeSourceRow[],
 ): DirectoryTreeBuildResult {
-	const parsedRows: ParsedPageRow[] = [];
-	for (const row of rows) {
+	const state: DirectoryTreeBuilderState = {
+		nodes: [],
+		childrenByIndex: [],
+		rootByHost: new Map(),
+	};
+	const pages: DirectoryPageInsertRow[] = [];
+	for (const sourceRow of rows) {
 		// A 404 URL has no page behind it, whatever its provenance — drop it so
 		// a host whose only internal rows are 404s builds no tree at all.
 		// NULL-status legacy rows are not 404s.
-		if (row.status === 404) {
+		if (sourceRow.status === 404) {
 			continue;
 		}
 		// Known only as a link target, never taken on as a crawl target, so it
 		// gets no node. Not a path test — see this function's docs.
-		if (row.isExternal) {
+		if (sourceRow.isExternal) {
 			continue;
 		}
-		const parsed = parsePageRow(row);
-		if (parsed) {
-			parsedRows.push(parsed);
+		const row = parsePageRow(sourceRow);
+		if (!row) {
+			continue;
 		}
-	}
-
-	const state: DirectoryTreeBuilderState = { nextNodeId: 1, nodesByKey: new Map() };
-	const pages: DirectoryPageInsertRow[] = [];
-	for (const row of parsedRows) {
 		const node = getOrCreateDirectoryNode(state, row.host, row.dirSegments);
 		node.direct_page_count += 1;
 		// Every surviving row is internal by construction, so this is the only
@@ -379,8 +345,7 @@ export function buildDirectoryTreeRows(
 		pages.push({ node_id: node.node_id, page_id: row.id, page_url_sort_key: row.url });
 	}
 
-	const nodes = [...state.nodesByKey.values()];
-	propagateDescendantCounts(nodes);
+	propagateDescendantCounts(state.nodes);
 
-	return { nodes, pages };
+	return { nodes: state.nodes, pages };
 }

@@ -57,10 +57,48 @@ export function buildPageUrlRankMap(
  * from where `ORDER BY url_sort_key` (and thus `listPages`/`viewer_pages`)
  * ranks the same page, silently diverging `/api/images`'s default page-order
  * sort from the Pages view's URL order for affected archives.
+ *
+ * Compares code points, which orders strings exactly as their UTF-8 bytes
+ * do (UTF-8 preserves code point order, and a string that is a prefix of
+ * another sorts first either way), without encoding either string. Why not
+ * `Buffer.compare(Buffer.from(a), Buffer.from(b))`: sorting hundreds of
+ * thousands of URLs makes millions of comparisons, and encoding both operands
+ * in each one allocates two `Buffer`s per comparison — native memory that is
+ * released only when the garbage collector gets to it. A lone surrogate counts
+ * as U+FFFD, which is what the UTF-8 encoding writes for it.
  * @param a - The first URL.
  * @param b - The second URL.
  * @returns Negative if `a` sorts first, positive if `b` sorts first, `0` if equal.
  */
 function compareUrlBinary(a: string, b: string): number {
-	return Buffer.compare(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
+	let indexA = 0;
+	let indexB = 0;
+	while (indexA < a.length && indexB < b.length) {
+		const codePointA = scalarValueAt(a, indexA);
+		const codePointB = scalarValueAt(b, indexB);
+		if (codePointA !== codePointB) {
+			return codePointA < codePointB ? -1 : 1;
+		}
+		// Equal code points have the same width in UTF-16, so both advance together.
+		// A code point above U+FFFF (65_535) is a surrogate pair: two code units.
+		indexA += codePointA > 65_535 ? 2 : 1;
+		indexB += codePointB > 65_535 ? 2 : 1;
+	}
+	if (indexA < a.length) {
+		return 1;
+	}
+	return indexB < b.length ? -1 : 0;
+}
+
+/**
+ * The Unicode scalar value at a UTF-16 index, with a lone surrogate mapped to
+ * U+FFFD as UTF-8 encoding does.
+ * @param text - The string.
+ * @param index - A code unit index that starts a code point.
+ * @returns The scalar value.
+ */
+function scalarValueAt(text: string, index: number): number {
+	const codePoint = text.codePointAt(index)!;
+	// U+D800..U+DFFF (55_296..57_343) are lone surrogates; U+FFFD is 65_533.
+	return codePoint >= 55_296 && codePoint <= 57_343 ? 65_533 : codePoint;
 }

@@ -738,7 +738,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 
 	// Site-wide technology inventory, one row per detected technology —
 	// the read-model counterpart of `getTechnologyInventory`'s live query
-	// against `page_technologies`, produced by `buildTechnologySummaryRows`.
+	// against `page_technologies`, produced by `TechnologySummaryAccumulator`.
 	await trx.raw(`
 		CREATE TABLE viewer_technology_summary (
 			technology text primary key,
@@ -749,7 +749,7 @@ export async function createViewerReadModelTables(trx: Knex): Promise<void> {
 	`);
 
 	// Directory × technology distribution — one row per (directory,
-	// technology) pair, produced by `buildTechnologyDirectoryStatsRows`. No
+	// technology) pair, produced by `TechnologyDirectoryStatsAccumulator`. No
 	// reader remains (the viewer dropped the per-technology directory
 	// breakdown); the table is kept because removing it is a schema change
 	// that bumps `VIEWER_READ_MODEL_SCHEMA_VERSION`, which would force every

@@ -3,6 +3,8 @@ import type { DirIndexInboundLinkCountSourceRow } from './compute-dir-index-inbo
 import { describe, expect, it } from 'vitest';
 
 import { computeDirIndexInboundLinkCountByPageId } from './compute-dir-index-inbound-link-count-by-page-id.js';
+import { computePageDirKeys } from './compute-page-dir-keys.js';
+import { DensePageCounts } from './dense-page-counts.js';
 
 /**
  *
@@ -95,5 +97,44 @@ describe('computeDirIndexInboundLinkCountByPageId', () => {
 		const result = computeDirIndexInboundLinkCountByPageId(rows, counts);
 		expect(result.get(1)).toBe(3);
 		expect(result.get(2)).toBe(8);
+	});
+
+	it('gives the same result from precomputed directory keys, without reading the URLs again', () => {
+		const rows = [
+			row(1, 'https://example.com/blog/'),
+			row(2, 'https://example.com/blog/index.html'),
+			row(3, 'https://example.com/docs/'),
+		];
+		const counts = new Map([
+			[1, 2],
+			[2, 5],
+			[3, 1],
+		]);
+		const dirKeys = computePageDirKeys(rows);
+		// The keys are all that is read: URLs that would not parse change nothing.
+		const unparseable = rows.map((r) => row(r.id, 'not a url'));
+		// /blog/ and /blog/index.html share a directory: 2 + 5 = 7 for both;
+		// /docs/ is alone with 1.
+		expect(computeDirIndexInboundLinkCountByPageId(unparseable, counts, dirKeys)).toEqual(
+			new Map([
+				[1, 7],
+				[2, 7],
+				[3, 1],
+			]),
+		);
+	});
+
+	it('reads counts from a dense counter the same way as from a map', () => {
+		const rows = [
+			row(1, 'https://example.com/blog/'),
+			row(2, 'https://example.com/blog/index.html'),
+		];
+		const dense = new DensePageCounts(10);
+		dense.increment(1);
+		dense.increment(2);
+		dense.increment(2);
+		const result = computeDirIndexInboundLinkCountByPageId(rows, dense);
+		expect(result.get(1)).toBe(3);
+		expect(result.get(2)).toBe(3);
 	});
 });

@@ -1,6 +1,6 @@
-import { tryParseUrl } from '@d-zero/shared/parse-url';
+import type { PageCountLookup, PageDirKeys } from './types.js';
 
-import { originDirnameKey } from './origin-dirname-key.js';
+import { computePageDirKeys } from './compute-page-dir-keys.js';
 
 /** Minimal page shape this function needs from `sourceRows`. */
 export interface DirIndexInboundLinkCountSourceRow {
@@ -25,20 +25,23 @@ export interface DirIndexInboundLinkCountSourceRow {
  * @param inboundLinkCountByPageId - Each page's own inbound link count
  *   (distinct-referrer count from `viewer_anchor_facts`), keyed by
  *   `page_id`. A page with no entry is treated as `0`.
+ * @param dirKeys - The rows' directory keys, when the caller already has them
+ *   (`buildViewerReadModel` computes them once for every consumer). Defaults to
+ *   parsing `rows` here. Must have been computed from this same `rows` array.
  * @returns Map from an index page's `page_id` to its directory's combined
  *   inbound link count. Non-index pages have no entry.
  */
 export function computeDirIndexInboundLinkCountByPageId(
 	rows: readonly DirIndexInboundLinkCountSourceRow[],
-	inboundLinkCountByPageId: ReadonlyMap<number, number>,
+	inboundLinkCountByPageId: PageCountLookup,
+	dirKeys: PageDirKeys = computePageDirKeys(rows),
 ): Map<number, number> {
 	const indexPageIdsByDirname = new Map<string, number[]>();
-	for (const row of rows) {
-		const parsed = tryParseUrl(row.url);
-		if (!parsed?.isIndex) {
+	for (const [i, row] of rows.entries()) {
+		if (!dirKeys.isIndexAt(i)) {
 			continue;
 		}
-		const key = originDirnameKey(parsed);
+		const key = dirKeys.dirKeyAt(i)!;
 		const existing = indexPageIdsByDirname.get(key);
 		if (existing) {
 			existing.push(row.id);

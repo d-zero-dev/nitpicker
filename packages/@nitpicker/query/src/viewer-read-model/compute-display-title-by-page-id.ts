@@ -1,6 +1,6 @@
-import { tryParseUrl } from '@d-zero/shared/parse-url';
+import type { PageDirKeys } from './types.js';
 
-import { originDirnameKey } from './origin-dirname-key.js';
+import { computePageDirKeys } from './compute-page-dir-keys.js';
 
 /** Minimal page shape this function needs from `sourceRows`. */
 export interface DisplayTitleSourceRow {
@@ -24,39 +24,40 @@ export interface DisplayTitleSourceRow {
  * its untrimmed title, a scan-order bug this full-archive computation
  * removes by construction rather than by ordering the scan).
  * @param rows - Every page's id/url/title, from `sourceRows`.
+ * @param dirKeys - The rows' directory keys, when the caller already has them
+ *   (`buildViewerReadModel` computes them once for every consumer). Defaults to
+ *   parsing `rows` here. Must have been computed from this same `rows` array.
  * @returns Map from `page_id` to its display title. A `null` source title
  *   maps to `null`; a title with nothing left to strip maps to itself
  *   verbatim.
  */
 export function computeDisplayTitleByPageId(
 	rows: readonly DisplayTitleSourceRow[],
+	dirKeys: PageDirKeys = computePageDirKeys(rows),
 ): Map<number, string | null> {
 	const indexTitleByDirname = new Map<string, string>();
-	for (const row of rows) {
+	for (const [i, row] of rows.entries()) {
 		if (!row.title) {
 			continue;
 		}
-		const parsed = tryParseUrl(row.url);
-		if (parsed?.isIndex) {
-			indexTitleByDirname.set(originDirnameKey(parsed), row.title);
+		if (dirKeys.isIndexAt(i)) {
+			indexTitleByDirname.set(dirKeys.dirKeyAt(i)!, row.title);
 		}
 	}
 
 	const result = new Map<number, string | null>();
-	for (const row of rows) {
+	for (const [i, row] of rows.entries()) {
 		if (!row.title) {
 			result.set(row.id, row.title);
 			continue;
 		}
-		const parsed = tryParseUrl(row.url);
-		if (!parsed) {
+		if (!dirKeys.isParsedAt(i)) {
 			result.set(row.id, row.title);
 			continue;
 		}
-		const dirKey = originDirnameKey(parsed);
-		const parentDir = `/${parsed.paths.slice(0, -2).join('/')}`;
-		const parentDirKey = originDirnameKey({ ...parsed, dirname: parentDir });
-		const dirTitle = parsed.isIndex
+		const dirKey = dirKeys.dirKeyAt(i)!;
+		const parentDirKey = dirKeys.parentDirKeyAt(i)!;
+		const dirTitle = dirKeys.isIndexAt(i)
 			? (indexTitleByDirname.get(parentDirKey) ?? indexTitleByDirname.get(dirKey))
 			: (indexTitleByDirname.get(dirKey) ?? indexTitleByDirname.get(parentDirKey));
 		if (dirTitle && row.title.includes(dirTitle)) {

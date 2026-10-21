@@ -1,4 +1,5 @@
 import type { BuildViewerReadModelOptions, PageSource } from '../types.js';
+import type { PageCountLookup } from './types.js';
 import type { ExURL } from '@d-zero/shared/parse-url';
 import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { Knex } from 'knex';
@@ -21,8 +22,6 @@ import { buildDirectoryTreeRows } from './build-directory-tree-rows.js';
 import { buildIsolatedReadModelRows } from './build-isolated-read-model-rows.js';
 import { buildPageNaturalUrlRankMap } from './build-page-natural-url-rank-map.js';
 import { buildPageUrlRankMap } from './build-page-url-rank-map.js';
-import { buildTechnologyDirectoryStatsRows } from './build-technology-directory-stats-rows.js';
-import { buildTechnologySummaryRows } from './build-technology-summary-rows.js';
 import { computeAnchorFactRows } from './compute-anchor-fact-rows.js';
 import { computeDirIndexInboundLinkCountByPageId } from './compute-dir-index-inbound-link-count-by-page-id.js';
 import { computeDisplayTitleByPageId } from './compute-display-title-by-page-id.js';
@@ -33,14 +32,18 @@ import { computeGraphReadModelRows } from './compute-graph-read-model-rows.js';
 import { computeHeaderCheckInsertRows } from './compute-header-check-insert-rows.js';
 import { computeImageInsertRows } from './compute-image-insert-rows.js';
 import { computeMismatchInsertRows } from './compute-mismatch-rows.js';
+import { computePageDirKeys } from './compute-page-dir-keys.js';
 import { computePageFacetBuckets } from './compute-page-facet-buckets.js';
 import { computeResourceGroupRows } from './compute-resource-group-rows.js';
 import { computeResourceInsertRows } from './compute-resource-rows.js';
 import { createViewerReadModelIndexes } from './create-viewer-read-model-indexes.js';
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
+import { DensePageCounts } from './dense-page-counts.js';
 import { deriveExternalLinkSummaryRows } from './derive-external-link-summary-rows.js';
 import { dropViewerReadModelTables } from './drop-viewer-read-model-tables.js';
 import { NULL_STATUS_SENTINEL } from './null-status-sentinel.js';
+import { TechnologyDirectoryStatsAccumulator } from './technology-directory-stats-accumulator.js';
+import { TechnologySummaryAccumulator } from './technology-summary-accumulator.js';
 import { upsertExternalLinkRows } from './upsert-external-link-rows.js';
 import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-version.js';
 
@@ -48,13 +51,23 @@ import { VIEWER_READ_MODEL_SCHEMA_VERSION } from './viewer-read-model-schema-ver
 const INSERT_CHUNK_SIZE = 500;
 
 /** Named parameters for {@link insertChunked}. */
-interface InsertChunkedOptions<T extends object> {
+interface InsertChunkedOptions<T extends object, S extends object = T> {
 	/** The open transaction to insert through. */
 	readonly trx: Knex;
 	/** Destination table name. */
 	readonly table: string;
-	/** Rows to insert, in order. A no-op for an empty array (the loop body never runs). */
-	readonly rows: readonly T[];
+	/**
+	 * The rows to insert, in order — or, when `mapRow` is given, the source rows
+	 * `mapRow` converts. A no-op for an empty array (the loop body never runs).
+	 */
+	readonly rows: readonly S[];
+	/**
+	 * Converts a source row to the row that is inserted. When given, each chunk
+	 * is converted just before its `INSERT` and dropped right after it, so the
+	 * converted rows never exist for the whole table at once — only the source
+	 * rows do. Omit when `rows` already are the rows to insert.
+	 */
+	readonly mapRow?: (row: S) => T;
 	/**
 	 * Called after each chunk's `INSERT` resolves, with that chunk's own row
 	 * count — not a running total, since some callers accumulate one shared
@@ -75,8 +88,10 @@ interface InsertChunkedOptions<T extends object> {
  * @param options - See {@link InsertChunkedOptions}.
  * @param options.trx - The open transaction to insert through.
  * @param options.table - Destination table name.
- * @param options.rows - Rows to insert, in order. A no-op for an empty
- *   array (the loop body never runs).
+ * @param options.rows - Rows to insert (or, with `mapRow`, source rows to
+ *   convert), in order. A no-op for an empty array (the loop body never runs).
+ * @param options.mapRow - Converts each source row just before its chunk is
+ *   inserted — see {@link InsertChunkedOptions.mapRow}.
  * @param options.onChunkInserted - Called after each chunk's `INSERT`
  *   resolves, with that chunk's own row count — see
  *   {@link InsertChunkedOptions.onChunkInserted}.
@@ -85,21 +100,32 @@ interface InsertChunkedOptions<T extends object> {
  * await insertChunked({
  *   trx,
  *   table: 'viewer_pages',
- *   rows: insertRows,
+ *   rows: sourceRows,
+ *   mapRow: (row) => toViewerPageInsertRow(row, ...lookups),
  *   onChunkInserted: (n) => {
  *     insertedRows += n;
- *     onProgress?.({ insertedRows, totalRows: insertRows.length });
+ *     onProgress?.({ insertedRows, totalRows: sourceRows.length });
  *   },
  * });
  */
-async function insertChunked<T extends object>({
+async function insertChunked<T extends object>(
+	options: InsertChunkedOptions<T, T> & { readonly mapRow?: undefined },
+): Promise<void>;
+async function insertChunked<T extends object, S extends object>(
+	options: InsertChunkedOptions<T, S> & { readonly mapRow: (row: S) => T },
+): Promise<void>;
+async function insertChunked<T extends object, S extends object>({
 	trx,
 	table,
 	rows,
+	mapRow,
 	onChunkInserted,
-}: InsertChunkedOptions<T>): Promise<void> {
+}: InsertChunkedOptions<T, S>): Promise<void> {
 	for (let start = 0; start < rows.length; start += INSERT_CHUNK_SIZE) {
-		const chunk = rows.slice(start, start + INSERT_CHUNK_SIZE);
+		const sourceChunk = rows.slice(start, start + INSERT_CHUNK_SIZE);
+		const chunk = mapRow
+			? sourceChunk.map((row) => mapRow(row))
+			: (sourceChunk as unknown as T[]);
 		await trx(table).insert(chunk);
 		onChunkInserted?.(chunk.length);
 	}
@@ -107,10 +133,12 @@ async function insertChunked<T extends object>({
 
 /**
  * Rows read per keyset chunk while loading the `viewer_pages` source rows
- * and the technology source rows (issue #294). The full row sets are still
- * accumulated in memory exactly as the previous single-SELECT read did —
- * chunking exists purely so the multi-minute scan can report progress, not
- * to bound memory.
+ * and the technology source rows. The `viewer_pages` source rows are all kept
+ * (every later table that is derived from pages reads them), so for those the
+ * chunking exists so the scan can report progress — one `SELECT` would leave
+ * the build silent for minutes on a large archive. The technology rows are
+ * folded into their aggregates chunk by chunk and are not kept, so there the
+ * chunk size does bound memory.
  */
 const SOURCE_READ_CHUNK_SIZE = 2000;
 
@@ -552,7 +580,7 @@ function toViewerPageInsertRow(
 	row: PagesSourceRow,
 	naturalUrlRankByPageId: ReadonlyMap<number, number>,
 	displayTitleByPageId: ReadonlyMap<number, string | null>,
-	inboundLinkCountByPageId: ReadonlyMap<number, number>,
+	inboundLinkCountByPageId: PageCountLookup,
 	dirIndexInboundLinkCountByPageId: ReadonlyMap<number, number>,
 ): ViewerPageInsertRow {
 	const statusSortKey = row.status ?? NULL_STATUS_SENTINEL;
@@ -752,6 +780,17 @@ function toViewerPageInsertRow(
  * requires real pagination-cursor math tied to a specific page size/page
  * number, which belongs to whichever issue actually wires up `/api/pages`
  * page-number jumps.
+ *
+ * Memory policy: the only per-page rows held for the whole build are
+ * `sourceRows` and the lookups derived from them. Everything written from
+ * `sourceRows` is converted chunk by chunk (`insertChunked`'s `mapRow`) and
+ * dropped after its `INSERT`; the technology rows are folded into
+ * `TechnologySummaryAccumulator` / `TechnologyDirectoryStatsAccumulator` as
+ * they are read; counters keyed by page id are `DensePageCounts`; each row's
+ * URL is parsed twice (`computePageDirKeys`, then its insert-row conversion).
+ * Why not hold the converted rows too: they are a second copy of every page
+ * with dozens of columns. Most of the build's peak RSS is not in these arrays
+ * but in the native SQLite side, which this policy does not touch.
  *
  * Always a full rebuild — there is no incremental/diff path.
  * @param accessor - The archive accessor to build against. Must be
@@ -1052,7 +1091,7 @@ export async function buildViewerReadModel(
 
 		// Separate scan (not part of `sourceRows`, which only selects
 		// `pages`/`page_meta`) — one row per (page, technology) pair, joined
-		// to the page's URL for `buildTechnologyDirectoryStatsRows`'
+		// to the page's URL for `TechnologyDirectoryStatsAccumulator`'s
 		// directory bucketing. Feeds `viewer_technology_summary` /
 		// `viewer_technology_directory_stats`.
 		//
@@ -1062,13 +1101,8 @@ export async function buildViewerReadModel(
 		// than keyset-LIMIT: a LIMIT cursor on `pageId` could split one
 		// page's technology rows across chunks and then skip the remainder.
 		onPhase?.('loadingTechnologyRows');
-		const technologySourceRows: Array<{
-			pageId: number;
-			url: string;
-			technology: string;
-			category: string | null;
-			confidence: number;
-		}> = [];
+		const technologySummary = new TechnologySummaryAccumulator();
+		const technologyDirectoryStats = new TechnologyDirectoryStatsAccumulator();
 		for (
 			let rangeEnd = SOURCE_READ_CHUNK_SIZE;
 			maxContentItemId > 0;
@@ -1093,9 +1127,10 @@ export async function buildViewerReadModel(
 					'pt.category as category',
 					'pt.confidence as confidence',
 				);
-			for (const row of chunk) {
-				technologySourceRows.push(row);
-			}
+			// Folded into the two aggregates and dropped: the rows (one per page
+			// × technology, with the page URL) are never all held at once.
+			technologySummary.add(chunk);
+			technologyDirectoryStats.add(chunk);
 			onProgress?.({
 				insertedRows: Math.min(rangeEnd, maxContentItemId),
 				totalRows: maxContentItemId,
@@ -1132,12 +1167,11 @@ export async function buildViewerReadModel(
 		// bounded-memory guarantee the chunked read exists to provide.
 		//
 		// `inboundLinkCountByPageId` IS a whole-build JS-side accumulator, but
-		// a bounded one: one integer per page that receives at least one
-		// internal link (at most `sourceRows.length` entries), not one entry
-		// per edge or per link occurrence — the same bounded-by-page-count
-		// shape as `naturalUrlRankByPageId`/`pageIdByUrl` above.
+		// a bounded one: a 4-byte counter per possible page id (a dense
+		// `Uint32Array` sized from `content_items`' largest id), not an entry
+		// per edge or per link occurrence, and no per-page object.
 		onPhase?.('buildingAnchorFacts');
-		const inboundLinkCountByPageId = new Map<number, number>();
+		const inboundLinkCountByPageId = new DensePageCounts(maxContentItemId + 1);
 		for await (const anchorFactChunk of computeAnchorFactRows(
 			trx,
 			undefined,
@@ -1148,10 +1182,7 @@ export async function buildViewerReadModel(
 			await insertChunked({ trx, table: 'viewer_anchor_facts', rows: anchorFactChunk });
 			await upsertExternalLinkRows(trx, deriveExternalLinkSummaryRows(anchorFactChunk));
 			for (const fact of anchorFactChunk) {
-				inboundLinkCountByPageId.set(
-					fact.dest_page_id,
-					(inboundLinkCountByPageId.get(fact.dest_page_id) ?? 0) + 1,
-				);
+				inboundLinkCountByPageId.increment(fact.dest_page_id);
 			}
 		}
 
@@ -1160,22 +1191,18 @@ export async function buildViewerReadModel(
 		// the same insert pass rather than a second UPDATE sweep. See each
 		// function's docs for why this needs a full-archive view
 		// `joinViewerPageIdsToListItems`'s per-page-id lookup cannot provide.
-		const displayTitleByPageId = computeDisplayTitleByPageId(sourceRows);
+		// One URL parse per row for both directory-keyed lookups below; the
+		// second (and last) parse of each row happens when its `viewer_pages`
+		// chunk is converted.
+		const pageDirKeys = computePageDirKeys(sourceRows);
+		const displayTitleByPageId = computeDisplayTitleByPageId(sourceRows, pageDirKeys);
 		const dirIndexInboundLinkCountByPageId = computeDirIndexInboundLinkCountByPageId(
 			sourceRows,
 			inboundLinkCountByPageId,
-		);
-		const insertRows = sourceRows.map((row) =>
-			toViewerPageInsertRow(
-				row,
-				naturalUrlRankByPageId,
-				displayTitleByPageId,
-				inboundLinkCountByPageId,
-				dirIndexInboundLinkCountByPageId,
-			),
+			pageDirKeys,
 		);
 
-		const totalRows = insertRows.length;
+		const totalRows = sourceRows.length;
 		let insertedRows = 0;
 
 		onPhase?.('buildingPages');
@@ -1190,7 +1217,15 @@ export async function buildViewerReadModel(
 		await insertChunked({
 			trx,
 			table: 'viewer_pages',
-			rows: insertRows,
+			rows: sourceRows,
+			mapRow: (row) =>
+				toViewerPageInsertRow(
+					row,
+					naturalUrlRankByPageId,
+					displayTitleByPageId,
+					inboundLinkCountByPageId,
+					dirIndexInboundLinkCountByPageId,
+				),
 			onChunkInserted: (n) => {
 				insertedRows += n;
 				onProgress?.({ insertedRows, totalRows });
@@ -1202,15 +1237,8 @@ export async function buildViewerReadModel(
 		// docs for the tree-building rules (host eligibility, trailing-slash
 		// directory/page boundary, count propagation).
 		onPhase?.('buildingDirectoryTree');
-		const { nodes: directoryNodes, pages: directoryPages } = buildDirectoryTreeRows(
-			sourceRows.map((row) => ({
-				id: row.id,
-				url: row.url,
-				isExternal: row.isExternal,
-				contentType: row.contentType,
-				status: row.status,
-			})),
-		);
+		const { nodes: directoryNodes, pages: directoryPages } =
+			buildDirectoryTreeRows(sourceRows);
 		const directoryTotalRows = directoryNodes.length + directoryPages.length;
 		let directoryInsertedRows = 0;
 		await insertChunked({
@@ -1238,12 +1266,11 @@ export async function buildViewerReadModel(
 			},
 		});
 
-		// Reuses `technologySourceRows` (already loaded above) instead of a
-		// second `page_technologies` scan.
+		// The aggregates were filled while `page_technologies` was scanned above,
+		// so there is no second scan and no row array to build from.
 		onPhase?.('buildingTechnologySummary');
-		const technologySummaryRows = buildTechnologySummaryRows(technologySourceRows);
-		const technologyDirectoryStatsRows =
-			buildTechnologyDirectoryStatsRows(technologySourceRows);
+		const technologySummaryRows = technologySummary.toRows();
+		const technologyDirectoryStatsRows = technologyDirectoryStats.toRows();
 		const technologyTotalRows =
 			technologySummaryRows.length + technologyDirectoryStatsRows.length;
 		let technologyInsertedRows = 0;
@@ -1302,7 +1329,7 @@ export async function buildViewerReadModel(
 		});
 
 		onPhase?.('buildingGraph');
-		const graphIndegreeByPageId = new Map<number, number>();
+		const graphIndegreeByPageId = new DensePageCounts(maxContentItemId + 1);
 		for await (const graphEdgeChunk of computeGraphReadModelRows(
 			trx,
 			undefined,
@@ -1311,24 +1338,25 @@ export async function buildViewerReadModel(
 			},
 		)) {
 			for (const edge of graphEdgeChunk) {
-				graphIndegreeByPageId.set(
-					edge.target_page_id,
-					(graphIndegreeByPageId.get(edge.target_page_id) ?? 0) + 1,
-				);
+				graphIndegreeByPageId.increment(edge.target_page_id);
 			}
 			await insertChunked({ trx, table: 'viewer_graph_edges', rows: graphEdgeChunk });
 		}
 
-		const graphNodeRows = sourceRows
-			.filter((row) => !row.isExternal && row.contentType === 'text/html')
-			.map((row) => ({
+		await insertChunked({
+			trx,
+			table: 'viewer_graph_nodes',
+			rows: sourceRows.filter(
+				(row) => !row.isExternal && row.contentType === 'text/html',
+			),
+			mapRow: (row) => ({
 				page_id: row.id,
 				url: row.url,
 				status: row.status,
-				indegree: graphIndegreeByPageId.get(row.id) ?? 0,
+				indegree: graphIndegreeByPageId.get(row.id),
 				source: row.source,
-			}));
-		await insertChunked({ trx, table: 'viewer_graph_nodes', rows: graphNodeRows });
+			}),
+		});
 
 		// Independent of `pages`/`anchors` — reads `resources` +
 		// `resources-referrers` in bounded chunks (see
@@ -1473,7 +1501,7 @@ export async function buildViewerReadModel(
 			await insertChunked({ trx, table: 'viewer_mismatches', rows: mismatchChunk });
 		}
 
-		const total = insertRows.length;
+		const total = sourceRows.length;
 		await trx('viewer_query_profiles').insert({
 			scope: 'pages',
 			profile_key: 'default',

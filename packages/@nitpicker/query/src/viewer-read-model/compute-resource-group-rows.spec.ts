@@ -421,3 +421,116 @@ describe('computeResourceGroupRows — referrer sample cap', () => {
 		expect(urlLines.length + hiddenCount).toBe(REFERRER_COUNT);
 	});
 });
+
+describe('computeResourceGroupRows — a page sampled by several groups', () => {
+	const workingDir = path.resolve(
+		__dirname,
+		'__test_fixtures_compute_resource_group_rows_shared_samples__',
+	);
+	const archiveFilePath = path.resolve(
+		workingDir,
+		'compute-resource-group-rows-shared-samples-test.nitpicker',
+	);
+	let archive: InstanceType<typeof Archive>;
+
+	beforeAll(async () => {
+		const { mkdirSync } = await import('node:fs');
+		mkdirSync(workingDir, { recursive: true });
+		archive = await Archive.create({ filePath: archiveFilePath, cwd: workingDir });
+		await archive.setConfig(BASE_CONFIG);
+
+		for (const slug of ['page-a', 'page-b', 'page-c']) {
+			await archive.setPage({
+				url: parseUrl(`https://example.com/${slug}`)!,
+				redirectPaths: [],
+				isExternal: false,
+				isTarget: true,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/html',
+				contentLength: 100,
+				responseHeaders: {},
+				html: '',
+				meta: { ...META, title: slug },
+				anchorList: [],
+				imageList: [],
+				isSkipped: false,
+			});
+		}
+		for (const name of ['one.css', 'two.css', 'three.css']) {
+			await archive.setResources({
+				url: parseUrl(`https://example.com/${name}`)!,
+				isExternal: false,
+				isError: false,
+				status: 200,
+				statusText: 'OK',
+				contentType: 'text/css',
+				contentLength: 10,
+				compress: false,
+				cdn: false,
+				headers: {},
+			});
+		}
+		// page-a and page-b are referrers of all three stylesheets (so each
+		// group samples the same two pages); page-c only of three.css.
+		for (const name of ['one.css', 'two.css', 'three.css']) {
+			for (const slug of ['page-a', 'page-b']) {
+				await archive.setResourcesReferrers({
+					url: `https://example.com/${slug}`,
+					src: `https://example.com/${name}`,
+				});
+			}
+		}
+		await archive.setResourcesReferrers({
+			url: 'https://example.com/page-c',
+			src: 'https://example.com/three.css',
+		});
+	});
+
+	afterAll(async () => {
+		if (archive) {
+			await archive.releaseHandle();
+		}
+		const { rmSync } = await import('node:fs');
+		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('shows each sampled page URL, and only its own referrers, in every group note', async () => {
+		const rows = await archive
+			.getKnex()
+			.transaction((trx) => computeResourceGroupRows(trx));
+		const noteLines = (url: string) =>
+			rows
+				.find((row) => row.canonical_url === url)!
+				.referrer_note!.split('\n')
+				.toSorted();
+		expect(noteLines('https://example.com/one.css')).toEqual([
+			'https://example.com/page-a',
+			'https://example.com/page-b',
+		]);
+		expect(noteLines('https://example.com/two.css')).toEqual([
+			'https://example.com/page-a',
+			'https://example.com/page-b',
+		]);
+		expect(noteLines('https://example.com/three.css')).toEqual([
+			'https://example.com/page-a',
+			'https://example.com/page-b',
+			'https://example.com/page-c',
+		]);
+	});
+
+	it('counts each group distinct referrers independently of the shared samples', async () => {
+		const rows = await archive
+			.getKnex()
+			.transaction((trx) => computeResourceGroupRows(trx));
+		expect(
+			rows
+				.map((row) => [row.canonical_url, row.referrer_count])
+				.toSorted((a, b) => String(a[0]).localeCompare(String(b[0]))),
+		).toEqual([
+			['https://example.com/one.css', 2],
+			['https://example.com/three.css', 3],
+			['https://example.com/two.css', 2],
+		]);
+	});
+});

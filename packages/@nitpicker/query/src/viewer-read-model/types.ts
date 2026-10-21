@@ -67,7 +67,8 @@ export interface FacetBucketRow {
  * Minimal shape `buildDirectoryTreeRows` needs from each listable `pages`
  * row. A structural subset of `build-viewer-read-model.ts`'s private
  * `PagesSourceRow` — the same `sourceRows` array already loaded for
- * `viewer_pages` is reused here, so no second `pages` SELECT is issued.
+ * `viewer_pages` is passed in as it is, so no second `pages` SELECT is issued
+ * and no copy of the rows is made. Fields beyond these are never read.
  */
 export interface DirectoryTreeSourceRow {
 	/** `pages.id` — becomes `viewer_directory_pages.page_id`. */
@@ -486,8 +487,10 @@ export interface ResourceInsertRows {
 }
 
 /**
- * Minimal shape `buildTechnologySummaryRows` / `buildTechnologyDirectoryStatsRows`
- * need from each `page_technologies` row (joined to its page's URL).
+ * Minimal shape `TechnologySummaryAccumulator` / `TechnologyDirectoryStatsAccumulator`
+ * (and their batch forms `buildTechnologySummaryRows` /
+ * `buildTechnologyDirectoryStatsRows`) need from each `page_technologies` row
+ * (joined to its page's URL).
  */
 export interface TechnologySourceRow {
 	/** The page's absolute URL — used only to derive its directory bucket. */
@@ -500,7 +503,7 @@ export interface TechnologySourceRow {
 
 /**
  * One row to insert into `viewer_technology_summary` — one row per detected
- * technology across the whole archive, produced by `buildTechnologySummaryRows`.
+ * technology across the whole archive, produced by `TechnologySummaryAccumulator`.
  */
 export interface TechnologySummaryInsertRow {
 	technology: string;
@@ -514,7 +517,7 @@ export interface TechnologySummaryInsertRow {
 
 /**
  * One row to insert into `viewer_technology_directory_stats` — one
- * (directory, technology) pair, produced by `buildTechnologyDirectoryStatsRows`.
+ * (directory, technology) pair, produced by `TechnologyDirectoryStatsAccumulator`.
  * A page can contribute to multiple rows (once per detected technology) since
  * `page_technologies` is not limited to a single "primary" technology per page.
  */
@@ -568,4 +571,36 @@ export interface ImageInsertRow {
 	 * becomes `0` rather than requiring a nullable sort column.
 	 */
 	is_lazy: number;
+}
+
+/**
+ * Per-row directory keys of a page list, computed by one URL parse per row
+ * (see `computePageDirKeys`) and read by index: row `i` is the `i`-th row of
+ * the array the keys were computed from.
+ */
+export interface PageDirKeys {
+	/** How many distinct key strings are held (a directory appears once however many rows it has). */
+	readonly keyCount: number;
+	/** Whether row `index`'s URL parsed; when `false` every other accessor reports "none". */
+	isParsedAt(index: number): boolean;
+	/** `originDirnameKey` of row `index`'s own directory, or `undefined` for an unparseable URL. */
+	dirKeyAt(index: number): string | undefined;
+	/**
+	 * `originDirnameKey` of the directory two path segments above row `index`'s
+	 * URL (the parent a page-list title/inbound-count lookup falls back to), or
+	 * `undefined` for an unparseable URL.
+	 */
+	parentDirKeyAt(index: number): string | undefined;
+	/** Whether row `index`'s URL is a directory index (`/dir/`); `false` for an unparseable URL. */
+	isIndexAt(index: number): boolean;
+}
+
+/**
+ * Read side of a per-page counter: what a `Map<number, number>` and a
+ * `DensePageCounts` have in common, so a consumer works with either. `get`
+ * returns `undefined` or `0` for a page with no count — callers treat both as zero.
+ */
+export interface PageCountLookup {
+	/** The count recorded for `pageId`, or `undefined`/`0` when none. */
+	get(pageId: number): number | undefined;
 }
