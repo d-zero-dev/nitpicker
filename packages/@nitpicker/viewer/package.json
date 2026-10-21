@@ -47,7 +47,7 @@
 	},
 	"dependencies": {
 		"@d-zero/dealer": "1.14.0",
-		"@hono/node-server": "2.1.4",
+		"@hono/node-server": "2.1.5",
 		"@nitpicker/archive": "0.24.0",
 		"@nitpicker/query": "0.24.0",
 		"@tanstack/react-query": "5.102.8",
@@ -72,7 +72,7 @@
 		"@types/react": "19.2.18",
 		"@types/react-dom": "19.2.7",
 		"@vitejs/plugin-react": "6.1.2",
-		"eslint-plugin-storybook": "10.6.1",
+		"eslint-plugin-storybook": "10.6.2",
 		"graphology-types": "0.24.8",
 		"jsdom": "30.0.1",
 		"storybook": "10.6.1",
