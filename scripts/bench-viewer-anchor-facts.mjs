@@ -34,10 +34,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-import knex from 'knex';
+import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
+import Archive from '@nitpicker/archive/archive';
 
-import { initSchema } from '../packages/@nitpicker/archive/lib/init-schema.js';
-import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 import { listViewerBrokenLinks } from '../packages/@nitpicker/query/lib/list-viewer-broken-links.js';
 import { buildViewerReadModel } from '../packages/@nitpicker/query/lib/viewer-read-model/build-viewer-read-model.js';
 import { createApp } from '../packages/@nitpicker/viewer/lib/create-app.js';
@@ -83,16 +82,19 @@ const MATRIX = [
 ];
 
 /**
- * Materialises a disk-backed synthetic archive DB with `n` `pages` rows and
- * `n * ANCHOR_FANOUT` `anchors` rows. Status mix (200/301/404/500/null)
- * matches `bench-viewer-pages-read-model.mjs`'s real-world skew. Anchor
- * targets are deterministic offsets from the source page index, including
- * one guaranteed duplicate target per page (exercises `count` dedup) and a
- * regular hit rate on 404 destinations (exercises `is_broken`).
- * @param {number} n - The number of page rows to insert.
- * @returns {Promise<{db: import('knex').Knex, dbFilePath: string, cleanupDir: string, anchorRowCount: number}>}
- *   The seeded Knex instance, its backing file/dir (for size + cleanup),
- *   and the total anchor row count inserted.
+ * Materialises a disk-backed synthetic archive with `n` pages and
+ * `n * ANCHOR_FANOUT` anchors, seeded through the real write path
+ * (`Archive.setPage` with an `anchorList`, as a live crawl writes it — a fresh
+ * archive has no `pages` / `anchors` tables to insert into). Status mix
+ * (200/301/404/500/null) matches `bench-viewer-pages-read-model.mjs`'s
+ * real-world skew. Anchor targets are deterministic offsets from the source
+ * page index, including one guaranteed duplicate target per page (exercises
+ * `count` dedup) and a regular hit rate on 404 destinations (exercises
+ * `is_broken`).
+ * @param {number} n - The number of pages to seed.
+ * @returns {Promise<{archive: import('@nitpicker/archive/archive').default, db: import('knex').Knex, dbFilePath: string, cleanupDir: string, anchorRowCount: number}>}
+ *   The seeded, still-open archive, its Knex instance, its backing file/dir
+ *   (for size + cleanup), and the total anchor count written.
  */
 async function makeDb(n) {
 	const cleanupDir = path.join(
@@ -101,53 +103,38 @@ async function makeDb(n) {
 	);
 	rmSync(cleanupDir, { recursive: true, force: true });
 	mkdirSync(cleanupDir, { recursive: true });
-	const dbFilePath = path.join(cleanupDir, 'db.sqlite');
 
-	const db = knex({
-		client: LibsqlDialect,
-		connection: { filename: dbFilePath },
-		useNullAsDefault: true,
+	const archive = await Archive.create({
+		filePath: path.join(cleanupDir, 'archive.nitpicker'),
+		cwd: cleanupDir,
 	});
-	await initSchema(db);
+	await archive.setConfig({
+		baseUrl: 'https://example.com',
+		name: 'bench-viewer-anchor-facts',
+		version: '0.13.0',
+		recursive: true,
+		interval: 0,
+		image: true,
+		fetchExternal: false,
+		parallels: 1,
+		roots: ['https://example.com'],
+		excludes: [],
+		excludeKeywords: [],
+		excludeUrls: [],
+		maxExcludedDepth: 0,
+		retry: 3,
+		fromList: false,
+		disableQueries: false,
+		userAgent: 'bench',
+		ignoreRobots: false,
+	});
 
 	const STATUSES = [200, 200, 200, 200, 301, 404, 500, null];
-	const CHUNK = 100;
-
-	const pageRows = [];
-	for (let i = 0; i < n; i++) {
-		const padded = String(i).padStart(8, '0');
-		pageRows.push({
-			url: `https://example.com/page-${padded}`,
-			scraped: 1,
-			isTarget: 1,
-			isExternal: 0,
-			isSkipped: 0,
-			redirectDestId: null,
-			status: STATUSES[i % STATUSES.length],
-			statusText: 'OK',
-			contentType: 'text/html',
-			contentLength: 1000,
-			title: `Page ${padded}`,
-			source: 'crawled',
-			tag_count: 0,
-			jsonld_count: 0,
-		});
-		if (pageRows.length >= CHUNK) {
-			await db('pages').insert(pageRows);
-			pageRows.length = 0;
-		}
-	}
-	if (pageRows.length > 0) {
-		await db('pages').insert(pageRows);
-	}
-
-	const idRows = await db('pages').select('id').orderBy('id');
-	const idByIndex = idRows.map((row) => row.id);
+	const urlOf = (index) => `https://example.com/page-${String(index).padStart(8, '0')}`;
 
 	let anchorRowCount = 0;
-	const anchorRows = [];
 	for (let i = 0; i < n; i++) {
-		const sourceId = idByIndex[i];
+		const anchorList = [];
 		for (let k = 0; k < ANCHOR_FANOUT; k++) {
 			// A fixed prime-step walk spreads targets across the whole page
 			// set deterministically; k === ANCHOR_FANOUT - 1 repeats the k=0
@@ -156,19 +143,55 @@ async function makeDb(n) {
 			// with count=2.
 			const step = k === ANCHOR_FANOUT - 1 ? 0 : k;
 			const targetIndex = (i + 1 + step * 97) % n;
-			anchorRows.push({ pageId: sourceId, hrefId: idByIndex[targetIndex] });
+			anchorList.push({
+				href: parseUrl(urlOf(targetIndex)),
+				isExternal: false,
+				title: null,
+				textContent: 'link',
+			});
 			anchorRowCount++;
 		}
-		if (anchorRows.length >= CHUNK) {
-			await db('anchors').insert(anchorRows);
-			anchorRows.length = 0;
-		}
-	}
-	if (anchorRows.length > 0) {
-		await db('anchors').insert(anchorRows);
+		const status = STATUSES[i % STATUSES.length];
+		await archive.setPage({
+			url: parseUrl(urlOf(i)),
+			redirectPaths: [],
+			isExternal: false,
+			isTarget: true,
+			status,
+			statusText: status ? 'OK' : '',
+			contentType: 'text/html',
+			contentLength: 1000,
+			responseHeaders: {},
+			html: '',
+			mainContents: null,
+			scrollHeight: null,
+			meta: {
+				lang: null,
+				title: `Page ${String(i).padStart(8, '0')}`,
+				description: null,
+				keywords: null,
+				noindex: false,
+				nofollow: false,
+				noarchive: false,
+				canonical: null,
+				alternate: null,
+				'og:type': null,
+				'og:title': null,
+				'og:site_name': null,
+				'og:description': null,
+				'og:url': null,
+				'og:image': null,
+				'twitter:card': null,
+			},
+			anchorList,
+			imageList: [],
+			isSkipped: false,
+		});
 	}
 
-	return { db, dbFilePath, cleanupDir, anchorRowCount };
+	// `Archive.create`'s working directory is `<cwd>/._nitpicker-<basename>`.
+	const dbFilePath = path.join(cleanupDir, '._nitpicker-archive', 'db.sqlite');
+	return { archive, db: archive.getKnex(), dbFilePath, cleanupDir, anchorRowCount };
 }
 
 /**
@@ -311,7 +334,7 @@ for (const n of SIZES) {
 	console.log(
 		`\n══════════ ${n.toLocaleString()} pages (~${(n * ANCHOR_FANOUT).toLocaleString()} anchors) ══════════`,
 	);
-	const { db, dbFilePath, cleanupDir, anchorRowCount } = await makeDb(n);
+	const { archive, db, dbFilePath, cleanupDir, anchorRowCount } = await makeDb(n);
 	try {
 		const seedSizeBytes = statSync(dbFilePath).size;
 		console.log(`  seeded DB size: ${(seedSizeBytes / 1024 / 1024).toFixed(1)} MiB`);
@@ -327,7 +350,7 @@ for (const n of SIZES) {
 
 		await runMatrix(db, n);
 	} finally {
-		await db.destroy();
+		await archive.releaseHandle();
 		rmSync(cleanupDir, { recursive: true, force: true });
 	}
 }
