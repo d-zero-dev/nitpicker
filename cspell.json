@@ -42,6 +42,8 @@
 
 		// SQLite PRAGMA table_info() column name
 		"dflt",
+		// SQLite result code SQLITE_IOERR (disk I/O error)
+		"IOERR",
 
 		// nitpicker
 		"readtext",
