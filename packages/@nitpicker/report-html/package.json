@@ -35,8 +35,8 @@
 		"@nitpicker/query": "0.24.0",
 		"@nitpicker/viewer": "0.24.0",
 		"enquirer": "2.4.1",
-		"react": "19.2.8",
-		"react-dom": "19.2.8"
+		"react": "19.3.1",
+		"react-dom": "19.3.1"
 	},
 	"devDependencies": {
 		"@d-zero/shared": "0.23.0",
