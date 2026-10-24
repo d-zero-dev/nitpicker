@@ -17,7 +17,7 @@ jobs:
     # glibc 2.28 — the same floor as Node.js 24's own Linux binaries, so the
     # addon loads on any Linux (WSL2 included) that can run a supported Node.
     # Building on the runner itself would link against its much newer glibc.
-    container: quay.io/pypa/manylinux_2_28_x86_64:latest
+    container: quay.io/pypa/manylinux_2_28_x86_64:latest@sha256:f6adcfd450f0927a05c66ded9b4c3bb538fbab625b1ca3f35d71ac093b24b57f
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # rustup reads the pinned toolchain from rust-toolchain.toml on first use.
