@@ -21,7 +21,7 @@ napi-derive = "3.6.12"
 aho-corasick = "1.1.5"
 form_urlencoded = "1.2.2"
 indexmap = "2.14.2"
-lz4_flex = { version = "0.13.0", default-features = false, features = ["std", "safe-encode", "safe-decode"] }
+lz4_flex = { version = "0.14.0", default-features = false, features = ["std", "safe-encode", "safe-decode"] }
 memchr = { version = "2.8.3", default-features = false, features = ["std"] }
 proptest = "1.12.0"
 rayon = "1.12.0"
