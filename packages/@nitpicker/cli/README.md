@@ -10,6 +10,8 @@ CLI の呼び出しは `npx @nitpicker/cli` に統一しています。
 npx @nitpicker/cli <command> [options]
 ```
 
+ネイティブ処理（テンプレート分類、`query` の走査と URL の並び替えなど）のスレッド数と同時実行数は、環境変数 `NITPICKER_NATIVE_THREADS`（既定は論理コア数）と `NITPICKER_NATIVE_CONCURRENCY`（既定は 1）で変えられます。対象は `crawl` / `pipeline` / `query` / `viewer` / `viewer-build` / `concat` / `split` で、正の整数でない値は、作業を始める前に終了コード 1 で拒否します（`report` と `cache` は検査しません）。詳細は [@nitpicker/core](../core/README.md) を参照してください。
+
 ## コマンド
 
 | コマンド   | 用途                                                        | 詳細                                   |
