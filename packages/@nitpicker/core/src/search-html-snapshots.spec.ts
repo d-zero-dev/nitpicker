@@ -150,3 +150,63 @@ describe('searchHtmlSnapshots', () => {
 		);
 	});
 });
+
+describe('searchHtmlSnapshots with a signal', () => {
+	/**
+	 * Enough work that the abort, raised right after the call returns, lands
+	 * while the batch is still unsearched. That the scan then stops part way is the
+	 * Rust tests' concern; here the abort must reach the call and read as the
+	 * caller's own.
+	 */
+	function slowBatch() {
+		const body = zstdCompressSync(Buffer.from(`<p>${'a'.repeat(100_000)}</p>`, 'utf8'));
+		return Array.from({ length: 200 }, () => ({ body, codec: 'zstd' }));
+	}
+
+	it('rejects with the signal reason without searching when it is already aborted', async () => {
+		const reason = new Error('aborted first');
+		await expect(
+			searchHtmlSnapshots({
+				pattern: literal('needle'),
+				snippetLength: 20,
+				snapshots: [stored('needle', 'none')],
+				signal: AbortSignal.abort(reason),
+			}),
+		).rejects.toBe(reason);
+	});
+
+	it('rejects with the signal reason when it aborts right after the call', async () => {
+		const controller = new AbortController();
+		const reason = new Error('client went away');
+		const outcome = searchHtmlSnapshots({
+			pattern: literal('needle'),
+			snippetLength: 20,
+			snapshots: slowBatch(),
+			signal: controller.signal,
+		});
+		controller.abort(reason);
+		await expect(outcome).rejects.toBe(reason);
+	});
+
+	it('finds the same matches with a signal that never fires', async () => {
+		const outcomes = await searchHtmlSnapshots({
+			pattern: literal('needle'),
+			snippetLength: 20,
+			snapshots: [stored('needle', 'zstd'), stored('<p>x</p>', 'none')],
+			signal: new AbortController().signal,
+		});
+		expect(outcomes.map((outcome) => outcome.matchCount)).toEqual([1, 0]);
+	});
+
+	it('settles every call issued together, each with its own matches', async () => {
+		const calls = Array.from({ length: 6 }, (_, index) =>
+			searchHtmlSnapshots({
+				pattern: literal('needle'),
+				snippetLength: 20,
+				snapshots: [stored(index % 2 === 0 ? 'needle' : 'hay', 'zstd')],
+			}),
+		);
+		const results = await Promise.all(calls);
+		expect(results.map(([outcome]) => outcome!.matchCount)).toEqual([1, 0, 1, 0, 1, 0]);
+	});
+});

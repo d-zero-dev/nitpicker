@@ -36,6 +36,10 @@
 			"import": "./lib/body-hash/compute-body-hash.js",
 			"types": "./lib/body-hash/compute-body-hash.d.ts"
 		},
+		"./native-executor/check-native-executor-config": {
+			"import": "./lib/native-executor/check-native-executor-config.js",
+			"types": "./lib/native-executor/check-native-executor-config.d.ts"
+		},
 		"./cache/clear-archive-cache-entry": {
 			"import": "./lib/cache/clear-archive-cache-entry.js",
 			"types": "./lib/cache/clear-archive-cache-entry.d.ts"

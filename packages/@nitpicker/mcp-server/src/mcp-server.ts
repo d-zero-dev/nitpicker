@@ -1,3 +1,8 @@
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type {
+	ServerNotification,
+	ServerRequest,
+} from '@modelcontextprotocol/sdk/types.js';
 import type { TechnologySignalEntry } from '@nitpicker/query';
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -6,6 +11,7 @@ import {
 	CallToolRequestSchema,
 	ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { checkNativeExecutorConfig } from '@nitpicker/archive/native-executor/check-native-executor-config';
 import {
 	ArchiveManager,
 	countPagesByJsonLdType,
@@ -285,6 +291,10 @@ export function createServer() {
 		CallToolRequestSchema,
 		async (
 			request,
+			// Optional so a handler called without a transport (the unit specs call
+			// it directly) still works; the SDK always passes it. `signal` aborts when
+			// the client cancels the request or the transport closes.
+			extra?: Pick<RequestHandlerExtra<ServerRequest, ServerNotification>, 'signal'>,
 		): Promise<{
 			content: { type: 'text'; text: string }[];
 			isError?: boolean;
@@ -473,6 +483,7 @@ export function createServer() {
 								snippetLength: optionalNumber(args, 'snippetLength'),
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
+								signal: extra?.signal,
 							}),
 						);
 					}
@@ -485,6 +496,7 @@ export function createServer() {
 								directory: optionalString(args, 'directory'),
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
+								signal: extra?.signal,
 							}),
 						);
 					}
@@ -751,6 +763,8 @@ export function createServer() {
  * This is the entry point for the `nitpicker-mcp` binary.
  * @returns Resolves once the stdio transport is connected; the server then
  *   keeps serving requests until the process exits.
+ * @throws {Error} Before connecting, if `NITPICKER_NATIVE_THREADS` or
+ *   `NITPICKER_NATIVE_CONCURRENCY` is not a positive integer.
  * @example
  * ```ts
  * import { startServer } from '@nitpicker/mcp-server';
@@ -759,6 +773,9 @@ export function createServer() {
  * ```
  */
 export async function startServer() {
+	// Refuse a bad `NITPICKER_NATIVE_*` setting before the server accepts
+	// requests, not at the first search a client sends.
+	checkNativeExecutorConfig();
 	const server = createServer();
 	const transport = new StdioServerTransport();
 	await server.connect(transport);

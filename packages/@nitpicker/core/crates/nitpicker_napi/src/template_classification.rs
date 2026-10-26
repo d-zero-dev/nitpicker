@@ -2,9 +2,9 @@
 //!
 //! JS reads the corpus (it lives in the archive's database) and hands it
 //! over in batches: every page's signals first, then the HTML once or twice.
-//! Each call that computes returns a promise and does its work on rayon's
-//! thread pool, never on Node's main thread or libuv's small worker pool, so
-//! JS keeps reading the next batch meanwhile. Calls must not overlap: the
+//! Each call that computes returns a promise and does its work on the addon's
+//! thread pool (`executor`), never on Node's main thread or libuv's small
+//! worker pool, so JS keeps reading the next batch meanwhile. Calls must not overlap: the
 //! run is a sequence (sampling decisions follow page order), so a second
 //! call while one is running is rejected rather than queued.
 //!
@@ -25,6 +25,8 @@ use nitpicker_template_cluster::{
 	BlockingReason, Classification, ClassificationOutput, ContentRoot, Context, LandmarkType,
 	PageInput, PageSignals, Progress, RunError, SampleReason, TEMPLATE_MEMORY_BUDGET,
 };
+
+use crate::native_executor::shared_executor;
 
 /// One page's blocking signals.
 #[napi(object)]
@@ -341,9 +343,10 @@ impl TemplateClassificationRun {
 		}
 	}
 
-	/// Runs `work` on rayon's pool and settles the returned promise with its
-	/// result, turned into a JS value by `finish` on the JS thread together
-	/// with the number of progress events the work sent.
+	/// Runs `work` on the addon's pool (`executor`, behind any other call that
+	/// holds a slot) and settles the returned promise with its result, turned
+	/// into a JS value by `finish` on the JS thread together with the number of
+	/// progress events the work sent.
 	fn spawn<'env, T, D, F>(
 		&self,
 		env: &'env Env,
@@ -357,13 +360,14 @@ impl TemplateClassificationRun {
 			+ Send
 			+ 'static,
 	{
+		let executor = shared_executor()?;
 		if self.shared.busy.swap(true, Ordering::AcqRel) {
 			return Err(still_running());
 		}
 		let guard = BusyGuard(Arc::clone(&self.shared));
 		let (deferred, promise) = env.create_deferred()?;
 		let shared = Arc::clone(&self.shared);
-		rayon::spawn(move || {
+		executor.submit(move || {
 			let sent = AtomicU32::new(0);
 			let outcome = catch_unwind(AssertUnwindSafe(|| {
 				let report = |progress: Progress| {

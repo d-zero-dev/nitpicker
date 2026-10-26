@@ -19,6 +19,7 @@ export interface NativeBinding {
 		bodies: Uint8Array,
 		offsets: Uint32Array,
 		codecs: Uint8Array,
+		cancelToken?: NativeCancelToken,
 	): Promise<Uint8Array>;
 	/** See `validate-search-pattern.ts`. */
 	validateSearchPattern(pattern: NativeSearchPattern): boolean;
@@ -35,7 +36,12 @@ export interface NativeBinding {
 		bodies: Uint8Array,
 		offsets: Uint32Array,
 		codecs: Uint8Array,
+		cancelToken?: NativeCancelToken,
 	): Promise<{ matchCounts: number[]; snippets: string[] }>;
+	/** See `check-native-executor-config.ts`. */
+	checkNativeExecutorConfig(): void;
+	/** See `run-with-signal.ts`. */
+	NativeCancelToken: new () => NativeCancelToken;
 	/** See `compute-url-sort-ranks.ts`. */
 	computeUrlSortRanks(urls: Uint8Array, offsets: Uint32Array): Uint32Array;
 	/** See `compute-alias-keys.ts`. */
@@ -58,6 +64,15 @@ export interface NativeBinding {
 	TEMPLATE_MEMORY_BUDGET: number;
 	/** See `template-exact-page-limit.ts`. */
 	TEMPLATE_EXACT_PAGE_LIMIT: number;
+}
+
+/**
+ * Stops the asynchronous native calls it was passed to. Raising it is one-way;
+ * a call that sees it raised rejects with code `Cancelled`.
+ */
+export interface NativeCancelToken {
+	/** Raises the token. */
+	cancel(): void;
 }
 
 /** How two adjacent compounds of a complex selector are joined. */

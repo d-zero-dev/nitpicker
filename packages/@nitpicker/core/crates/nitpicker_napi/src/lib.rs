@@ -2,18 +2,25 @@
 //! crates to Node. Keeping napi out of the other crates lets them be tested
 //! with plain `cargo test`, without a Node runtime.
 //!
-//! Every exported function, and every method of `IsolatedClusterRun`, uses
-//! `catch_unwind`, so a Rust panic reaches JS as a thrown `Error` instead of
-//! aborting the whole Node process. `TemplateClassificationRun` runs its work
-//! on rayon's pool and catches a panic there itself, rejecting the call.
+//! Every synchronous function that computes, and every method of
+//! `IsolatedClusterRun`, uses `catch_unwind`, so a Rust panic reaches JS as a
+//! thrown `Error` instead of aborting the whole Node process. The asynchronous
+//! calls (`match_selector_snapshots`, `search_html_snapshots`, every computing
+//! method of `TemplateClassificationRun`) go through `executor`, which owns the
+//! thread pool, the limit on calls running at once and the queue behind it;
+//! each catches a panic inside the job it hands over and rejects its promise.
+//! `NativeCancelToken` only flips a flag and cannot panic.
 
 // The exported functions count as unused in the test build, where the addon
 // registration that calls them is compiled out.
 #[cfg_attr(test, allow(dead_code))]
 mod alias;
+mod executor;
 mod isolated_cluster;
 #[cfg_attr(test, allow(dead_code))]
 mod match_selector;
+#[cfg_attr(test, allow(dead_code))]
+mod native_executor;
 #[cfg_attr(test, allow(dead_code))]
 mod search_html;
 mod slice_by_offsets;
@@ -26,6 +33,7 @@ use napi::Result;
 use napi::bindgen_prelude::{Buffer, Uint32Array};
 use napi_derive::napi;
 
+use crate::native_executor::shared_executor;
 use crate::slice_by_offsets::slice_utf8_by_offsets;
 
 /// Pages per sampled block a template classification run clusters (see
@@ -69,14 +77,21 @@ pub fn compute_body_hash(html: &[u8]) -> Buffer {
 /// strings. Returns, per input position, the rank that URL takes.
 ///
 /// Synchronous: it is called from the read model build, which already runs
-/// on a worker thread, and it spends its time on rayon's pool.
+/// on a worker thread. It spends its time on the addon's pool (the thread
+/// count setting applies) but does not wait for a slot of the concurrency
+/// limit: queueing behind whole calls would block the caller's thread. It
+/// still waits for a free pool thread (see `executor`).
 ///
 /// # Errors
 ///
 /// `InvalidArg` when `offsets` does not start at 0, does not ascend, runs
-/// past `urls` or stops short of its end, or when a URL is not valid UTF-8.
+/// past `urls` or stops short of its end, when a URL is not valid UTF-8, or
+/// when an executor setting is invalid.
 #[napi(catch_unwind)]
 pub fn compute_url_sort_ranks(urls: &[u8], offsets: &[u32]) -> Result<Uint32Array> {
+	let executor = shared_executor()?;
 	let slices = slice_utf8_by_offsets(urls, offsets)?;
-	Ok(Uint32Array::new(nitpicker_url_key::sort_ranks(&slices)))
+	Ok(Uint32Array::new(
+		executor.install(|| nitpicker_url_key::sort_ranks(&slices)),
+	))
 }

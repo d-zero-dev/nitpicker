@@ -126,6 +126,32 @@ keys[keyOfPage[0]!]; // '["path:news","cluster:0"]'
 
 サンプルに落としたブロックの残りのページは、2 回目の読み込み（`needsAssignment()` が true のときの `pushAssignmentPages`）で最も近いクラスタに割り当てます。落としたブロックは、`block()` の間に `block-sampled` の進捗イベントで 1 つずつ通知され、`takeOutput()` の `sampledBlocks` にも、理由（`table-over-budget` か `pages-over-limit`）つきで残ります。どちらの読み込みでも全ページをコーパス順に渡しますが、`pageMask()` が 0 のページは HTML を空文字にして構いません（HTML を読み出す必要もありません）。
 
+### スレッドプール・同時実行数・キャンセル
+
+非同期のネイティブ呼び出し（`matchSelectorSnapshots`・`searchHtmlSnapshots`・テンプレート分類の各呼び出し）は、アドオンが持つ専用のスレッドプールで動きます。次の 2 つの環境変数で調整できます。値は正の整数で、プロセスで最初にプールを使うときに 1 回だけ読みます。正の整数でない値は、既定値に置き換えずにエラーにします。
+
+| 環境変数                       | 既定                                                    | 内容                                                                                                                                                                                      |
+| ------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NITPICKER_NATIVE_THREADS`     | rayon の既定（`RAYON_NUM_THREADS`、なければ論理コア数） | プールのスレッド数。同期の `computeUrlSortRanks` もこのプールで動く                                                                                                                       |
+| `NITPICKER_NATIVE_CONCURRENCY` | 1                                                       | 同時に走らせる非同期呼び出しの数。1 つの呼び出しがすでに全スレッドを使うので、増やしても合計の処理量は増えない。同期の `computeUrlSortRanks` はこの上限に数えず、待たずに専用プールを使う |
+
+上限を超えた呼び出しは、拒否せず、受け付けた順（FIFO）に待ちます。待っている間はスレッドを占有しません。`checkNativeExecutorConfig` は、環境変数の誤りを最初のネイティブ呼び出しではなく作業の開始前に検出します。
+
+```ts
+import { checkNativeExecutorConfig } from '@nitpicker/core/check-native-executor-config';
+
+checkNativeExecutorConfig(); // NITPICKER_NATIVE_THREADS="lots" なら InvalidArg で投げる
+```
+
+`matchSelectorSnapshots` と `searchHtmlSnapshots` は `signal`（`AbortSignal`）を受け取ります。abort すると、実行中の呼び出しは次のスナップショットの前で止まり、待機中の呼び出しは順番が来た時点で終わり、どちらも `signal.reason` で reject します。すでに abort 済みの signal は、アドオンを呼ばずに reject します。同じバッチに展開に失敗したスナップショットがあっても、abort を見たスナップショットが 1 つでもあれば abort（`signal.reason`）を返します。展開のエラーを返すのは、どのスナップショットも abort を見る前に失敗したときだけです。テンプレート分類は、これまでどおり `run.cancel()` で止めます。
+
+```ts
+const controller = new AbortController();
+const pending = matchSelectorSnapshots({ plan, snapshots, signal: controller.signal });
+controller.abort(new Error('client went away'));
+await pending; // rejects with the Error above
+```
+
 ## 開発
 
 Rust ツールチェーンが必要です（バージョンはリポジトリルートの `rust-toolchain.toml` で固定。セットアップは [CONTRIBUTING.md](../../../CONTRIBUTING.md) を参照）。`yarn build` を実行すると、`scripts/build-native.mjs` がホスト向けのアドオンをビルドしてパッケージ直下に `core.<platform>.node` として置きます。ローダーはこのローカルビルドを先に探し、なければプラットフォーム別パッケージを読み込みます。
