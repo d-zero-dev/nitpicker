@@ -2,6 +2,7 @@ import { parseCli } from '@d-zero/roar';
 
 import pkg from '../package.json' with { type: 'json' };
 
+import { commandUsesNativePool } from './command-uses-native-pool.js';
 import { commandDef as cacheDef } from './commands/cache-def.js';
 import { commandDef as concatDef } from './commands/concat-def.js';
 import { commandDef as crawlDef } from './commands/crawl-def.js';
@@ -45,6 +46,14 @@ try {
 	// loading all nine unconditionally on every invocation added several
 	// seconds before the first byte of output, regardless of which single
 	// command was actually run.
+	if (commandUsesNativePool(cli.command)) {
+		// The native thread pool is one per process and is read from the
+		// environment once, so a bad `NITPICKER_NATIVE_*` value is refused here,
+		// before a crawl has spent time, rather than at the first native call.
+		const { checkNativeExecutorConfig } =
+			await import('@nitpicker/archive/native-executor/check-native-executor-config');
+		checkNativeExecutorConfig();
+	}
 	switch (cli.command) {
 		case 'crawl': {
 			const { crawl } = await import('./commands/crawl.js');

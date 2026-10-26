@@ -28,6 +28,7 @@
 	"words": [
 		// Rust: crate names, std methods, code points in the template classifier (#426)
 		"alnum",
+		"deque",
 		"FEFF",
 		"FFFD",
 		"interner",

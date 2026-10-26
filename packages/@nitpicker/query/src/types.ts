@@ -4105,6 +4105,11 @@ export interface SearchHtmlOptions extends HtmlSnapshotPageFilters {
 	 * (`Scanning HTML snapshots: <done> / <total>`). Omit for silent.
 	 */
 	onProgress?: (message: string) => void;
+	/**
+	 * Stops the scan when it aborts: the call rejects with the signal's reason,
+	 * and the native search stops at its next snapshot. Omit to run to the end.
+	 */
+	signal?: AbortSignal;
 }
 
 /** One page whose stored HTML snapshot matched a {@link SearchHtmlOptions.pattern}. */
@@ -4153,6 +4158,11 @@ export interface MatchSelectorOptions extends HtmlSnapshotPageFilters {
 	 * (`Scanning HTML snapshots: <done> / <total>`). Omit for silent.
 	 */
 	onProgress?: (message: string) => void;
+	/**
+	 * Stops the scan when it aborts: the call rejects with the signal's reason,
+	 * and the native judging stops at its next snapshot. Omit to run to the end.
+	 */
+	signal?: AbortSignal;
 }
 
 /** One page whose stored HTML snapshot contains an element matching the selector. */

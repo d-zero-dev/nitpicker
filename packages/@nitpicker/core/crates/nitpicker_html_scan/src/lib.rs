@@ -68,7 +68,7 @@ pub use matches_nth::matches_nth;
 pub use normalize_url_like_strings::normalize_url_like_strings;
 pub use passes_ordered_prefilter::passes_ordered_prefilter;
 pub use scan_snapshots::{
-	ScanError, SnapshotCodec, StoredSnapshot, judge_snapshots, scan_snapshots,
+	ScanError, ScanFailure, SnapshotCodec, StoredSnapshot, judge_snapshots, scan_snapshots,
 };
 pub use search_html::{SearchOutcome, search_html};
 pub use search_pattern::{

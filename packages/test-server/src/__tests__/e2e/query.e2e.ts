@@ -36,11 +36,17 @@ interface CliResult {
  * resolves once it exits on its own, capturing its output.
  * @param args - CLI arguments (after the binary path).
  * @param cwd - Working directory for the spawned process.
+ * @param extraEnvironment - Variables added to the spawned process's environment.
  * @returns The process's exit code and captured stdout/stderr.
  */
-async function runCli(args: string[], cwd: string): Promise<CliResult> {
+async function runCli(
+	args: string[],
+	cwd: string,
+	extraEnvironment: Record<string, string> = {},
+): Promise<CliResult> {
 	const child = spawn(process.execPath, [CLI_BIN, ...args], {
 		cwd,
+		env: { ...process.env, ...extraEnvironment },
 		stdio: ['ignore', 'pipe', 'pipe'],
 	});
 
@@ -447,6 +453,64 @@ describe('query match-selector (e2e)', () => {
 		expect(stdout).toBe('');
 		expect(stderr).toContain(reason);
 		expect(stderr).not.toContain('Extracting archive');
+	});
+
+	it.each([
+		['NITPICKER_NATIVE_THREADS', 'lots'],
+		['NITPICKER_NATIVE_CONCURRENCY', '0'],
+	])(
+		'rejects an invalid %s with exit code 1 before opening the archive',
+		async (name, value) => {
+			const { exitCode, stdout, stderr } = await runCli(
+				['query', FIXTURE, 'match-selector', '--selector', 'a'],
+				cwd,
+				{ [name]: value },
+			);
+
+			expect(exitCode).toBe(1);
+			expect(stdout).toBe('');
+			expect(stderr).toContain(`Invalid ${name}="${value}"`);
+			expect(stderr).not.toContain('Extracting archive');
+		},
+	);
+
+	it('does not check the native pool settings for a command that never uses the pool', async () => {
+		const { exitCode, stderr } = await runCli(['cache', 'list', '--json'], cwd, {
+			NITPICKER_NATIVE_THREADS: 'lots',
+		});
+
+		expect(exitCode).toBe(0);
+		expect(stderr).not.toContain('NITPICKER_NATIVE_THREADS');
+	});
+
+	it.each([
+		['crawl', ['crawl', 'https://example.invalid']],
+		['pipeline', ['pipeline', 'https://example.invalid']],
+		['viewer-build', ['viewer-build', FIXTURE]],
+		['viewer', ['viewer', FIXTURE]],
+	])(
+		'rejects an invalid NITPICKER_NATIVE_THREADS for %s with exit code 1 before it starts',
+		async (_command, args) => {
+			const { exitCode, stderr } = await runCli(args, cwd, {
+				NITPICKER_NATIVE_THREADS: 'lots',
+			});
+
+			expect(exitCode).toBe(1);
+			expect(stderr).toContain('Invalid NITPICKER_NATIVE_THREADS="lots"');
+		},
+	);
+
+	it('gives the same answer under valid NITPICKER_NATIVE_* settings as under the defaults', async () => {
+		const args = ['query', FIXTURE, 'match-selector', '--selector', 'a'];
+		const defaults = await runCli(args, cwd);
+		const narrowed = await runCli(args, cwd, {
+			NITPICKER_NATIVE_THREADS: '1',
+			NITPICKER_NATIVE_CONCURRENCY: '1',
+		});
+
+		expect(defaults.exitCode).toBe(0);
+		expect(narrowed.exitCode).toBe(0);
+		expect(JSON.parse(narrowed.stdout)).toEqual(JSON.parse(defaults.stdout));
 	});
 
 	it('keeps stdout pure JSON while progress goes to stderr', async () => {

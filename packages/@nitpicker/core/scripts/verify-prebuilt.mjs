@@ -3,9 +3,10 @@
 // license banner, then runs one small template
 // classification to its known keys, one URL ranking, one pair of alias keys,
 // one alias grouping, one isolated-components run, one match-selector batch
-// and one search-html batch over a zstd-compressed snapshot — a smoke check that
-// the exports work in this build, not a substitute for the template golden
-// records, the URL order tests or the alias parity tests.
+// and one search-html batch over a zstd-compressed snapshot, then the thread
+// pool's settings check and one call stopped by a raised cancel token — a
+// smoke check that the exports work in this build, not a substitute for the
+// template golden records, the URL order tests or the alias parity tests.
 // CI runs this on every prebuilt binary — on the platform it targets —
 // before it can be published.
 // Usage: node verify-prebuilt.mjs <path-to-addon.node>
@@ -333,3 +334,29 @@ if (!lookaroundRefused || binding.validateSearchPattern(anchorStart)) {
 	process.exit(1);
 }
 console.log(`Search-html smoke check passed for ${addonPath}`);
+
+// The thread pool the asynchronous calls above ran on accepts its settings
+// (nothing is set here, so the defaults), and a call given a raised cancel
+// token rejects with code `Cancelled` instead of judging its snapshots.
+binding.checkNativeExecutorConfig();
+const raised = new binding.NativeCancelToken();
+raised.cancel();
+let cancelledCode;
+try {
+	await binding.matchSelectorSnapshots(
+		imgAlt,
+		snapshotBodies,
+		snapshotOffsets,
+		snapshotCodecs,
+		raised,
+	);
+} catch (error) {
+	cancelledCode = error.code;
+}
+if (cancelledCode !== 'Cancelled') {
+	console.error(
+		`MISMATCH cancel token: a raised token must reject with code "Cancelled", got ${cancelledCode}`,
+	);
+	process.exit(1);
+}
+console.log(`Native executor smoke check passed for ${addonPath}`);

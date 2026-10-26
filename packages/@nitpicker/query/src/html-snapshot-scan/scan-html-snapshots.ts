@@ -175,8 +175,10 @@ async function findMatchedHashes(
  * carries the hash it was stored under, which is the key a judge keeps its
  * results by. A blob row is paired with the hash it came back with: `whereIn`
  * does not return rows in the order the hashes were asked for.
- * @param params - The archive, page filters, snapshot judge and progress callback.
+ * @param params - The archive, page filters, snapshot judge, progress callback and signal.
  * @returns Matched pages in page-id order plus scan totals.
+ * @throws {unknown} The signal's reason when `params.signal` aborts: it is checked before
+ *   each chunk is judged and before the matched pages are resolved.
  * @example
  * const { matchedPages, scannedSnapshots } = await scanHtmlSnapshots({
  *   knex: accessor.getKnex(),
@@ -188,7 +190,7 @@ async function findMatchedHashes(
 export async function scanHtmlSnapshots(
 	params: ScanHtmlSnapshotsParams,
 ): Promise<ScanHtmlSnapshotsResult> {
-	const { knex, filters, onProgress } = params;
+	const { knex, filters, onProgress, signal } = params;
 	const candidates = () => createHtmlSnapshotCandidateQuery(knex, filters);
 
 	const walkedHashes = (
@@ -220,16 +222,25 @@ export async function scanHtmlSnapshots(
 	};
 	let pending: Promise<BlobRow[]> | undefined =
 		walkedHashes.length > 0 ? readNext(0) : undefined;
-	for (let start = 0; start < walkedHashes.length; start += SCAN_CHUNK) {
-		const rows = await pending!;
-		const next = start + SCAN_CHUNK;
-		pending = next < walkedHashes.length ? readNext(next) : undefined;
+	try {
+		for (let start = 0; start < walkedHashes.length; start += SCAN_CHUNK) {
+			signal?.throwIfAborted();
+			const rows = await pending!;
+			const next = start + SCAN_CHUNK;
+			pending = next < walkedHashes.length ? readNext(next) : undefined;
 
-		matchedHashes.push(...(await findMatchedHashes(params, rows)));
-		scanned += Math.min(SCAN_CHUNK, walkedHashes.length - start);
-		onProgress?.(`Scanning HTML snapshots: ${scanned} / ${hashTotal}`);
+			matchedHashes.push(...(await findMatchedHashes(params, rows)));
+			scanned += Math.min(SCAN_CHUNK, walkedHashes.length - start);
+			onProgress?.(`Scanning HTML snapshots: ${scanned} / ${hashTotal}`);
+		}
+	} finally {
+		// A scan that stops early (an abort, a failed judge) leaves the prefetched
+		// read running; its caller may close the archive as soon as this rejects,
+		// so the read settles first. Its own failure is not the scan's.
+		await pending?.catch(() => {});
 	}
 
+	signal?.throwIfAborted();
 	const matchedPages: MatchedSnapshotPage[] = [];
 	for (let i = 0; i < matchedHashes.length; i += SQLITE_IN_CHUNK) {
 		const rows = (await candidates()

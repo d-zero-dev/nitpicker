@@ -40,3 +40,17 @@ describe('searchHtmlSnapshots', () => {
 		).rejects.toThrow(/snapshot 0 could not be decoded/);
 	});
 });
+
+describe('searchHtmlSnapshots with a signal', () => {
+	it('rejects with the signal reason when it is already aborted', async () => {
+		const reason = new Error('aborted first');
+		await expect(
+			searchHtmlSnapshots({
+				pattern: NEEDLE,
+				snippetLength: 20,
+				snapshots: [{ body: Buffer.from('needle'), codec: 'none' }],
+				signal: AbortSignal.abort(reason),
+			}),
+		).rejects.toBe(reason);
+	});
+});

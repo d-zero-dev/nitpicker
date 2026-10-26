@@ -14,10 +14,12 @@ import { matchSelectorSnapshots as matchSelectorSnapshotsNatively } from '@nitpi
  * @param options - The plan and the batch.
  * @param options.plan - The validated selector list.
  * @param options.snapshots - The stored snapshots, in the order the verdicts are returned.
+ * @param options.signal - Stops the call at its next snapshot; a call still waiting for its turn stops when the turn comes.
  * @returns One verdict per snapshot, in input order.
  * @throws {Error} If a codec is not `zstd` or `none`, or the batch takes more than 4 GiB.
  *   The returned promise rejects if a snapshot's zstd data is corrupt, or with code
- *   `InvalidArg` if the plan is malformed.
+ *   `InvalidArg` if the plan is malformed, and with the signal's reason if `signal` aborted
+ *   before the call finished.
  * @example
  * ```ts
  * const verdicts = await matchSelectorSnapshots({
@@ -29,6 +31,7 @@ import { matchSelectorSnapshots as matchSelectorSnapshotsNatively } from '@nitpi
 export function matchSelectorSnapshots(options: {
 	readonly plan: SelectorPlan;
 	readonly snapshots: readonly StoredHtmlSnapshot[];
+	readonly signal?: AbortSignal;
 }): Promise<SnapshotMatchOutcome[]> {
 	// Passing archive's types to core's wrapper, and taking its result as
 	// archive's type, is the check that the two still mirror each other.

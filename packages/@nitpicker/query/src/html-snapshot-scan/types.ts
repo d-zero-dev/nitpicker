@@ -26,6 +26,13 @@ export interface ScanHtmlSnapshotsParams {
 	/** Receives `Scanning HTML snapshots: <done> / <total>` after each chunk. */
 	readonly onProgress?: (message: string) => void;
 	/**
+	 * Stops the scan: it is checked before each chunk is judged and once more
+	 * before the matched pages are resolved, and the scan rejects with the
+	 * signal's reason. A judge that takes the same signal also stops inside a
+	 * batch.
+	 */
+	readonly signal?: AbortSignal;
+	/**
 	 * Judges a batch of distinct snapshots as stored and resolves with one
 	 * verdict per snapshot, in order; `true` marks every page of the snapshot
 	 * as matched. A batch is closed when its estimated decoded size reaches

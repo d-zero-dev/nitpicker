@@ -3,8 +3,9 @@
 //! JS decides whether the pattern is a literal or `/…/flags`, validates the
 //! flags and reads the stored snapshots from the archive's database; the
 //! pattern is compiled here (once per call), and a batch is decoded (zstd),
-//! read as UTF-8 and searched on rayon's pool. The call returns a promise, so
-//! neither Node's main thread nor libuv's small worker pool is held.
+//! read as UTF-8 and searched on the addon's thread pool (`executor`). The call
+//! returns a promise, so neither Node's main thread nor libuv's small worker
+//! pool is held.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Mutex, PoisonError};
@@ -13,10 +14,11 @@ use napi::bindgen_prelude::{Object, Uint8Array};
 use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use nitpicker_html_scan::{
-	RegexFlags, SearchKind, SearchPattern, StoredSnapshot, compile_search_pattern, judge_snapshots,
-	search_html,
+	RegexFlags, ScanFailure, SearchKind, SearchPattern, StoredSnapshot, compile_search_pattern,
+	judge_snapshots, search_html,
 };
 
+use crate::native_executor::{NativeCancelToken, cancelled_error, shared_executor};
 use crate::slice_by_offsets::slice_by_offsets;
 use crate::snapshot_codecs::to_snapshot_codecs;
 
@@ -137,16 +139,21 @@ pub fn search_html_document(
 /// positions that cut it into `n` snapshots, and `codecs` one byte per
 /// snapshot: `0` stored as they are, `1` zstd.
 ///
-/// The work runs on another thread after this call returns, and reads
-/// `bodies` in place: the caller must not write to that buffer until the
-/// promise settles (the JS wrapper packs a fresh one for every call).
+/// The work runs on the addon's thread pool (`executor`) after this call
+/// returns — behind any call already running when the concurrency limit is
+/// reached — and reads `bodies` in place: the caller must not write to that
+/// buffer until the promise settles (the JS wrapper packs a fresh one for
+/// every call).
+///
+/// `cancel_token`, once raised, stops the search at the next snapshot (a call
+/// still queued ends when its turn comes) and rejects with code `Cancelled`.
 ///
 /// # Errors
 ///
-/// `InvalidArg` when the pattern cannot be compiled, or the offsets or a
-/// codec are malformed. The promise rejects when a snapshot cannot be
-/// decoded, or when searching panicked; a snapshot is never silently
-/// reported as "no match".
+/// `InvalidArg` when the pattern cannot be compiled, the offsets or a codec
+/// are malformed, or an executor setting is invalid. The promise rejects when
+/// a snapshot cannot be decoded, when the call was cancelled, or when
+/// searching panicked; a snapshot is never silently reported as "no match".
 #[napi(ts_return_type = "Promise<SearchSnapshotsOutput>")]
 pub fn search_html_snapshots<'env>(
 	env: &'env Env,
@@ -155,7 +162,10 @@ pub fn search_html_snapshots<'env>(
 	bodies: Uint8Array,
 	offsets: &[u32],
 	codecs: &[u8],
+	cancel_token: Option<&NativeCancelToken>,
 ) -> Result<Object<'env>> {
+	let executor = shared_executor()?;
+	let cancelled = NativeCancelToken::flag_of(cancel_token);
 	let regex = compile(pattern)?;
 	let codecs = to_snapshot_codecs(codecs)?;
 	let cut = slice_by_offsets(&bodies, offsets)?;
@@ -171,7 +181,7 @@ pub fn search_html_snapshots<'env>(
 		.collect();
 
 	let (deferred, promise) = env.create_deferred()?;
-	rayon::spawn(move || {
+	executor.submit(move || {
 		let outcome = catch_unwind(AssertUnwindSafe(|| {
 			let snapshots: Vec<StoredSnapshot> = ranges
 				.into_iter()
@@ -181,7 +191,7 @@ pub fn search_html_snapshots<'env>(
 					codec,
 				})
 				.collect();
-			judge_snapshots(&snapshots, |text| {
+			judge_snapshots(&snapshots, cancelled.raised(), |text| {
 				search_html(&regex, text, snippet_length as usize)
 			})
 		}));
@@ -198,6 +208,7 @@ pub fn search_html_snapshots<'env>(
 					snippets,
 				})
 			}
+			Ok(Err(ScanFailure::Cancelled)) => Err(cancelled_error("search-html matching")),
 			Ok(Err(error)) => Err(Error::new(Status::GenericFailure, error.to_string())),
 			Err(_) => Err(Error::new(
 				Status::GenericFailure,

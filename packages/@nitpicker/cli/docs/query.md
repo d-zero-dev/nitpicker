@@ -565,3 +565,14 @@ npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
 | `--urls`                     | string  | `match-urls`                                                                                                                                         |
 | `--selector`                 | string  | `match-selector`                                                                                                                                     |
 | `--pretty`                   | boolean | JSON整形                                                                                                                                             |
+
+## ネイティブ処理の環境変数
+
+`match-selector` / `search-html` の走査や URL の並び替えなどのネイティブ処理が使うスレッド数と同時実行数は、環境変数で変えられます。
+
+| 環境変数                       | 既定       | 内容                                                                     |
+| ------------------------------ | ---------- | ------------------------------------------------------------------------ |
+| `NITPICKER_NATIVE_THREADS`     | 論理コア数 | ネイティブ処理のスレッド数                                               |
+| `NITPICKER_NATIVE_CONCURRENCY` | 1          | 同時に走らせる非同期のネイティブ呼び出しの数（超えた分は順番に待ちます） |
+
+正の整数でない値は、作業を始める前に終了コード 1 で拒否します。詳細は [@nitpicker/core](../../core/README.md) を参照してください。

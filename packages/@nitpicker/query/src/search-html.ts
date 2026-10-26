@@ -84,7 +84,12 @@ export async function searchHtml(
 		knex,
 		filters: options,
 		judgeBatch: async (snapshots) => {
-			const outcomes = await searchHtmlSnapshots({ pattern, snippetLength, snapshots });
+			const outcomes = await searchHtmlSnapshots({
+				pattern,
+				snippetLength,
+				snapshots,
+				signal: options.signal,
+			});
 			return outcomes.map((outcome, index) => {
 				if (outcome.matchCount === 0) {
 					return false;
@@ -97,6 +102,7 @@ export async function searchHtml(
 			});
 		},
 		onProgress: options.onProgress,
+		signal: options.signal,
 	});
 
 	const slice = matchedPages.slice(offset, offset + limit);
