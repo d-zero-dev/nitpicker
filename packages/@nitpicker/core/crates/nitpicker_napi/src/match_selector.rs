@@ -2,9 +2,9 @@
 //!
 //! JS validates the selector and reads the stored snapshots from the
 //! archive's database; the batch it hands over is decoded (zstd), read as
-//! markup and judged here. A batch is judged on rayon's pool and the call
-//! returns a promise, so neither Node's main thread nor libuv's small worker
-//! pool is held while it runs.
+//! markup and judged here. A batch is judged on the addon's thread pool
+//! (`executor`) and the call returns a promise, so neither Node's main thread
+//! nor libuv's small worker pool is held while it runs.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -13,9 +13,10 @@ use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use nitpicker_html_scan::{
 	Alternative, AttributeOperator, AttributeTest, Combinator, Compound, Conditions,
-	HtmlMatchOutcome, NthTest, SelectorPlan, StoredSnapshot,
+	HtmlMatchOutcome, NthTest, ScanFailure, SelectorPlan, StoredSnapshot,
 };
 
+use crate::native_executor::{NativeCancelToken, cancelled_error, shared_executor};
 use crate::slice_by_offsets::slice_by_offsets;
 use crate::snapshot_codecs::to_snapshot_codecs;
 
@@ -259,15 +260,22 @@ pub fn match_selector_html(plan: SelectorPlanInput, html: &[u8]) -> Result<HtmlM
 /// snapshot, in order: bit 0 matched, bit 1 rejected by the prefilter alone,
 /// bit 2 judged on the open-element stack.
 ///
-/// The work runs on another thread after this call returns, and reads
-/// `bodies` in place: the caller must not write to that buffer until the
-/// promise settles (the JS wrapper packs a fresh one for every call).
+/// The work runs on the addon's thread pool (`executor`) after this call
+/// returns — behind any call already running when the concurrency limit is
+/// reached — and reads `bodies` in place: the caller must not write to that
+/// buffer until the promise settles (the JS wrapper packs a fresh one for
+/// every call).
+///
+/// `cancel_token`, once raised, stops the judging at the next snapshot (a
+/// call still queued ends when its turn comes) and rejects with code
+/// `Cancelled`.
 ///
 /// # Errors
 ///
-/// `InvalidArg` when the plan, the offsets or a codec is malformed. The
-/// promise rejects when a snapshot cannot be decoded, or when judging
-/// panicked; a snapshot is never silently judged "no match".
+/// `InvalidArg` when the plan, the offsets or a codec is malformed, or an
+/// executor setting is invalid. The promise rejects when a snapshot cannot be
+/// decoded, when the call was cancelled, or when judging panicked; a snapshot
+/// is never silently judged "no match".
 #[napi(ts_return_type = "Promise<Uint8Array>")]
 pub fn match_selector_snapshots<'env>(
 	env: &'env Env,
@@ -275,7 +283,10 @@ pub fn match_selector_snapshots<'env>(
 	bodies: Uint8Array,
 	offsets: &[u32],
 	codecs: &[u8],
+	cancel_token: Option<&NativeCancelToken>,
 ) -> Result<Object<'env>> {
+	let executor = shared_executor()?;
+	let cancelled = NativeCancelToken::flag_of(cancel_token);
 	let plan = to_plan(plan)?;
 	let codecs = to_snapshot_codecs(codecs)?;
 	let cut = slice_by_offsets(&bodies, offsets)?;
@@ -288,7 +299,7 @@ pub fn match_selector_snapshots<'env>(
 		.collect();
 
 	let (deferred, promise) = env.create_deferred()?;
-	rayon::spawn(move || {
+	executor.submit(move || {
 		let outcome = catch_unwind(AssertUnwindSafe(|| {
 			let snapshots: Vec<StoredSnapshot> = ranges
 				.into_iter()
@@ -298,12 +309,13 @@ pub fn match_selector_snapshots<'env>(
 					codec,
 				})
 				.collect();
-			nitpicker_html_scan::scan_snapshots(&plan, &snapshots)
+			nitpicker_html_scan::scan_snapshots(&plan, &snapshots, cancelled.raised())
 		}));
 		deferred.resolve(move |_| match outcome {
 			Ok(Ok(outcomes)) => Ok(Uint8Array::new(
 				outcomes.into_iter().map(flags).collect::<Vec<u8>>(),
 			)),
+			Ok(Err(ScanFailure::Cancelled)) => Err(cancelled_error("match-selector judging")),
 			Ok(Err(error)) => Err(Error::new(Status::GenericFailure, error.to_string())),
 			Err(_) => Err(Error::new(
 				Status::GenericFailure,

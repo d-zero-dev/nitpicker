@@ -20,6 +20,10 @@
 	],
 	"type": "module",
 	"exports": {
+		"./check-native-executor-config": {
+			"import": "./lib/check-native-executor-config.js",
+			"types": "./lib/check-native-executor-config.d.ts"
+		},
 		"./compute-alias-keys": {
 			"import": "./lib/compute-alias-keys.js",
 			"types": "./lib/compute-alias-keys.d.ts"

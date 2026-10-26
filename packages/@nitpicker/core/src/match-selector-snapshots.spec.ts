@@ -117,3 +117,86 @@ describe('matchSelectorSnapshots', () => {
 		);
 	});
 });
+
+describe('matchSelectorSnapshots with a signal', () => {
+	/**
+	 * Enough work that the abort, raised right after the call returns, lands
+	 * while the batch is still being judged. That the scan then stops part way is the
+	 * Rust tests' concern; here the abort must reach the call and read as the
+	 * caller's own.
+	 */
+	function slowBatch() {
+		const body = zstdCompressSync(Buffer.from(`<p>${'a'.repeat(100_000)}</p>`, 'utf8'));
+		return Array.from({ length: 200 }, () => ({ body, codec: 'zstd' }));
+	}
+
+	it('rejects with the signal reason without judging when it is already aborted', async () => {
+		const reason = new Error('aborted first');
+		await expect(
+			matchSelectorSnapshots({
+				plan: IMG_PLAN,
+				snapshots: [stored('<img>', 'none')],
+				signal: AbortSignal.abort(reason),
+			}),
+		).rejects.toBe(reason);
+	});
+
+	it('rejects with the signal reason when it aborts right after the call', async () => {
+		const controller = new AbortController();
+		const reason = new Error('client went away');
+		const outcome = matchSelectorSnapshots({
+			plan: IMG_PLAN,
+			snapshots: slowBatch(),
+			signal: controller.signal,
+		});
+		controller.abort(reason);
+		await expect(outcome).rejects.toBe(reason);
+	});
+
+	it('judges the same verdicts with a signal that never fires', async () => {
+		const snapshots = [stored('<p><img></p>', 'zstd'), stored('<p>x</p>', 'none')];
+		const verdicts = await matchSelectorSnapshots({
+			plan: IMG_PLAN,
+			snapshots,
+			signal: new AbortController().signal,
+		});
+		expect(verdicts.map((verdict) => verdict.matched)).toEqual([true, false]);
+	});
+
+	it('settles every call issued together, each with its own verdicts', async () => {
+		const calls = Array.from({ length: 6 }, (_, index) =>
+			matchSelectorSnapshots({
+				plan: IMG_PLAN,
+				snapshots: [stored(index % 2 === 0 ? '<img>' : '<p>x</p>', 'zstd')],
+			}),
+		);
+		const results = await Promise.all(calls);
+		expect(results.map(([verdict]) => verdict!.matched)).toEqual([
+			true,
+			false,
+			true,
+			false,
+			true,
+			false,
+		]);
+	});
+
+	it('does not stop a call whose own signal is not the one that fired', async () => {
+		const quiet = new AbortController();
+		const noisy = new AbortController();
+		const kept = matchSelectorSnapshots({
+			plan: IMG_PLAN,
+			snapshots: [stored('<img>', 'none')],
+			signal: quiet.signal,
+		});
+		const stopped = matchSelectorSnapshots({
+			plan: IMG_PLAN,
+			snapshots: slowBatch(),
+			signal: noisy.signal,
+		});
+		noisy.abort(new Error('only this one'));
+		await expect(stopped).rejects.toThrow('only this one');
+		const keptVerdicts = await kept;
+		expect(keptVerdicts[0]!.matched).toBe(true);
+	});
+});
