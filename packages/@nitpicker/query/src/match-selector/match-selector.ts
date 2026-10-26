@@ -61,7 +61,11 @@ export async function matchSelector(
 			knex,
 			filters: options,
 			judgeBatch: async (snapshots) => {
-				const outcomes = await matchSelectorSnapshots({ plan, snapshots });
+				const outcomes = await matchSelectorSnapshots({
+					plan,
+					snapshots,
+					signal: options.signal,
+				});
 				for (const outcome of outcomes) {
 					if (outcome.prefiltered) {
 						prefiltered++;
@@ -73,6 +77,7 @@ export async function matchSelector(
 				return outcomes.map((outcome) => outcome.matched);
 			},
 			onProgress: options.onProgress,
+			signal: options.signal,
 		});
 
 	const slice = matchedPages.slice(offset, offset + limit).map((page) => page.pageId);
