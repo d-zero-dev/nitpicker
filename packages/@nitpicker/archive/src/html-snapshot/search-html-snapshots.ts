@@ -19,10 +19,12 @@ import { searchHtmlSnapshots as searchHtmlSnapshotsNatively } from '@nitpicker/c
  * @param options.pattern - The pattern and its flags.
  * @param options.snippetLength - Window size in characters.
  * @param options.snapshots - The stored snapshots, in the order the outcomes are returned.
+ * @param options.signal - Stops the call at its next snapshot; a call still waiting for its turn stops when the turn comes.
  * @returns One outcome per snapshot, in input order; `matchCount` is 0 where nothing matched.
  * @throws {Error} If a codec is not `zstd` or `none`, or the batch takes more than 4 GiB.
  *   The returned promise rejects if a snapshot's zstd data is corrupt, or with code
- *   `InvalidArg` if the pattern cannot be compiled.
+ *   `InvalidArg` if the pattern cannot be compiled, and with the signal's reason if `signal`
+ *   aborted before the call finished.
  * @example
  * ```ts
  * const outcomes = await searchHtmlSnapshots({
@@ -36,6 +38,7 @@ export function searchHtmlSnapshots(options: {
 	readonly pattern: SearchPattern;
 	readonly snippetLength: number;
 	readonly snapshots: readonly StoredHtmlSnapshot[];
+	readonly signal?: AbortSignal;
 }): Promise<SnapshotSearchOutcome[]> {
 	// Passing archive's types to core's wrapper, and taking its result as
 	// archive's type, is the check that the two still mirror each other.

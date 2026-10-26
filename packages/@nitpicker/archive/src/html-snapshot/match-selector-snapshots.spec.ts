@@ -52,3 +52,16 @@ describe('matchSelectorSnapshots', () => {
 		).rejects.toThrow('Unknown page_html_blobs.codec: lz4');
 	});
 });
+
+describe('matchSelectorSnapshots with a signal', () => {
+	it('rejects with the signal reason when it is already aborted', async () => {
+		const reason = new Error('aborted first');
+		await expect(
+			matchSelectorSnapshots({
+				plan: IMG,
+				snapshots: [{ body: Buffer.from('<img>'), codec: 'none' }],
+				signal: AbortSignal.abort(reason),
+			}),
+		).rejects.toBe(reason);
+	});
+});
