@@ -626,6 +626,30 @@ describe('createServer', () => {
 		expect(missing.content[0]!.text).toContain('Missing required argument: pattern');
 	});
 
+	it('search_html と match_selector はクライアントのキャンセル（extra.signal）で走査を止め、エラーを返す', async () => {
+		type RequestHandler = (request: unknown, extra: unknown) => Promise<unknown>;
+		const handlers = (
+			server as unknown as { _requestHandlers: Map<string, RequestHandler> }
+		)._requestHandlers;
+		const callToolHandler = handlers.get('tools/call')!;
+		const callAborted = (name: string, args: Record<string, unknown>) =>
+			callToolHandler(
+				{ method: 'tools/call', params: { name, arguments: args } },
+				{ signal: AbortSignal.abort(new Error('client cancelled the request')) },
+			) as Promise<{ content: { type: string; text: string }[]; isError?: boolean }>;
+
+		const searched = await callAborted('search_html', {
+			archiveId,
+			pattern: '<h1>About</h1>',
+		});
+		expect(searched.isError).toBe(true);
+		expect(searched.content[0]!.text).toContain('client cancelled the request');
+
+		const matched = await callAborted('match_selector', { archiveId, selector: 'h1' });
+		expect(matched.isError).toBe(true);
+		expect(matched.content[0]!.text).toContain('client cancelled the request');
+	});
+
 	it('search_html の description と pattern は正規表現の契約（Rust regex 構文・対応 flags）を示す', () => {
 		const searchHtml = toolDefinitions.find((tool) => tool.name === 'search_html');
 		expect(searchHtml?.description).toContain('Rust `regex` syntax');
