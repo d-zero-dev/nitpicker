@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 
-import { eachSplitted } from '@nitpicker/archive/utils/array/each-splitted';
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
 
 import { normalizeArchiveUrl } from './normalize-archive-url.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
@@ -88,7 +88,11 @@ export async function computeFromListAllowedPageIds({
 	];
 
 	const allowedIds = new Set<number>();
-	await eachSplitted(normalizedRoots, SQLITE_IN_CHUNK, async (chunk) => {
+	// One chunk at a time, not `eachSplitted`: that starts every chunk's
+	// SELECT before any of them yields, so no turn of the event loop would
+	// come between two statements (see `releaseFinishedStatements`).
+	for (let start = 0; start < normalizedRoots.length; start += SQLITE_IN_CHUNK) {
+		const chunk = normalizedRoots.slice(start, start + SQLITE_IN_CHUNK);
 		const rows: RootRow[] = await knex('content_items as root')
 			.join('url_refs as ur', 'ur.id', 'root.url_id')
 			.leftJoin(
@@ -103,6 +107,7 @@ export async function computeFromListAllowedPageIds({
 				'root.alias_of_id as aliasOfId',
 				'redirect_target.alias_of_id as redirectTargetAliasOfId',
 			);
+		await releaseFinishedStatements();
 		for (const row of rows) {
 			// The root's own row is always admitted — a redirect source is now
 			// a listable row in its own right (`is_redirect_source`), not just
@@ -116,7 +121,7 @@ export async function computeFromListAllowedPageIds({
 				allowedIds.add(resolvedDestId);
 			}
 		}
-	});
+	}
 
 	return allowedIds;
 }

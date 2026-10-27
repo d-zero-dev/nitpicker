@@ -1,5 +1,6 @@
 import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
 import { computeShapeKey } from '@nitpicker/archive/url-pattern/compute-shape-key';
 
 const CHUNK_SIZE = 500;
@@ -124,6 +125,7 @@ export async function backfillDedupeCapEventId(
 			}
 		});
 		processed += chunk.length;
+		await releaseFinishedStatements();
 		onProgress?.(processed, total);
 	}
 }

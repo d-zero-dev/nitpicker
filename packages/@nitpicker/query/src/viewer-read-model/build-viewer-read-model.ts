@@ -6,6 +6,8 @@ import type { Knex } from 'knex';
 
 import { decodeURISafely } from '@d-zero/shared/decode-uri-safely';
 import { tryParseUrl } from '@d-zero/shared/parse-url';
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+import { withBulkWritePragmas } from '@nitpicker/archive/with-bulk-write-pragmas';
 
 import { applyPageListUniverse } from '../apply-page-list-universe.js';
 import { buildHeaderPresenceSelects } from '../build-header-presence-selects.js';
@@ -127,6 +129,12 @@ async function insertChunked<T extends object, S extends object>({
 			? sourceChunk.map((row) => mapRow(row))
 			: (sourceChunk as unknown as T[]);
 		await trx(table).insert(chunk);
+		// Before the next chunk, not after the loop: each chunk's statement is
+		// freed only on a turn of the event loop (see the helper's docs), and
+		// the whole build runs inside one transaction, so without this every
+		// chunk's compiled statement and bound values stay allocated until
+		// `COMMIT`.
+		await releaseFinishedStatements();
 		onChunkInserted?.(chunk.length);
 	}
 }
@@ -789,8 +797,17 @@ function toViewerPageInsertRow(
  * they are read; counters keyed by page id are `DensePageCounts`; each row's
  * URL is parsed twice (`computePageDirKeys`, then its insert-row conversion).
  * Why not hold the converted rows too: they are a second copy of every page
- * with dozens of columns. Most of the build's peak RSS is not in these arrays
- * but in the native SQLite side, which this policy does not touch.
+ * with dozens of columns. The native side is bounded separately: every loop
+ * that runs statements per chunk (the inserts, the chunked source scans, the
+ * `compute-*-rows` generators, the external-link upsert, the index pass and
+ * the backfills) awaits `releaseFinishedStatements` once per iteration,
+ * because the libsql driver frees a finished statement only on a turn of the
+ * event loop, and this build, which awaits nothing but synchronous SQL,
+ * would otherwise hold every statement of the transaction until `COMMIT`
+ * (see that helper's docs for the rule and the measurement). The few
+ * statements that run once outside a loop (the summary, profile and meta
+ * rows) are released by the next loop's turn. The connection settings for
+ * the whole run are `withBulkWritePragmas`'s.
  *
  * Always a full rebuild — there is no incremental/diff path.
  * @param accessor - The archive accessor to build against. Must be
@@ -830,6 +847,43 @@ export async function buildViewerReadModel(
 	// `accessor.getConfig()` to resolve (see this function's own docs), so
 	// this adds no new precondition.
 	const config = await accessor.getConfig();
+	// The whole build, backfills and checkpoint included, runs with the
+	// connection tuned for one long bulk write; the read-tuned settings come
+	// back before this resolves. Applied here rather than only by the worker
+	// entry so an in-thread build (tests, fixtures, the bench) is measured
+	// the same way the worker builds. The worker's backfills-only task wraps
+	// its own run the same way.
+	await withBulkWritePragmas(knex, () =>
+		runBuildPhases({ accessor, knex, config, onProgress, onPhase }),
+	);
+}
+
+/** Named parameters for {@link runBuildPhases}. */
+interface RunBuildPhasesOptions extends BuildViewerReadModelOptions {
+	readonly accessor: ArchiveAccessor;
+	readonly knex: Knex;
+	readonly config: Awaited<ReturnType<ArchiveAccessor['getConfig']>>;
+}
+
+/**
+ * The build itself, from the backfills to the final WAL checkpoint — see
+ * {@link buildViewerReadModel} for what it writes and the memory policy.
+ * Split from the entry point only so the connection settings wrapping it stay
+ * one call around one function.
+ * @param options - See {@link RunBuildPhasesOptions}.
+ * @param options.accessor - The writable archive accessor the build runs on.
+ * @param options.knex - That accessor's connection.
+ * @param options.config - The archive's crawl configuration, read once by the entry point.
+ * @param options.onProgress - See {@link BuildViewerReadModelOptions.onProgress}.
+ * @param options.onPhase - See {@link BuildViewerReadModelOptions.onPhase}.
+ */
+async function runBuildPhases({
+	accessor,
+	knex,
+	config,
+	onProgress,
+	onPhase,
+}: RunBuildPhasesOptions): Promise<void> {
 	// Adapts the backfills' own `(processed, total)` callback shape to this
 	// build's phase-generic `onProgress` (issue #294) — the current phase
 	// (tracked by the caller via `onPhase`) tells the display which backfill
@@ -1051,6 +1105,7 @@ export async function buildViewerReadModel(
 					'pm.lang as lang',
 					...buildHeaderPresenceSelects(trx),
 				);
+			await releaseFinishedStatements();
 			if (chunk.length === 0) {
 				onProgress?.({ insertedRows: maxContentItemId, totalRows: maxContentItemId });
 				break;
@@ -1131,6 +1186,7 @@ export async function buildViewerReadModel(
 			// × technology, with the page URL) are never all held at once.
 			technologySummary.add(chunk);
 			technologyDirectoryStats.add(chunk);
+			await releaseFinishedStatements();
 			onProgress?.({
 				insertedRows: Math.min(rangeEnd, maxContentItemId),
 				totalRows: maxContentItemId,

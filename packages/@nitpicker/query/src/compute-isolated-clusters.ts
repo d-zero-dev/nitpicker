@@ -3,6 +3,7 @@ import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import type { PageSource } from '@nitpicker/archive/types';
 
 import { createIsolatedClusterRun } from '@nitpicker/archive/isolated-cluster/create-isolated-cluster-run';
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
 
 import { requireAliasOfIdColumn } from './require-alias-of-id-column.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
@@ -172,6 +173,7 @@ export async function computeIsolatedClusters(
 			pageId: number;
 			hrefId: number;
 		}[];
+		await releaseFinishedStatements();
 		const edges: number[] = [];
 		for (const row of rows) {
 			edges.push(row.pageId, row.hrefId);

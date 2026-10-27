@@ -57,6 +57,10 @@
 		"vicp",
 		"indegree",
 
+		// Memory region readers of the read model build bench: macOS `vmmap`, Linux `/proc` `RssShmem`
+		"vmmap",
+		"shmem",
+
 		// Filesystems / OS storage primitives (tar cache documentation)
 		"APFS",
 		"tmpfs",

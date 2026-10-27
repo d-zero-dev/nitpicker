@@ -3,7 +3,15 @@ import path from 'node:path';
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
 import { computeBodyHash } from '@nitpicker/archive/body-hash/compute-body-hash';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { backfillBodyHashFromHtmlBlobs } from './backfill-body-hash-from-html-blobs.js';
 
@@ -152,6 +160,18 @@ describe('backfillBodyHashFromHtmlBlobs', () => {
 		const [processed, total] = calls.at(-1)!;
 		expect(processed).toBe(total);
 		expect(total).toBe(2);
+	});
+
+	it('gives the event loop one turn per chunk, before its progress report', async () => {
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		vi.mocked(releaseFinishedStatements).mockClear();
+		let ticks = 0;
+		await backfillBodyHashFromHtmlBlobs(archive, () => {
+			ticks += 1;
+		});
+		expect(ticks).toBeGreaterThan(0);
+		expect(vi.mocked(releaseFinishedStatements)).toHaveBeenCalledTimes(ticks);
 	});
 
 	it('fails naming the page and the blob hash when a stored blob cannot be decoded', async () => {

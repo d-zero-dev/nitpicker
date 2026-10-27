@@ -39,6 +39,7 @@ import type { ViewerReadModelWorkerData, ViewerReadModelWorkerMessage } from './
 import { parentPort, workerData } from 'node:worker_threads';
 
 import Archive from '@nitpicker/archive/archive';
+import { withBulkWritePragmas } from '@nitpicker/archive/with-bulk-write-pragmas';
 
 import { backfillAliasOfId } from '../backfill-alias-of-id.js';
 import { backfillBodyHashFromHtmlBlobs } from '../backfill-body-hash-from-html-blobs.js';
@@ -68,14 +69,18 @@ try {
 			// function's `checkpointing` phase for why the checkpoint must
 			// happen here on the worker's own connection rather than on the
 			// caller's later `archive.write()`.
-			post({ type: 'phase', phase: 'backfillingBodyHash' });
-			await backfillBodyHashFromHtmlBlobs(accessor, relayBackfillProgress);
-			post({ type: 'phase', phase: 'backfillingAliasOfId' });
-			await backfillAliasOfId(accessor, relayBackfillProgress);
-			post({ type: 'phase', phase: 'backfillingDedupeCapEventId' });
-			await backfillDedupeCapEventId(accessor, relayBackfillProgress);
-			post({ type: 'phase', phase: 'checkpointing' });
-			await accessor.getKnex().raw('PRAGMA wal_checkpoint(TRUNCATE)');
+			// Same connection settings as a full build, for the same reason
+			// (`buildViewerReadModel` wraps its own run the same way).
+			await withBulkWritePragmas(accessor.getKnex(), async () => {
+				post({ type: 'phase', phase: 'backfillingBodyHash' });
+				await backfillBodyHashFromHtmlBlobs(accessor, relayBackfillProgress);
+				post({ type: 'phase', phase: 'backfillingAliasOfId' });
+				await backfillAliasOfId(accessor, relayBackfillProgress);
+				post({ type: 'phase', phase: 'backfillingDedupeCapEventId' });
+				await backfillDedupeCapEventId(accessor, relayBackfillProgress);
+				post({ type: 'phase', phase: 'checkpointing' });
+				await accessor.getKnex().raw('PRAGMA wal_checkpoint(TRUNCATE)');
+			});
 		} else {
 			await buildViewerReadModel(accessor, {
 				onPhase: (phase) => {

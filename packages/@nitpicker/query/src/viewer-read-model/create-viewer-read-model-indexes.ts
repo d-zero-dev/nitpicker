@@ -1,5 +1,7 @@
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 /**
  * Every index this read model needs, in creation order. Kept as a flat list
  * (rather than inline `await trx.raw(...)` calls) so
@@ -266,6 +268,9 @@ export async function createViewerReadModelIndexes(
 	let completed = 0;
 	for (const statement of INDEX_STATEMENTS) {
 		await trx.raw(statement);
+		// Each `CREATE INDEX` sorts its keys in memory the statement owns; the
+		// turn frees that before the next index is built (see the helper).
+		await releaseFinishedStatements();
 		completed += 1;
 		onProgress?.(completed, total);
 	}

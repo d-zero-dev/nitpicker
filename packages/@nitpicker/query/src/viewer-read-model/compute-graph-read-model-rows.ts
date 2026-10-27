@@ -1,6 +1,8 @@
 import type { GraphEdgeInsertRow } from './types.js';
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 /** Rows read per `viewer_anchor_facts` chunk while deriving graph edges. */
 const READ_CHUNK_SIZE = 2000;
 
@@ -63,6 +65,7 @@ export async function* computeGraphReadModelRows(
 				'facts.source_page_id as sourcePageId',
 				'facts.dest_page_id as targetPageId',
 			)) as { edgeId: number; sourcePageId: number; targetPageId: number }[];
+		await releaseFinishedStatements();
 
 		if (rows.length === 0) {
 			onProgress?.(maxEdgeId, maxEdgeId);

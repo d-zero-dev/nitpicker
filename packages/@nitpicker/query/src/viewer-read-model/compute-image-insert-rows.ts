@@ -1,6 +1,8 @@
 import type { ImageInsertRow } from './types.js';
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 /** Rows read per `image_items` scan chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;
 
@@ -90,6 +92,7 @@ export async function* computeImageInsertRows(
 				'ii.natural_height as naturalHeight',
 				'ii.is_lazy as isLazy',
 			);
+		await releaseFinishedStatements();
 
 		if (rows.length === 0) {
 			onProgress?.(maxId, maxId);
