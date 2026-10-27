@@ -64,6 +64,10 @@
 			"import": "./lib/match-structural-technology-signals.js",
 			"types": "./lib/match-structural-technology-signals.d.ts"
 		},
+		"./max-decoded-snapshot-bytes": {
+			"import": "./lib/max-decoded-snapshot-bytes.js",
+			"types": "./lib/max-decoded-snapshot-bytes.d.ts"
+		},
 		"./search-html-document": {
 			"import": "./lib/search-html-document.js",
 			"types": "./lib/search-html-document.d.ts"
