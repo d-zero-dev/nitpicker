@@ -39,6 +39,24 @@ const BASE_CONFIG = {
 	ignoreRobots: false,
 };
 
+/**
+ * Counts turns of the event loop from now until `stop()`, by re-queuing a
+ * `setImmediate` callback on every turn — the queue the libsql driver's
+ * statement finalizers run from.
+ * @returns `read()` gives the turns so far; `stop()` ends the counting.
+ */
+function startEventLoopTurnCounter(): { read: () => number; stop: () => void } {
+	let turns = 0;
+	let handle = setImmediate(function tick() {
+		turns += 1;
+		handle = setImmediate(tick);
+	});
+	return {
+		read: () => turns,
+		stop: () => clearImmediate(handle),
+	};
+}
+
 const META = {
 	lang: null,
 	title: null,
@@ -1059,6 +1077,74 @@ describe('buildViewerReadModel', () => {
 
 		it('defaults to no progress reporting when onProgress is omitted', async () => {
 			await expect(buildViewerReadModel(archive)).resolves.toBeUndefined();
+		});
+
+		it('gives the event loop a turn before every progress tick inside the transaction, so each finished statement is freed before the next one', async () => {
+			// The libsql driver frees a statement's native memory from a
+			// `setImmediate` finalizer, which never runs while the build only
+			// awaits synchronous SQL through microtasks. Two consecutive ticks
+			// that saw the same turn count would mean a statement ran without
+			// a turn after the one before it.
+			const turns = startEventLoopTurnCounter();
+			const ticks: { phase: string; turn: number }[] = [];
+			let phase = '';
+			try {
+				await buildViewerReadModel(archive, {
+					onPhase: (name) => {
+						phase = name;
+					},
+					onProgress: () => {
+						ticks.push({ phase, turn: turns.read() });
+					},
+				});
+			} finally {
+				turns.stop();
+			}
+			// The transaction opens with `loadingPageRows`; the backfills before
+			// it run in their own transactions.
+			const inTransaction = ticks.slice(
+				ticks.findIndex((tick) => tick.phase === 'loadingPageRows'),
+			);
+			// Both the bulk inserts and the index pass were observed.
+			expect(inTransaction.map((tick) => tick.phase)).toEqual(
+				expect.arrayContaining(['buildingPages', 'creatingIndexes']),
+			);
+			const stalled = inTransaction.filter(
+				(tick, index) => index > 0 && tick.turn <= inTransaction[index - 1]!.turn,
+			);
+			expect(stalled).toEqual([]);
+		});
+
+		it('runs with the bulk-write connection settings and restores the read-tuned ones afterwards', async () => {
+			const knex = archive.getKnex();
+			const readPragma = async (name: string) => {
+				const [row] = (await knex.raw(`PRAGMA ${name}`)) as Record<string, number>[];
+				return Number(row![name]);
+			};
+			const readSettings = async () => ({
+				tempStore: await readPragma('temp_store'),
+				mmapSize: await readPragma('mmap_size'),
+				cacheSize: await readPragma('cache_size'),
+			});
+			// Queued from the first phase, before the build's transaction opens,
+			// so it runs between two of the build's own statements on the same
+			// connection and sees the settings the build runs with.
+			let duringBuild: ReturnType<typeof readSettings> | undefined;
+			await buildViewerReadModel(archive, {
+				onPhase: () => {
+					duringBuild ??= readSettings();
+				},
+			});
+			expect(await duringBuild).toEqual({
+				tempStore: 0,
+				mmapSize: 0,
+				cacheSize: -16_384,
+			});
+			expect(await readSettings()).toEqual({
+				tempStore: 0,
+				mmapSize: 268_435_456,
+				cacheSize: -65_536,
+			});
 		});
 	});
 

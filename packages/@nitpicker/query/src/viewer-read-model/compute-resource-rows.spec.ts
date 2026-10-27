@@ -5,7 +5,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { computeResourceInsertRows } from './compute-resource-rows.js';
 
@@ -304,6 +312,25 @@ describe('computeResourceInsertRows', () => {
 			rows.toSorted((a, b) => a.resource_id - b.resource_id);
 		expect(byResourceId(chunked.resources)).toEqual(byResourceId(baseline.resources));
 		expect(byResourceId(chunked.stats)).toEqual(byResourceId(baseline.stats));
+	});
+
+	it('gives the event loop one turn per SELECT, the final empty one included', async () => {
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		const knex = archive.getKnex();
+		let selects = 0;
+		vi.mocked(releaseFinishedStatements).mockClear();
+		await knex.transaction(async (trx) => {
+			// One progress report per SELECT, so the reports count the SELECTs.
+			for await (const chunk of computeResourceInsertRows(trx, 1, () => {
+				selects += 1;
+			})) {
+				expect(chunk.resources).toHaveLength(1);
+			}
+		});
+		// 4 fixture resources at chunkSize=1: 4 SELECTs with a row and 1 empty.
+		expect(selects).toBe(5);
+		expect(vi.mocked(releaseFinishedStatements)).toHaveBeenCalledTimes(selects);
 	});
 
 	it('throws on a non-positive chunkSize instead of silently yielding nothing or looping forever', async () => {

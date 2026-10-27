@@ -1,5 +1,7 @@
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 /** Metadata fields `findDuplicates`/this read model track duplicates for. */
 type DuplicateGroupField = 'title' | 'description';
 
@@ -84,6 +86,7 @@ export async function computeDuplicateGroupRows(trx: Knex): Promise<{
 			value: string;
 			cnt: number | string;
 		}[];
+		await releaseFinishedStatements();
 
 		const valueToGroupId = groupIdByValue.get(field)!;
 		for (const row of rows) {

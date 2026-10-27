@@ -1,7 +1,15 @@
 import path from 'node:path';
 
 import Archive from '@nitpicker/archive/archive';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { createViewerReadModelTables } from './create-viewer-read-model-tables.js';
 import { upsertExternalLinkRows } from './upsert-external-link-rows.js';
@@ -110,5 +118,28 @@ describe('upsertExternalLinkRows', () => {
 			.where('dest_page_id', '>=', 1000)
 			.count('* as c');
 		expect(Number(count[0]!.c)).toBe(1200);
+	});
+
+	it('gives the event loop one turn per INSERT statement, so a long chunk releases its statements as it goes', async () => {
+		const knex = archive.getKnex();
+		const rows = Array.from({ length: 1200 }, (_, index) => ({
+			dest_page_id: 5000 + index,
+			dest_url_ref_id: 5000 + index,
+			status: 200,
+			referrer_count: 1,
+		}));
+		const refRows = rows.map((row) => ({
+			id: row.dest_url_ref_id,
+			url: `https://ads.example.com/${row.dest_url_ref_id}`,
+		}));
+		for (let start = 0; start < refRows.length; start += 500) {
+			await knex('viewer_url_refs').insert(refRows.slice(start, start + 500));
+		}
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		vi.mocked(releaseFinishedStatements).mockClear();
+		await knex.transaction((trx) => upsertExternalLinkRows(trx, rows));
+		// 1,200 rows at 500 per INSERT: three statements, three turns.
+		expect(vi.mocked(releaseFinishedStatements)).toHaveBeenCalledTimes(3);
 	});
 });

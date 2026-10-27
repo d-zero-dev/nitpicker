@@ -2,6 +2,7 @@ import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { computeBodyHash } from '@nitpicker/archive/body-hash/compute-body-hash';
 import { decodePageHtmlBlobBytes } from '@nitpicker/archive/decode-page-html-blob-bytes';
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
 
 const CHUNK_SIZE = 500;
 
@@ -89,6 +90,10 @@ export async function backfillBodyHashFromHtmlBlobs(
 
 		lastPageId = rows.at(-1)!.pageId;
 		processed += rows.length;
+		// Releases the chunk's SELECT and UPDATE statement handles before the
+		// next chunk (see the helper's docs). The rows themselves, blobs
+		// included, are JS-owned and go when `rows` is reassigned.
+		await releaseFinishedStatements();
 		onProgress?.(processed, total);
 	}
 }

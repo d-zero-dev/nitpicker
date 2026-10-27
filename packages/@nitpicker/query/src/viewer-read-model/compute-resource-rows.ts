@@ -1,6 +1,8 @@
 import type { ResourceInsertRows } from './types.js';
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 import { NULL_STATUS_SENTINEL } from './null-status-sentinel.js';
 
 /** Rows read per `resource_items`/`resource_ref_edges` scan chunk, by default. */
@@ -102,6 +104,7 @@ export async function* computeResourceInsertRows(
 				'ri.cdn as cdn',
 				trx.raw('coalesce(sum("rre"."count"), 0) as "referrerCount"'),
 			);
+		await releaseFinishedStatements();
 
 		if (rows.length === 0) {
 			onProgress?.(maxId, maxId);

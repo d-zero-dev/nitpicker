@@ -2,7 +2,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { computeIsolatedClusters } from './compute-isolated-clusters.js';
 
@@ -306,6 +314,16 @@ describe('computeIsolatedClusters', () => {
 
 		expect(components.length).toBeGreaterThan(2);
 		expect(smallestIds).toEqual(smallestIds.toSorted((a, b) => a - b));
+	});
+
+	it('gives the event loop one turn per anchor_edges IN chunk of candidates', async () => {
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		vi.mocked(releaseFinishedStatements).mockClear();
+		const components = await computeIsolatedClusters(archive);
+		// The fixture's candidates fit in one IN list of 500: one SELECT, one turn.
+		expect(components.length).toBeGreaterThan(0);
+		expect(vi.mocked(releaseFinishedStatements)).toHaveBeenCalledTimes(1);
 	});
 
 	it('returns one component per connected group, including singletons', async () => {

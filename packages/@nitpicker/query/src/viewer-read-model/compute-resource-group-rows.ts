@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
 import { computeUrlSortRanks } from '@nitpicker/archive/url-sort/compute-url-sort-ranks';
 
 import { getResourceReferrerPageEdges } from '../get-resource-referrer-page-edges.js';
@@ -305,6 +306,7 @@ export async function computeResourceGroupRows(
 				'ctr.raw as contentType',
 				'ri.content_length as contentLength',
 			);
+		await releaseFinishedStatements();
 
 		if (rows.length === 0) {
 			onProgress?.(maxId, maxId);

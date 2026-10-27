@@ -2,7 +2,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { computeDuplicateGroupRows } from './compute-duplicate-group-rows.js';
 
@@ -109,6 +117,14 @@ describe('computeDuplicateGroupRows', () => {
 		}
 		const { rmSync } = await import('node:fs');
 		rmSync(workingDir, { recursive: true, force: true });
+	});
+
+	it('gives the event loop one turn per field it scans (title, then description)', async () => {
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		vi.mocked(releaseFinishedStatements).mockClear();
+		await archive.getKnex().transaction((trx) => computeDuplicateGroupRows(trx));
+		expect(vi.mocked(releaseFinishedStatements)).toHaveBeenCalledTimes(2);
 	});
 
 	it('detects title and description duplicate groups, excluding singletons', async () => {

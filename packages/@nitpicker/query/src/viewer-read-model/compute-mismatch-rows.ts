@@ -1,5 +1,7 @@
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 import { buildPageNaturalUrlRankMap } from './build-page-natural-url-rank-map.js';
 
 /** Rows read per `content_items` id-keyset scan chunk, by default. */
@@ -202,6 +204,7 @@ export async function* computeMismatchInsertRows(
 				.where('ci.id', '>', lastId)
 				.orderBy('ci.id', 'asc')
 				.limit(chunkSize);
+			await releaseFinishedStatements();
 
 			if (rows.length === 0) {
 				break;
@@ -224,6 +227,7 @@ export async function* computeMismatchInsertRows(
 				.where('ci.id', '>', lastId)
 				.orderBy('ci.id', 'asc')
 				.limit(chunkSize);
+			await releaseFinishedStatements();
 
 			if (rows.length === 0) {
 				break;

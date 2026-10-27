@@ -1,5 +1,6 @@
 import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
 import { groupAliasCandidates } from '@nitpicker/archive/url-alias/group-alias-candidates';
 
 import { normalizeBodyHash } from './normalize-body-hash.js';
@@ -151,6 +152,7 @@ export async function backfillAliasOfId(
 			for (let start = 0; start < total; start += CHUNK_SIZE) {
 				const chunk = assignments.slice(start, start + CHUNK_SIZE);
 				await trx(`temp.${STAGING_TABLE}`).insert(chunk);
+				await releaseFinishedStatements();
 				processed += chunk.length;
 				if (processed < total) {
 					onProgress?.(processed, total);

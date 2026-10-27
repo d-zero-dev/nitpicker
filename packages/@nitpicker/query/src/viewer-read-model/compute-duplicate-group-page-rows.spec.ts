@@ -5,7 +5,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { computeDuplicateGroupPageRows } from './compute-duplicate-group-page-rows.js';
 import { computeDuplicateGroupRows } from './compute-duplicate-group-rows.js';
@@ -219,6 +227,27 @@ describe('computeDuplicateGroupPageRows', () => {
 		expect(chunked.toSorted((a, b) => (sortKey(a) > sortKey(b) ? 1 : -1))).toEqual(
 			baseline.toSorted((a, b) => (sortKey(a) > sortKey(b) ? 1 : -1)),
 		);
+	});
+
+	it('gives the event loop one turn per pages-scan SELECT, the final empty one included', async () => {
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		const knex = archive.getKnex();
+		let selects = 0;
+		let turnsInScan = 0;
+		await knex.transaction(async (trx) => {
+			const { groupIdByValue } = await computeDuplicateGroupRows(trx);
+			// Counted from here: computeDuplicateGroupRows takes its own turns.
+			vi.mocked(releaseFinishedStatements).mockClear();
+			// One progress report per SELECT, so the reports count the SELECTs.
+			const chunks = computeDuplicateGroupPageRows(trx, groupIdByValue, 1, () => {
+				selects += 1;
+			});
+			await Array.fromAsync(chunks);
+			turnsInScan = vi.mocked(releaseFinishedStatements).mock.calls.length;
+		});
+		expect(selects).toBeGreaterThan(1);
+		expect(turnsInScan).toBe(selects);
 	});
 
 	it('short-circuits to zero rows without scanning pages when groupIdByValue has no duplicate values', async () => {
