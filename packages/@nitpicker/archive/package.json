@@ -100,6 +100,10 @@
 			"import": "./lib/decode-html-blob.js",
 			"types": "./lib/decode-html-blob.d.ts"
 		},
+		"./decode-page-html-blob-bytes": {
+			"import": "./lib/decode-page-html-blob-bytes.js",
+			"types": "./lib/decode-page-html-blob-bytes.d.ts"
+		},
 		"./decode-stored-blob-bytes": {
 			"import": "./lib/decode-stored-blob-bytes.js",
 			"types": "./lib/decode-stored-blob-bytes.d.ts"

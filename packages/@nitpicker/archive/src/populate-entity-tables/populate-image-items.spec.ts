@@ -357,4 +357,40 @@ describe('populateImageItems', () => {
 
 		expect(capturedHtml).toEqual([null]);
 	});
+
+	it('fails naming the page and the blob hash when the HTML snapshot cannot be decoded', async () => {
+		const hash = createHash('sha256').update('<p>corrupt</p>').digest();
+		await db('pages').insert([
+			{ id: 1, url: 'https://example.com/a', scraped: 1, isTarget: 1 },
+		]);
+		await db('page_html_blobs').insert({
+			hash,
+			body: Buffer.from('not zstd'),
+			codec: 'zstd',
+			size_raw: 14,
+			size_stored: 8,
+		});
+		await db('page_html_ref').insert({ page_id: 1, hash });
+		await db('images').insert([
+			{
+				id: 1,
+				pageId: 1,
+				src: 'https://example.com/img.png',
+				alt: null,
+				width: 1,
+				height: 1,
+				naturalWidth: 1,
+				naturalHeight: 1,
+				isLazy: 0,
+				viewportWidth: 1,
+				sourceCode: null,
+			},
+		]);
+		await populateRefTables(db);
+		await populateContentItems(db);
+
+		await expect(populateImageItems(db, unknownResolver)).rejects.toThrow(
+			`HTML snapshot of page 1 (page_html_blobs hash ${hash.toString('hex')}) could not be decoded`,
+		);
+	});
 });
