@@ -14,10 +14,11 @@ import { matchSelectorSnapshots as matchSelectorSnapshotsNatively } from '@nitpi
  * @param options - The plan and the batch.
  * @param options.plan - The validated selector list.
  * @param options.snapshots - The stored snapshots, in the order the verdicts are returned.
- * @param options.signal - Stops the call at its next snapshot; a call still waiting for its turn stops when the turn comes.
+ * @param options.signal - Stops the call at its next snapshot, or within the next mebibyte of a decompression under way; a call still waiting for its turn stops when the turn comes.
  * @returns One verdict per snapshot, in input order.
  * @throws {Error} If a codec is not `zstd` or `none`, or the batch takes more than 4 GiB.
- *   The returned promise rejects if a snapshot's zstd data is corrupt, or with code
+ *   The returned promise rejects (`snapshot <n> could not be decoded`) if a snapshot's
+ *   zstd data is corrupt or decompresses past `MAX_DECODED_SNAPSHOT_BYTES`, or with code
  *   `InvalidArg` if the plan is malformed, and with the signal's reason if `signal` aborted
  *   before the call finished.
  * @example

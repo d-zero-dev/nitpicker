@@ -58,6 +58,16 @@ pub const TEMPLATE_EXACT_PAGE_LIMIT: u32 = nitpicker_template_cluster::EXACT_PAG
 #[allow(clippy::cast_precision_loss)]
 pub const TEMPLATE_MEMORY_BUDGET: f64 = nitpicker_template_cluster::TEMPLATE_MEMORY_BUDGET as f64;
 
+/// Bytes one zstd-compressed HTML snapshot may decompress to; the
+/// `max_decoded_bytes` the JS wrappers pass to `matchSelectorSnapshots` and
+/// `searchHtmlSnapshots` (see `nitpicker_html_scan`).
+#[napi]
+// About 1.5 GiB, below 2^32 (asserted below); the cast cannot truncate.
+#[allow(clippy::cast_possible_truncation)]
+pub const MAX_DECODED_SNAPSHOT_BYTES: u32 = nitpicker_html_scan::MAX_DECODED_SNAPSHOT_BYTES as u32;
+// The JS calls take the limit as a `u32`: a larger value must not compile.
+const _: () = assert!(nitpicker_html_scan::MAX_DECODED_SNAPSHOT_BYTES <= u32::MAX as usize);
+
 /// Computes `page_meta.body_hash` for one HTML document.
 ///
 /// Synchronous on purpose: it runs on the crawler's event handler once per

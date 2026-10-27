@@ -66,7 +66,7 @@ run.unionEdges([10, 20, 20, 40]);
 run.labels(); // Uint32Array [0, 0, 0]
 ```
 
-保存済み HTML スナップショットのセレクタ照合は、`matchSelectorSnapshots` がバッチ（`page_html_blobs` の行）を受け取り、zstd の展開から判定までをスレッドプールで並列に行って、スナップショットごとの判定を返します。同時に展開済みの文書を持つのは、スレッド数ぶんだけです。1 文書だけを同期で判定する `matchSelectorHtml` は、テストとベンチの段階比較のために出しています。判定は、必要なリテラルが順に現れるかの事前判定、開始タグだけで決まるセレクタの開始タグ走査、結合子と `:nth-*` のための開タグスタックの順で、最も安い厳密な手段を使います。タグ名と属性名は ASCII の大文字小文字だけを無視します。計画（`SelectorPlan`）の作り方と解釈規則は `@nitpicker/cli` の `docs/query.md` が正です。
+保存済み HTML スナップショットのセレクタ照合は、`matchSelectorSnapshots` がバッチ（`page_html_blobs` の行）を受け取り、zstd の展開から判定までをスレッドプールで並列に行って、スナップショットごとの判定を返します。同時に展開済みの文書を持つのは、スレッド数ぶんだけです。zstd のスナップショット 1 件の展開後は `MAX_DECODED_SNAPSHOT_BYTES`（`@nitpicker/core/max-decoded-snapshot-bytes`、約 1.5 GiB）までで、超えると「不一致」にせず、`snapshot <n> could not be decoded` で呼び出し全体を reject します。zstd のフレームヘッダが述べる展開後サイズは省略も偽りもできるので、展開しながら出てきたバイト数を数えて止めます。上限はクローラーが保存できる最大（V8 の文字列の最大長 2^29 − 24 code unit × UTF-8 の最大 3 バイト）なので、クローラーが保存したスナップショットが上限で弾かれることはありません。圧縮せずに保存されたスナップショットには掛けません（`searchHtmlSnapshots` も同じ）。1 文書だけを同期で判定する `matchSelectorHtml` は、テストとベンチの段階比較のために出しています。判定は、必要なリテラルが順に現れるかの事前判定、開始タグだけで決まるセレクタの開始タグ走査、結合子と `:nth-*` のための開タグスタックの順で、最も安い厳密な手段を使います。タグ名と属性名は ASCII の大文字小文字だけを無視します。計画（`SelectorPlan`）の作り方と解釈規則は `@nitpicker/cli` の `docs/query.md` が正です。
 
 ```ts
 import { matchSelectorSnapshots } from '@nitpicker/core/match-selector-snapshots';
@@ -143,7 +143,7 @@ import { checkNativeExecutorConfig } from '@nitpicker/core/check-native-executor
 checkNativeExecutorConfig(); // NITPICKER_NATIVE_THREADS="lots" なら InvalidArg で投げる
 ```
 
-`matchSelectorSnapshots` と `searchHtmlSnapshots` は `signal`（`AbortSignal`）を受け取ります。abort すると、実行中の呼び出しは次のスナップショットの前で止まり、待機中の呼び出しは順番が来た時点で終わり、どちらも `signal.reason` で reject します。すでに abort 済みの signal は、アドオンを呼ばずに reject します。同じバッチに展開に失敗したスナップショットがあっても、abort を見たスナップショットが 1 つでもあれば abort（`signal.reason`）を返します。展開のエラーを返すのは、どのスナップショットも abort を見る前に失敗したときだけです。テンプレート分類は、これまでどおり `run.cancel()` で止めます。
+`matchSelectorSnapshots` と `searchHtmlSnapshots` は `signal`（`AbortSignal`）を受け取ります。abort すると、実行中の呼び出しは次のスナップショットの前か展開中のスナップショットの次の 1 MiB を読む前で止まり、待機中の呼び出しは順番が来た時点で終わります。どちらも `signal.reason` で reject します。すでに abort 済みの signal は、アドオンを呼ばずに reject します。同じバッチに展開に失敗したスナップショットがあっても、abort を見たスナップショットが 1 つでもあれば abort（`signal.reason`）を返します。展開のエラーを返すのは、どのスナップショットも abort を見る前に失敗したときだけです。テンプレート分類は、これまでどおり `run.cancel()` で止めます。
 
 ```ts
 const controller = new AbortController();

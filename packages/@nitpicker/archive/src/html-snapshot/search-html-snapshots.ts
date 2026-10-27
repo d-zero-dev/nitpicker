@@ -19,10 +19,11 @@ import { searchHtmlSnapshots as searchHtmlSnapshotsNatively } from '@nitpicker/c
  * @param options.pattern - The pattern and its flags.
  * @param options.snippetLength - Window size in characters.
  * @param options.snapshots - The stored snapshots, in the order the outcomes are returned.
- * @param options.signal - Stops the call at its next snapshot; a call still waiting for its turn stops when the turn comes.
+ * @param options.signal - Stops the call at its next snapshot, or within the next mebibyte of a decompression under way; a call still waiting for its turn stops when the turn comes.
  * @returns One outcome per snapshot, in input order; `matchCount` is 0 where nothing matched.
  * @throws {Error} If a codec is not `zstd` or `none`, or the batch takes more than 4 GiB.
- *   The returned promise rejects if a snapshot's zstd data is corrupt, or with code
+ *   The returned promise rejects (`snapshot <n> could not be decoded`) if a snapshot's
+ *   zstd data is corrupt or decompresses past `MAX_DECODED_SNAPSHOT_BYTES`, or with code
  *   `InvalidArg` if the pattern cannot be compiled, and with the signal's reason if `signal`
  *   aborted before the call finished.
  * @example

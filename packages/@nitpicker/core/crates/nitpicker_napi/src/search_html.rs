@@ -137,7 +137,8 @@ pub fn search_html_document(
 ///
 /// `bodies` holds the stored bytes back to back, `offsets` the `n + 1`
 /// positions that cut it into `n` snapshots, and `codecs` one byte per
-/// snapshot: `0` stored as they are, `1` zstd.
+/// snapshot: `0` stored as they are, `1` zstd. A zstd snapshot may
+/// decompress to at most `max_decoded_bytes`.
 ///
 /// The work runs on the addon's thread pool (`executor`) after this call
 /// returns — behind any call already running when the concurrency limit is
@@ -145,15 +146,19 @@ pub fn search_html_document(
 /// buffer until the promise settles (the JS wrapper packs a fresh one for
 /// every call).
 ///
-/// `cancel_token`, once raised, stops the search at the next snapshot (a call
-/// still queued ends when its turn comes) and rejects with code `Cancelled`.
+/// `cancel_token`, once raised, stops the search at the next snapshot or
+/// within the next mebibyte of a decompression under way (a call still
+/// queued ends when its turn comes) and rejects with code `Cancelled`.
 ///
 /// # Errors
 ///
 /// `InvalidArg` when the pattern cannot be compiled, the offsets or a codec
 /// are malformed, or an executor setting is invalid. The promise rejects when
-/// a snapshot cannot be decoded, when the call was cancelled, or when
-/// searching panicked; a snapshot is never silently reported as "no match".
+/// a snapshot cannot be decoded (corrupt, or past `max_decoded_bytes`), when
+/// the call was cancelled, or when searching panicked; a snapshot is never
+/// silently reported as "no match".
+// The arguments are the JS call's, one per buffer the batch crosses as.
+#[allow(clippy::too_many_arguments)]
 #[napi(ts_return_type = "Promise<SearchSnapshotsOutput>")]
 pub fn search_html_snapshots<'env>(
 	env: &'env Env,
@@ -162,6 +167,7 @@ pub fn search_html_snapshots<'env>(
 	bodies: Uint8Array,
 	offsets: &[u32],
 	codecs: &[u8],
+	max_decoded_bytes: u32,
 	cancel_token: Option<&NativeCancelToken>,
 ) -> Result<Object<'env>> {
 	let executor = shared_executor()?;
@@ -191,9 +197,12 @@ pub fn search_html_snapshots<'env>(
 					codec,
 				})
 				.collect();
-			judge_snapshots(&snapshots, cancelled.raised(), |text| {
-				search_html(&regex, text, snippet_length as usize)
-			})
+			judge_snapshots(
+				&snapshots,
+				max_decoded_bytes as usize,
+				cancelled.raised(),
+				|text| search_html(&regex, text, snippet_length as usize),
+			)
 		}));
 		deferred.resolve(move |_| match outcome {
 			Ok(Ok(outcomes)) => {

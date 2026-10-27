@@ -1,5 +1,6 @@
 import type { SelectorPlan, SnapshotMatchOutcome, StoredHtmlSnapshot } from './types.js';
 
+import { MAX_DECODED_SNAPSHOT_BYTES } from './max-decoded-snapshot-bytes.js';
 import { nativeBinding } from './native-binding.js';
 import { packStoredSnapshots } from './pack-stored-snapshots.js';
 import { runWithSignal } from './run-with-signal.js';
@@ -24,16 +25,19 @@ const TOKENIZED = 4;
  * already running (see `checkNativeExecutorConfig`). Only the batch's stored bytes cross
  * the boundary, as one buffer and one offsets array.
  *
- * A snapshot that cannot be decompressed fails the whole call; it is never
- * judged "no match".
+ * A snapshot that cannot be decompressed — its zstd data is corrupt, or it
+ * decompresses past `MAX_DECODED_SNAPSHOT_BYTES` — fails the whole call; it is
+ * never judged "no match".
  * @param options - The plan and the batch.
  * @param options.plan - The validated selector list.
  * @param options.snapshots - The stored snapshots, in the order the verdicts are returned.
- * @param options.signal - Stops the call at its next snapshot; a call still waiting for its turn stops when the turn comes.
+ * @param options.signal - Stops the call at its next snapshot, or within the next mebibyte of a decompression under way; a call still waiting for its turn stops when the turn comes.
  * @returns One verdict per snapshot, in input order.
  * @throws {Error} If a codec is not `zstd` or `none`, or the batch takes more than 4 GiB.
- *   The returned promise rejects if a snapshot's zstd data is corrupt, and with
- *   the signal's reason if `signal` aborted before the call finished.
+ *   The returned promise rejects with a plain error naming the snapshot
+ *   (`snapshot <n> could not be decoded`) if its zstd data is corrupt or
+ *   decompresses past the limit, and with the signal's reason if `signal`
+ *   aborted before the call finished.
  * @example
  * ```ts
  * const verdicts = await matchSelectorSnapshots({
@@ -58,6 +62,7 @@ export async function matchSelectorSnapshots(options: {
 			bodies,
 			offsets,
 			codecs,
+			MAX_DECODED_SNAPSHOT_BYTES,
 			cancelToken,
 		),
 	);

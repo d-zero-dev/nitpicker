@@ -15,7 +15,8 @@ function isCancelled(error: unknown): boolean {
  *
  * With no signal, `run` gets no token and nothing is allocated. With one, a
  * fresh native token is raised when the signal fires, and the call stops at
- * its next check (between snapshots, or when it leaves the queue) and rejects
+ * its next check (between snapshots, between mebibytes of a snapshot's
+ * decompression, or when it leaves the queue) and rejects
  * with code `Cancelled`; that rejection, and only that one, is replaced by
  * the signal's reason, so an abort reads as the caller's own abort. The
  * addon reports a cancellation over a decode failure of the same batch (the
@@ -30,7 +31,7 @@ function isCancelled(error: unknown): boolean {
  * @example
  * ```ts
  * const flags = await runWithSignal(signal, (token) =>
- * 	nativeBinding.matchSelectorSnapshots(plan, bodies, offsets, codecs, token),
+ * 	nativeBinding.matchSelectorSnapshots(plan, bodies, offsets, codecs, maxDecodedBytes, token),
  * );
  * ```
  */

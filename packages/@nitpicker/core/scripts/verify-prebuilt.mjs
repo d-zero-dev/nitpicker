@@ -247,12 +247,22 @@ const snapshotOffsets = Uint32Array.of(
 	zstdSnapshot.length + plainSnapshot.length,
 );
 const snapshotCodecs = Uint8Array.of(1, 0);
+// The limit the JS wrappers pass; the addon owns the value. A build without
+// it would leave the JS-side decoder (`maxOutputLength`) unlimited.
+const maxDecodedBytes = binding.MAX_DECODED_SNAPSHOT_BYTES;
+if (!Number.isSafeInteger(maxDecodedBytes) || maxDecodedBytes <= 0) {
+	console.error(
+		`MISMATCH MAX_DECODED_SNAPSHOT_BYTES: expected a positive integer, got ${maxDecodedBytes}`,
+	);
+	process.exit(1);
+}
 const imgVerdicts = [
 	...(await binding.matchSelectorSnapshots(
 		imgAlt,
 		snapshotBodies,
 		snapshotOffsets,
 		snapshotCodecs,
+		maxDecodedBytes,
 	)),
 ].join(' ');
 const navVerdicts = [
@@ -261,6 +271,7 @@ const navVerdicts = [
 		snapshotBodies,
 		snapshotOffsets,
 		snapshotCodecs,
+		maxDecodedBytes,
 	)),
 ].join(' ');
 // img[alt]: the zstd snapshot matches (1), the plain one lacks `<img` (prefiltered, 2).
@@ -302,6 +313,7 @@ const imgSearch = await binding.searchHtmlSnapshots(
 	snapshotBodies,
 	snapshotOffsets,
 	snapshotCodecs,
+	maxDecodedBytes,
 );
 const anchorSearch = await binding.searchHtmlSnapshots(
 	anchorStart,
@@ -309,6 +321,7 @@ const anchorSearch = await binding.searchHtmlSnapshots(
 	snapshotBodies,
 	snapshotOffsets,
 	snapshotCodecs,
+	maxDecodedBytes,
 );
 const searched = `${imgSearch.matchCounts} ${anchorSearch.matchCounts}`;
 if (
@@ -348,6 +361,7 @@ try {
 		snapshotBodies,
 		snapshotOffsets,
 		snapshotCodecs,
+		maxDecodedBytes,
 		raised,
 	);
 } catch (error) {

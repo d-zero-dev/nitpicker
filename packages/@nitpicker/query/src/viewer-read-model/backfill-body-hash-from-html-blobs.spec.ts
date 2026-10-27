@@ -153,4 +153,30 @@ describe('backfillBodyHashFromHtmlBlobs', () => {
 		expect(processed).toBe(total);
 		expect(total).toBe(2);
 	});
+
+	it('fails naming the page and the blob hash when a stored blob cannot be decoded', async () => {
+		const knex = archive.getKnex();
+		const blob = (await knex('page_html_blobs').select('hash').first()) as {
+			hash: Uint8Array;
+		};
+		const hash = Buffer.from(blob.hash);
+		await knex('page_html_blobs')
+			.where('hash', hash)
+			.update({ body: Buffer.from('not zstd'), codec: 'zstd' });
+		const ref = (await knex('page_html_ref')
+			.where('hash', hash)
+			.select('page_id')
+			.first()) as {
+			page_id: number;
+		};
+
+		const error = await backfillBodyHashFromHtmlBlobs(archive).catch(
+			(error_: unknown) => error_ as Error,
+		);
+
+		expect(error).toBeInstanceOf(Error);
+		expect(error!.message).toContain(
+			`HTML snapshot of page ${ref.page_id} (page_html_blobs hash ${hash.toString('hex')}) could not be decoded`,
+		);
+	});
 });
