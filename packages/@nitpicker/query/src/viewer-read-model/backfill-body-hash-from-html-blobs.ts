@@ -1,7 +1,8 @@
 import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 
 import { computeBodyHash } from '@nitpicker/archive/body-hash/compute-body-hash';
-import { decodeStoredBlobBytes } from '@nitpicker/archive/decode-stored-blob-bytes';
+import { decodePageHtmlBlobBytes } from '@nitpicker/archive/decode-page-html-blob-bytes';
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
 
 const CHUNK_SIZE = 500;
 
@@ -22,10 +23,19 @@ const CHUNK_SIZE = 500;
  * archive-wide transaction, since each chunk decompresses a full HTML
  * snapshot — holding all of them in memory at once does not scale to
  * multi-hundred-thousand-page archives.
+ *
+ * A snapshot that cannot be decoded fails the backfill with an error naming
+ * the page and the blob hash, rather than leaving that page's `body_hash`
+ * silently `NULL` (duplicate-body detection would then disagree with the
+ * archive).
  * @param accessor - Writable archive accessor.
  * @param onProgress - Optional callback invoked after each chunk with
  *   `(processed, total)` counts, for archives large enough that visible
  *   progress matters.
+ * @throws {Error} `HTML snapshot of page <id> (page_html_blobs hash <hex>) could not be decoded: …`
+ *   when a stored snapshot is corrupt or decompresses past the limit on one
+ *   snapshot; the chunk being written is rolled back and the read-model
+ *   build stops.
  */
 export async function backfillBodyHashFromHtmlBlobs(
 	accessor: ArchiveAccessor,
@@ -52,8 +62,14 @@ export async function backfillBodyHashFromHtmlBlobs(
 			.andWhere('pm.page_id', '>', lastPageId)
 			.orderBy('pm.page_id')
 			.limit(CHUNK_SIZE)
-			.select('pm.page_id as pageId', 'phb.body as body', 'phb.codec as codec')) as {
+			.select(
+				'pm.page_id as pageId',
+				'phb.hash as hash',
+				'phb.body as body',
+				'phb.codec as codec',
+			)) as {
 			pageId: number;
+			hash: Uint8Array;
 			body: Uint8Array;
 			codec: string;
 		}[];
@@ -65,7 +81,7 @@ export async function backfillBodyHashFromHtmlBlobs(
 			for (const row of rows) {
 				// Bytes, not a string: the hash is computed over UTF-8 anyway, so
 				// decoding to a JS string would only be re-encoded right back.
-				const html = decodeStoredBlobBytes(row.body, row.codec);
+				const html = decodePageHtmlBlobBytes(row);
 				await trx('page_meta')
 					.where('page_id', row.pageId)
 					.update({ body_hash: computeBodyHash(html) });
@@ -74,6 +90,10 @@ export async function backfillBodyHashFromHtmlBlobs(
 
 		lastPageId = rows.at(-1)!.pageId;
 		processed += rows.length;
+		// Releases the chunk's SELECT and UPDATE statement handles before the
+		// next chunk (see the helper's docs). The rows themselves, blobs
+		// included, are JS-owned and go when `rows` is reassigned.
+		await releaseFinishedStatements();
 		onProgress?.(processed, total);
 	}
 }

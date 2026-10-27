@@ -4,6 +4,7 @@ import { zstdCompressSync } from 'node:zlib';
 
 import { describe, it, expect } from 'vitest';
 
+import { MAX_DECODED_SNAPSHOT_BYTES } from './max-decoded-snapshot-bytes.js';
 import { nativeBinding } from './native-binding.js';
 import { searchHtmlSnapshots } from './search-html-snapshots.js';
 
@@ -141,6 +142,7 @@ describe('searchHtmlSnapshots', () => {
 				Uint8Array.of(120, 120),
 				Uint32Array.of(0, 1, 2),
 				codecs,
+				MAX_DECODED_SNAPSHOT_BYTES,
 			);
 		expect(() => call(Uint8Array.of(0))).toThrow(
 			expect.objectContaining({ code: 'InvalidArg' }),
@@ -182,6 +184,26 @@ describe('searchHtmlSnapshots with a signal', () => {
 			pattern: literal('needle'),
 			snippetLength: 20,
 			snapshots: slowBatch(),
+			signal: controller.signal,
+		});
+		controller.abort(reason);
+		await expect(outcome).rejects.toBe(reason);
+	});
+
+	it('rejects with the signal reason when it aborts right after a call holding one large snapshot', async () => {
+		// One frame that decompresses to 64 MiB from a few kilobytes, and nothing
+		// after it: when the native thread has already passed the check before
+		// that snapshot, only a check inside its decompression sees the abort.
+		// Which check sees it depends on timing, so this does not tell every run
+		// whether the decompression checks at all; that it checks between steps
+		// is the Rust tests' concern.
+		const body = zstdCompressSync(Buffer.alloc(64 * 1024 * 1024, 'a'));
+		const controller = new AbortController();
+		const reason = new Error('client went away');
+		const outcome = searchHtmlSnapshots({
+			pattern: literal('needle'),
+			snippetLength: 20,
+			snapshots: [{ body, codec: 'zstd' }],
 			signal: controller.signal,
 		});
 		controller.abort(reason);

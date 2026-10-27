@@ -5,7 +5,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { scanAnchorEdges } from './scan-anchor-edges.js';
 
@@ -176,6 +184,20 @@ describe('scanAnchorEdges', () => {
 	it('delivers everything as one chunk when the chunk is larger than the table', async () => {
 		const chunks = await scan(archive, 100);
 		expect(chunks.map((chunk) => chunk.length)).toStrictEqual([5]);
+	});
+
+	it('gives the event loop one turn per SELECT, at both ways the scan ends', async () => {
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		const turns = vi.mocked(releaseFinishedStatements);
+		// Ends on a short chunk: [2, 2, 1] is three SELECTs.
+		turns.mockClear();
+		await scan(archive, 2);
+		expect(turns).toHaveBeenCalledTimes(3);
+		// Ends on an empty SELECT after five full chunks of one: six SELECTs.
+		turns.mockClear();
+		await scan(archive, 1);
+		expect(turns).toHaveBeenCalledTimes(6);
 	});
 
 	/**

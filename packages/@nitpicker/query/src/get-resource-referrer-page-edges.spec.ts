@@ -2,7 +2,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { getResourceReferrerEdges } from './get-resource-referrer-edges.js';
 import { getResourceReferrerPageEdges } from './get-resource-referrer-page-edges.js';
@@ -210,5 +218,34 @@ describe('getResourceReferrerPageEdges', () => {
 		ids[700] = styleId;
 		const pageEdges = await getResourceReferrerPageEdges(archive.getKnex(), ids);
 		expect(pageEdges.filter((edge) => edge.resourceId === styleId)).toHaveLength(2);
+	});
+
+	it('gives the event loop a turn after each IN-chunk SELECT, before the next one runs', async () => {
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		const knex = archive.getKnex();
+		const ids = Array.from({ length: 1200 }, (_, index) => styleId + index);
+		const events: string[] = [];
+		const onQuery = () => events.push('statement');
+		vi.mocked(releaseFinishedStatements).mockImplementation(() => {
+			events.push('turn');
+			return Promise.resolve();
+		});
+		knex.on('query', onQuery);
+		try {
+			await getResourceReferrerPageEdges(knex, ids);
+		} finally {
+			knex.removeListener('query', onQuery);
+			vi.mocked(releaseFinishedStatements).mockReset();
+		}
+		// 1,200 ids at 500 per IN list: three SELECTs, each followed by its turn.
+		expect(events).toStrictEqual([
+			'statement',
+			'turn',
+			'statement',
+			'turn',
+			'statement',
+			'turn',
+		]);
 	});
 });

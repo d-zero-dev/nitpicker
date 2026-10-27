@@ -100,6 +100,10 @@
 			"import": "./lib/decode-html-blob.js",
 			"types": "./lib/decode-html-blob.d.ts"
 		},
+		"./decode-page-html-blob-bytes": {
+			"import": "./lib/decode-page-html-blob-bytes.js",
+			"types": "./lib/decode-page-html-blob-bytes.d.ts"
+		},
 		"./decode-stored-blob-bytes": {
 			"import": "./lib/decode-stored-blob-bytes.js",
 			"types": "./lib/decode-stored-blob-bytes.d.ts"
@@ -228,6 +232,10 @@
 			"import": "./lib/populate-ref-tables/populate-url-refs.js",
 			"types": "./lib/populate-ref-tables/populate-url-refs.d.ts"
 		},
+		"./release-finished-statements": {
+			"import": "./lib/release-finished-statements.js",
+			"types": "./lib/release-finished-statements.d.ts"
+		},
 		"./resource": {
 			"import": "./lib/resource.js",
 			"types": "./lib/resource.d.ts"
@@ -319,6 +327,10 @@
 		"./utils/types/types": {
 			"import": "./lib/utils/types/types.js",
 			"types": "./lib/utils/types/types.d.ts"
+		},
+		"./with-bulk-write-pragmas": {
+			"import": "./lib/with-bulk-write-pragmas.js",
+			"types": "./lib/with-bulk-write-pragmas.d.ts"
 		},
 		"./write-queue": {
 			"import": "./lib/write-queue.js",

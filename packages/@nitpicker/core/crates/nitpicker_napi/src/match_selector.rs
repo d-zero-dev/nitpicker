@@ -256,7 +256,8 @@ pub fn match_selector_html(plan: SelectorPlanInput, html: &[u8]) -> Result<HtmlM
 ///
 /// `bodies` holds the stored bytes back to back, `offsets` the `n + 1`
 /// positions that cut it into `n` snapshots, and `codecs` one byte per
-/// snapshot: `0` stored as they are, `1` zstd. Resolves with one byte per
+/// snapshot: `0` stored as they are, `1` zstd. A zstd snapshot may
+/// decompress to at most `max_decoded_bytes`. Resolves with one byte per
 /// snapshot, in order: bit 0 matched, bit 1 rejected by the prefilter alone,
 /// bit 2 judged on the open-element stack.
 ///
@@ -266,16 +267,17 @@ pub fn match_selector_html(plan: SelectorPlanInput, html: &[u8]) -> Result<HtmlM
 /// buffer until the promise settles (the JS wrapper packs a fresh one for
 /// every call).
 ///
-/// `cancel_token`, once raised, stops the judging at the next snapshot (a
-/// call still queued ends when its turn comes) and rejects with code
-/// `Cancelled`.
+/// `cancel_token`, once raised, stops the judging at the next snapshot or
+/// within the next mebibyte of a decompression under way (a call still
+/// queued ends when its turn comes) and rejects with code `Cancelled`.
 ///
 /// # Errors
 ///
 /// `InvalidArg` when the plan, the offsets or a codec is malformed, or an
 /// executor setting is invalid. The promise rejects when a snapshot cannot be
-/// decoded, when the call was cancelled, or when judging panicked; a snapshot
-/// is never silently judged "no match".
+/// decoded (corrupt, or past `max_decoded_bytes`), when the call was
+/// cancelled, or when judging panicked; a snapshot is never silently judged
+/// "no match".
 #[napi(ts_return_type = "Promise<Uint8Array>")]
 pub fn match_selector_snapshots<'env>(
 	env: &'env Env,
@@ -283,6 +285,7 @@ pub fn match_selector_snapshots<'env>(
 	bodies: Uint8Array,
 	offsets: &[u32],
 	codecs: &[u8],
+	max_decoded_bytes: u32,
 	cancel_token: Option<&NativeCancelToken>,
 ) -> Result<Object<'env>> {
 	let executor = shared_executor()?;
@@ -309,7 +312,12 @@ pub fn match_selector_snapshots<'env>(
 					codec,
 				})
 				.collect();
-			nitpicker_html_scan::scan_snapshots(&plan, &snapshots, cancelled.raised())
+			nitpicker_html_scan::scan_snapshots(
+				&plan,
+				&snapshots,
+				max_decoded_bytes as usize,
+				cancelled.raised(),
+			)
 		}));
 		deferred.resolve(move |_| match outcome {
 			Ok(Ok(outcomes)) => Ok(Uint8Array::new(

@@ -1,6 +1,8 @@
 import type { AnchorFactInsertRow } from './types.js';
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 import { NULL_STATUS_SENTINEL } from './null-status-sentinel.js';
 
 /**
@@ -195,6 +197,9 @@ export async function* computeAnchorFactRows(
 				trx.raw('sum("ae"."count") as "count"'),
 				trx.raw('min("ae"."first_text_id") as "firstTextId"'),
 			);
+		// The range's `GROUP BY` tree belongs to this statement until the event
+		// loop turns (see the helper); one turn per range keeps one tree alive.
+		await releaseFinishedStatements();
 
 		if (rows.length === 0) {
 			onProgress?.(Math.min(rangeEnd, maxId), maxId);

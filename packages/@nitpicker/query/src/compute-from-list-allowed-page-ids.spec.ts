@@ -4,7 +4,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { computeFromListAllowedPageIds } from './compute-from-list-allowed-page-ids.js';
 
@@ -320,5 +328,29 @@ describe('computeFromListAllowedPageIds', () => {
 		});
 		expect(allowed.has(await idOf('https://example.com/a'))).toBe(true);
 		expect(allowed.size).toBe(1);
+	});
+
+	it('gives the event loop a turn after each IN-chunk SELECT of roots, before the next one runs', async () => {
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		const roots = Array.from(
+			{ length: 502 },
+			(_, i) => `https://example.com/nonexistent-${i}`,
+		);
+		const events: string[] = [];
+		const onQuery = () => events.push('statement');
+		vi.mocked(releaseFinishedStatements).mockImplementation(() => {
+			events.push('turn');
+			return Promise.resolve();
+		});
+		knex.on('query', onQuery);
+		try {
+			await computeFromListAllowedPageIds({ knex, roots, disableQueries: false });
+		} finally {
+			knex.removeListener('query', onQuery);
+			vi.mocked(releaseFinishedStatements).mockReset();
+		}
+		// 502 roots at 500 per IN list: two SELECTs, each followed by its turn.
+		expect(events).toStrictEqual(['statement', 'turn', 'statement', 'turn']);
 	});
 });

@@ -1,6 +1,8 @@
 import type { ExternalLinkInsertRow } from './types.js';
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 /** Rows written per `INSERT` statement while upserting `viewer_external_links`. */
 const INSERT_CHUNK_SIZE = 500;
 
@@ -46,5 +48,6 @@ export async function upsertExternalLinkRows(
 					'"viewer_external_links"."referrer_count" + "excluded"."referrer_count"',
 				),
 			});
+		await releaseFinishedStatements();
 	}
 }

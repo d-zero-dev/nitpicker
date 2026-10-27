@@ -243,9 +243,12 @@ export class ArchiveAccessor extends EventEmitter<DatabaseEvent> {
 	 * Distinguishing "no body stored" from "empty body" is preserved: an
 	 * empty HTML string returns `''`, not `null`.
 	 *
-	 * Throws if the page's referenced blob is missing or the codec marker
-	 * is unrecognised — both indicate an archive that was truncated or
-	 * written by a future tool, neither of which we silently paper over.
+	 * Throws if the page's referenced blob is missing, its codec marker is
+	 * unrecognised, its zstd data is corrupt, or it decompresses past
+	 * `MAX_DECODED_SNAPSHOT_BYTES` — each indicates an archive that was
+	 * truncated, damaged or written by a future tool, none of which we
+	 * silently paper over. A decode failure names the page and the blob hash
+	 * (`HTML snapshot of page <id> (page_html_blobs hash <hex>) could not be decoded: …`).
 	 * @param pageId - The database id of the page to read.
 	 * @returns The HTML content as a UTF-8 string, or `null` when no body
 	 *   is stored for `pageId`.

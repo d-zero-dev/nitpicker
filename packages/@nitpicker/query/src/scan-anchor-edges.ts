@@ -1,5 +1,7 @@
 import type { AnchorEdgeRow, ScanAnchorEdgesOptions } from './types.js';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 /** Rows read per chunk when the caller gives no `chunkSize`. */
 const DEFAULT_CHUNK_SIZE = 100_000;
 
@@ -52,6 +54,9 @@ export async function scanAnchorEdges(options: ScanAnchorEdgesOptions): Promise<
 			.orderBy('page_id')
 			.orderBy('href_page_id')
 			.limit(chunkSize);
+		// Before either exit below, so every SELECT of the scan is released
+		// as it goes rather than when the whole call returns (see the helper).
+		await releaseFinishedStatements();
 		if (!Array.isArray(rows)) {
 			throw new TypeError(
 				'The database driver did not return the anchor edges as an array',

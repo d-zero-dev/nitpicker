@@ -19,6 +19,7 @@ export interface NativeBinding {
 		bodies: Uint8Array,
 		offsets: Uint32Array,
 		codecs: Uint8Array,
+		maxDecodedBytes: number,
 		cancelToken?: NativeCancelToken,
 	): Promise<Uint8Array>;
 	/** See `validate-search-pattern.ts`. */
@@ -36,6 +37,7 @@ export interface NativeBinding {
 		bodies: Uint8Array,
 		offsets: Uint32Array,
 		codecs: Uint8Array,
+		maxDecodedBytes: number,
 		cancelToken?: NativeCancelToken,
 	): Promise<{ matchCounts: number[]; snippets: string[] }>;
 	/** See `check-native-executor-config.ts`. */
@@ -64,6 +66,8 @@ export interface NativeBinding {
 	TEMPLATE_MEMORY_BUDGET: number;
 	/** See `template-exact-page-limit.ts`. */
 	TEMPLATE_EXACT_PAGE_LIMIT: number;
+	/** See `max-decoded-snapshot-bytes.ts`. */
+	MAX_DECODED_SNAPSHOT_BYTES: number;
 }
 
 /**

@@ -3,7 +3,7 @@ import type { DomPathResult } from './types.js';
 import type { Knex } from 'knex';
 
 import { createProgressReporter } from '../create-progress-reporter.js';
-import { decodeStoredBlob } from '../decode-html-blob.js';
+import { decodePageHtmlBlobBytes } from '../decode-page-html-blob-bytes.js';
 
 import { isBlobRefValue } from './is-blob-ref-value.js';
 import { resolveBlobRefs } from './resolve-blob-refs.js';
@@ -281,17 +281,24 @@ export async function populateImageItems(
  * @param trx - The open migration transaction.
  * @param pageId - `pages.id` (== `content_items.id`) to read HTML for.
  * @returns Decoded HTML string, or `null` when no snapshot is stored.
+ * @throws {Error} Naming the page and the blob hash when the snapshot is
+ *   corrupt or decompresses past `MAX_DECODED_SNAPSHOT_BYTES`; the migration
+ *   fails rather than resolving the page's images without its HTML.
  */
 async function readPageHtmlInTrx(trx: Knex, pageId: number): Promise<string | null> {
 	const row = (await trx('page_html_ref')
 		.join('page_html_blobs', 'page_html_ref.hash', '=', 'page_html_blobs.hash')
-		.select('page_html_blobs.body as body', 'page_html_blobs.codec as codec')
+		.select(
+			'page_html_blobs.hash as hash',
+			'page_html_blobs.body as body',
+			'page_html_blobs.codec as codec',
+		)
 		.where('page_html_ref.page_id', pageId)
-		.first()) as { body: Uint8Array; codec: string } | undefined;
+		.first()) as { hash: Uint8Array; body: Uint8Array; codec: string } | undefined;
 	if (!row) {
 		return null;
 	}
-	return decodeStoredBlob(row.body, row.codec);
+	return decodePageHtmlBlobBytes({ pageId, ...row }).toString('utf8');
 }
 
 /**

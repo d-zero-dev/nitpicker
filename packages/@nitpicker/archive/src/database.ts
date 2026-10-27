@@ -57,7 +57,7 @@ import { listDedupeCapShapeKeys as listDedupeCapShapeKeysOp } from './db-ops/ded
 import { insertCrawlError as insertCrawlErrorOp } from './db-ops/errors/insert-crawl-error.js';
 import { insertPageError as insertPageErrorOp } from './db-ops/errors/insert-page-error.js';
 import { listDnsBurnedHostCandidates as listDnsBurnedHostCandidatesOp } from './db-ops/errors/list-dns-burned-host-candidates.js';
-import { getHtmlOfPageById as getHtmlOfPageByIdOp } from './db-ops/html/get-html-of-page-by-id.js';
+import { readPageHtmlBlob as readPageHtmlBlobOp } from './db-ops/html/read-page-html-blob.js';
 import { checkpoint as checkpointOp } from './db-ops/lifecycle/checkpoint.js';
 import { destroy as destroyOp } from './db-ops/lifecycle/destroy.js';
 import { init as initOp } from './db-ops/lifecycle/init.js';
@@ -104,6 +104,7 @@ import { insertInventoryResources as insertInventoryResourcesOp } from './db-ops
 import { insertResourceReferrers as insertResourceReferrersOp } from './db-ops/resources/insert-resource-referrers.js';
 import { insertResource as insertResourceOp } from './db-ops/resources/insert-resource.js';
 import { replacePageTemplates as replacePageTemplatesOp } from './db-ops/templates/replace-page-templates.js';
+import { decodePageHtmlBlobBytes } from './decode-page-html-blob-bytes.js';
 import { mkdir } from './filesystem/mkdir.js';
 import { LibsqlDialect } from './libsql-dialect.js';
 import { emitErrorAndRetry } from './utils/error/emit-error-with-retry.js';
@@ -393,16 +394,27 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	}
 	/**
 	 * Reads the HTML snapshot stored as a zstd-compressed BLOB for the given page.
-	 * Delegates to {@link getHtmlOfPageByIdOp}.
+	 * Reads the row through {@link readPageHtmlBlobOp} with retries, then
+	 * decodes it once: a decode failure is in the stored bytes and would only
+	 * repeat, so it is not retried.
 	 * @param pageId - The database ID of the page.
 	 * @returns The decompressed HTML string, or `null` if no snapshot is stored.
+	 * @throws {Error} `HTML snapshot of page <id> (page_html_blobs hash <hex>) could not be decoded: …`
+	 *   when the snapshot is corrupt or decompresses past `MAX_DECODED_SNAPSHOT_BYTES`
+	 *   (also emitted as an `'error'` event).
 	 */
 	async getHtmlOfPageById(pageId: number): Promise<string | null> {
-		return emitErrorAndRetry(
+		const row = await emitErrorAndRetry(
 			this,
 			'Database.getHtmlOfPageById',
-			async () => await getHtmlOfPageByIdOp(this.#instance, pageId),
+			async () => await readPageHtmlBlobOp(this.#instance, pageId),
 			retrySetting,
+		);
+		if (!row) {
+			return null;
+		}
+		return emitError(this, 'Database.getHtmlOfPageById', () =>
+			Promise.resolve(decodePageHtmlBlobBytes({ pageId, ...row }).toString('utf8')),
 		);
 	}
 	/**

@@ -60,6 +60,15 @@ vi.mock('../backfill-dedupe-cap-event-id.js', () => ({
 	backfillDedupeCapEventId: mockBackfillDedupeCapEventId,
 }));
 
+// Isolated like the backfills: the stand-in connection cannot answer the
+// PRAGMA reads the real helper makes, and the settings it applies are covered
+// against a real connection by its own spec.
+const mockWithBulkWritePragmas = vi.fn();
+
+vi.mock('@nitpicker/archive/with-bulk-write-pragmas', () => ({
+	withBulkWritePragmas: mockWithBulkWritePragmas,
+}));
+
 describe('viewer-read-model-worker-entry', () => {
 	let exitSpy: MockInstance<typeof process.exit>;
 
@@ -76,6 +85,9 @@ describe('viewer-read-model-worker-entry', () => {
 		mockBackfillBodyHashFromHtmlBlobs.mockReset().mockResolvedValue();
 		mockBackfillAliasOfId.mockReset().mockResolvedValue();
 		mockBackfillDedupeCapEventId.mockReset().mockResolvedValue();
+		mockWithBulkWritePragmas
+			.mockReset()
+			.mockImplementation((_knex: unknown, work: () => Promise<unknown>) => work());
 		mockWorkerData = { tmpDir: '/tmp/archive-dir', task: 'build' };
 		mockParentPort = { postMessage: mockPostMessage };
 		exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
@@ -211,9 +223,64 @@ describe('viewer-read-model-worker-entry', () => {
 		expect(mockBackfillAliasOfId.mock.invocationCallOrder[0]!).toBeLessThan(
 			mockBackfillDedupeCapEventId.mock.invocationCallOrder[0]!,
 		);
+		// Behavior change: the 'backfills' task runs inside `withBulkWritePragmas`,
+		// whose entry PRAGMAs are the first `knex.raw` calls, so the order is
+		// checked against the `PRAGMA wal_checkpoint` call itself.
 		expect(mockBackfillDedupeCapEventId.mock.invocationCallOrder[0]!).toBeLessThan(
-			mockKnexRaw.mock.invocationCallOrder[0]!,
+			mockKnexRaw.mock.invocationCallOrder[
+				mockKnexRaw.mock.calls.findIndex(
+					([sql]) => sql === 'PRAGMA wal_checkpoint(TRUNCATE)',
+				)
+			]!,
 		);
+		// expect(mockBackfillDedupeCapEventId.mock.invocationCallOrder[0]!).toBeLessThan( // previous
+		// 	mockKnexRaw.mock.invocationCallOrder[0]!, // previous
+		// ); // previous
+		expect(mockPostMessage).toHaveBeenCalledWith({ type: 'done' });
+	});
+
+	it("runs the 'backfills' task's three backfills and its checkpoint inside withBulkWritePragmas, on the worker's connection", async () => {
+		mockWorkerData = { tmpDir: '/tmp/archive-dir', task: 'backfills' };
+		let inside = false;
+		const steps: string[] = [];
+		mockWithBulkWritePragmas.mockImplementation(
+			async (_knex: unknown, work: () => Promise<unknown>) => {
+				inside = true;
+				try {
+					return await work();
+				} finally {
+					inside = false;
+				}
+			},
+		);
+		mockBackfillBodyHashFromHtmlBlobs.mockImplementation(() => {
+			steps.push(`bodyHash inside=${inside}`);
+			return Promise.resolve();
+		});
+		mockBackfillAliasOfId.mockImplementation(() => {
+			steps.push(`aliasOfId inside=${inside}`);
+			return Promise.resolve();
+		});
+		mockBackfillDedupeCapEventId.mockImplementation(() => {
+			steps.push(`dedupeCapEventId inside=${inside}`);
+			return Promise.resolve();
+		});
+		mockKnexRaw.mockImplementation((sql: string) => {
+			steps.push(`${sql} inside=${inside}`);
+			return Promise.resolve();
+		});
+
+		await import('./viewer-read-model-worker-entry.js');
+
+		expect(mockWithBulkWritePragmas).toHaveBeenCalledOnce();
+		const [knexGiven] = mockWithBulkWritePragmas.mock.calls[0]!;
+		expect((knexGiven as { raw: unknown }).raw).toBe(mockKnexRaw);
+		expect(steps).toStrictEqual([
+			'bodyHash inside=true',
+			'aliasOfId inside=true',
+			'dedupeCapEventId inside=true',
+			'PRAGMA wal_checkpoint(TRUNCATE) inside=true',
+		]);
 		expect(mockPostMessage).toHaveBeenCalledWith({ type: 'done' });
 	});
 

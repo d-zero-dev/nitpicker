@@ -1,6 +1,8 @@
 import type { DuplicateGroupIdIndex } from './compute-duplicate-group-rows.js';
 import type { Knex } from 'knex';
 
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
+
 /** Rows read per `content_items` id-keyset scan chunk, by default. */
 const READ_CHUNK_SIZE = 20_000;
 
@@ -125,6 +127,7 @@ export async function* computeDuplicateGroupPageRows(
 				'title_ref.text as title',
 				'description_ref.text as description',
 			);
+		await releaseFinishedStatements();
 
 		if (rows.length === 0) {
 			onProgress?.(maxId, maxId);

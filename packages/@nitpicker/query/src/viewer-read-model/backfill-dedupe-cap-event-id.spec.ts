@@ -2,7 +2,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { backfillDedupeCapEventId } from './backfill-dedupe-cap-event-id.js';
 
@@ -207,6 +215,25 @@ describe('backfillDedupeCapEventId', () => {
 		expect(
 			await getDedupeCapEventId(archive, 'https://example.com/other/?ssp=1'),
 		).toBeNull();
+	});
+
+	it('gives the event loop one turn per write chunk, before its progress report', async () => {
+		await insertDedupeCapEventRow(
+			archive,
+			'example.com/search/?ssp={v}',
+			1_700_000_000_000,
+		);
+		await setPage(archive, 'https://example.com/search/?ssp=1');
+		await setPage(archive, 'https://example.com/search/?ssp=2');
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		vi.mocked(releaseFinishedStatements).mockClear();
+		let ticks = 0;
+		await backfillDedupeCapEventId(archive, () => {
+			ticks += 1;
+		});
+		expect(ticks).toBeGreaterThan(0);
+		expect(vi.mocked(releaseFinishedStatements)).toHaveBeenCalledTimes(ticks);
 	});
 
 	it('does not mark external pages even when their URL shape matches', async () => {

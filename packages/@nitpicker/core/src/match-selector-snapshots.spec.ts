@@ -153,6 +153,25 @@ describe('matchSelectorSnapshots with a signal', () => {
 		await expect(outcome).rejects.toBe(reason);
 	});
 
+	it('rejects with the signal reason when it aborts right after a call holding one large snapshot', async () => {
+		// One frame that decompresses to 64 MiB from a few kilobytes, and nothing
+		// after it: when the native thread has already passed the check before
+		// that snapshot, only a check inside its decompression sees the abort.
+		// Which check sees it depends on timing, so this does not tell every run
+		// whether the decompression checks at all; that it checks between steps
+		// is the Rust tests' concern.
+		const body = zstdCompressSync(Buffer.alloc(64 * 1024 * 1024, 'a'));
+		const controller = new AbortController();
+		const reason = new Error('client went away');
+		const outcome = matchSelectorSnapshots({
+			plan: IMG_PLAN,
+			snapshots: [{ body, codec: 'zstd' }],
+			signal: controller.signal,
+		});
+		controller.abort(reason);
+		await expect(outcome).rejects.toBe(reason);
+	});
+
 	it('judges the same verdicts with a signal that never fires', async () => {
 		const snapshots = [stored('<p><img></p>', 'zstd'), stored('<p>x</p>', 'none')];
 		const verdicts = await matchSelectorSnapshots({

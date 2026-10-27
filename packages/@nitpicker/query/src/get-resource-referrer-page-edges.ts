@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 
-import { eachSplitted } from '@nitpicker/archive/utils/array/each-splitted';
+import { releaseFinishedStatements } from '@nitpicker/archive/release-finished-statements';
 
 import { buildResourceReferrerEdgeQuery } from './build-resource-referrer-edge-query.js';
 import { SQLITE_IN_CHUNK } from './sqlite-in-chunk.js';
@@ -39,16 +39,20 @@ export async function getResourceReferrerPageEdges(
 		return [];
 	}
 	const result: ResourceReferrerPageEdge[] = [];
-	await eachSplitted(resourceIds, SQLITE_IN_CHUNK, async (chunk) => {
+	// One chunk at a time, not `eachSplitted`: that starts every chunk's
+	// SELECT before any of them yields, so no turn of the event loop would
+	// come between two statements (see `releaseFinishedStatements`).
+	for (let start = 0; start < resourceIds.length; start += SQLITE_IN_CHUNK) {
 		const rows: ResourceReferrerPageEdge[] = await buildResourceReferrerEdgeQuery(
 			knex,
-			chunk,
+			resourceIds.slice(start, start + SQLITE_IN_CHUNK),
 		).select('rre.resource_id as resourceId', 'rre.page_id as pageId');
+		await releaseFinishedStatements();
 		// Avoid `push(...rows)`: the same V8 argument-spread limit as
 		// `getResourceReferrerEdges`.
 		for (const row of rows) {
 			result.push(row);
 		}
-	});
+	}
 	return result;
 }

@@ -249,7 +249,7 @@ npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*
 - **`matchCount`**: 重なりのないマッチの数です。`\b` のように空文字列に一致しうるパターンは、境界ごとに1と数えます（空文字列そのものに一致するパターンは、全位置に一致してしまうため拒否します）。
 - **スニペット**: 先に文書全体の空白（JavaScriptの `\s` と同じ集合）の連続を1つの半角スペースにまとめて前後を除き、そのうえで最初のマッチの中心を窓の中心にした `--snippet-length` 文字（Unicodeスカラー値）を切り出します。インデントの深いHTMLでも、見える文字数は `--snippet-length` に近くなります（窓を先に切っていた旧実装では、空白ぶんだけ短くなっていました）。`--snippet-length` は0以上4,294,967,295以下の整数で（`0` ならスニペットは空文字列）、それ以外（負数・小数・`NaN`）は `RangeError` でexit code 1になります（MCPでは `isError`）。
 
-結果は `{ items: [{ url, matchCount, snippet }], total, offset, limit, scannedSnapshots, candidatePages }` です。全ユニークHTMLを展開する線形スキャンなので、大きなアーカイブでは時間がかかります（stderrに進捗が出ます）。まず `--limit 0` で `total` を確認するのが安全です。`candidatePages` が0、またはページ数より極端に少ない場合はHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。CSS/JSファイルの本文は保存されていないため検索できません。
+結果は `{ items: [{ url, matchCount, snippet }], total, offset, limit, scannedSnapshots, candidatePages }` です。全ユニークHTMLを展開する線形スキャンなので、大きなアーカイブでは時間がかかります（stderrに進捗が出ます）。まず `--limit 0` で `total` を確認するのが安全です。`candidatePages` が0、またはページ数より極端に少ない場合はHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。CSS/JSファイルの本文は保存されていないため検索できません。展開できないスナップショット（zstdのデータが壊れているもの、展開後が1文書約1.5 GiBを超えるもの）があると、「該当なし」にはせず、そのスナップショットの `page_html_blobs` の hash を示すエラー（exit code 1）で走査を止めます（`match-selector` も同じ）。約1.5 GiBはクローラーが保存できる最大のバイト数なので、クローラーが保存したHTMLがこの上限で弾かれることはありません。
 
 ### `match-selector`
 
@@ -273,7 +273,7 @@ npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'table:not([
 
 **対応しないセレクタ**: 要素より後ろのマークアップが分からないと判定できないもの（`+` `~` 結合子、`:last-child` `:only-child` `:nth-last-*` `:has()`）、`:is()` `:where()`、`:root` `:empty` などの状態系疑似クラス、疑似要素、名前空間、`:nth-child()` の `of S`、`:not()` に渡すリスト・結合子・入れ子の `:not()`。これらは近似せず、対応文法の一覧つきのエラー（exit code 1）で拒否します。保存HTMLはUTF-8でペアにならないサロゲートを持てないため、そのような文字を含むセレクタ（コピー&ペーストで途切れた絵文字など）も同じエラーで拒否します。
 
-結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ。`--url-pattern` / `--directory` の絞り込みも同じ意味）で、絞り込むと `candidatePages` / `scannedSnapshots` / `total` は絞り込み後のページだけを数えます。絞り込みなしで `candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。stderrに進捗が出ます。
+結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ。`--url-pattern` / `--directory` の絞り込みも同じ意味）で、絞り込むと `candidatePages` / `scannedSnapshots` / `total` は絞り込み後のページだけを数えます。絞り込みなしで `candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。展開できないスナップショット（zstdのデータが壊れているもの、展開後が1文書約1.5 GiBを超えるもの）があると、「不一致」にはせず、その hash を示すエラー（exit code 1）で走査を止めます。stderrに進捗が出ます。
 
 `prefilteredSnapshots` と `tokenizedSnapshots` は判定の経路を示します。必要なリテラル（id・クラス・属性値・`<タグ名`・属性名のうち、1つの複合セレクタにつき1つ）を導出できるセレクタは、まずそれらが順に現れるかを確認し、現れない文書はマークアップを一度も読まずに却下します（`prefilteredSnapshots`）。リテラルを導出できないセレクタ（`:not(.zz) > :not(.yy)` のように `:not()` だけで作ったものなど）はこの確認を通りません。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav` など）は、開始タグを順に読んで判定します。結合子・`:nth-*`・`<` `>` を含む属性値のセレクタと、`<template` を含む文書は開タグスタックで評価し、`tokenizedSnapshots` に数えます。判定は各スナップショットの展開から並列に行います。
 

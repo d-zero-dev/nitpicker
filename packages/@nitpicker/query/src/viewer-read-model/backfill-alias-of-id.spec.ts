@@ -2,7 +2,15 @@ import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import('@nitpicker/archive/release-finished-statements')
+		>();
+	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
+});
 
 import { backfillAliasOfId } from './backfill-alias-of-id.js';
 
@@ -584,6 +592,16 @@ describe('backfillAliasOfId — writes in chunks', () => {
 			'https://example.com/p299/',
 		);
 		expect(await getAliasTargetUrl(archive, 'https://example.com/p299/')).toBeNull();
+	});
+
+	it('gives the event loop one turn per staging INSERT chunk', async () => {
+		await writePairs(300);
+		const { releaseFinishedStatements } =
+			await import('@nitpicker/archive/release-finished-statements');
+		vi.mocked(releaseFinishedStatements).mockClear();
+		await backfillAliasOfId(archive);
+		// 300 assignments at 250 per INSERT: two statements, two turns.
+		expect(vi.mocked(releaseFinishedStatements)).toHaveBeenCalledTimes(2);
 	});
 
 	it('reports exactly one (250, 250) when there are exactly 250 assignments', async () => {

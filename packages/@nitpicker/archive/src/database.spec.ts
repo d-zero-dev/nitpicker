@@ -3991,6 +3991,53 @@ describe('getHtmlOfPageById', () => {
 		expect(await db.getHtmlOfPageById(pageId + 999)).toBeNull();
 	});
 
+	it('Fails naming the page and the blob hash when the stored blob cannot be decoded', async () => {
+		const corruptDbPath = path.resolve(workingDir, 'corrupt-blob-test.sqlite');
+		const { rmSync } = await import('node:fs');
+		rmSync(corruptDbPath, { force: true });
+		const db = await Database.connect({ filename: corruptDbPath });
+		try {
+			const pageId = await db.updatePage(
+				{
+					url: parseUrl('http://localhost/corrupt')!,
+					redirectPaths: [],
+					isExternal: false,
+					status: 200,
+					statusText: 'OK',
+					contentLength: 10,
+					contentType: 'text/html',
+					responseHeaders: {},
+					meta: { title: 'Corrupt' },
+					anchorList: [],
+					imageList: [],
+					html: '<html><body>corrupt</body></html>',
+					isSkipped: false,
+				},
+				true,
+				true,
+			);
+			const knex = db.getKnex();
+			const ref = (await knex('page_html_ref').where('page_id', pageId).first()) as {
+				hash: Uint8Array;
+			};
+			const hash = Buffer.from(ref.hash);
+			await knex('page_html_blobs')
+				.where('hash', hash)
+				.update({ body: Buffer.from('not zstd'), codec: 'zstd' });
+
+			const started = Date.now();
+			await expect(db.getHtmlOfPageById(pageId)).rejects.toThrow(
+				`HTML snapshot of page ${pageId} (page_html_blobs hash ${hash.toString('hex')}) could not be decoded`,
+			);
+			// Not retried: the retries wait 300 ms each, and the failure is in the
+			// stored bytes, so it would only repeat.
+			expect(Date.now() - started).toBeLessThan(300);
+		} finally {
+			await db.destroy();
+			rmSync(corruptDbPath, { force: true });
+		}
+	});
+
 	it('Deletes a page cascades to its page_html_ref row (FK ON DELETE CASCADE)', async () => {
 		// ON DELETE CASCADE on `page_html_ref.page_id` is load-bearing
 		// for issue #23's eventual GC pass: deleting a `pages` row must
