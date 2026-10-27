@@ -1,6 +1,7 @@
 import type { Knex } from 'knex';
 
-import { applyConnectionPragmas, initSchema } from '../../init-schema.js';
+import { applyConnectionPragmas } from '../../apply-connection-pragmas.js';
+import { initSchema } from '../../init-schema.js';
 import { assertCompatibleVersion } from '../../meta/assert-compatible-version.js';
 import { migrateContentItemsAliasOfId } from '../../migrate-content-items-alias-of-id.js';
 import { migrateContentItemsDedupeCapEventId } from '../../migrate-content-items-dedupe-cap-event-id.js';
