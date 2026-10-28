@@ -1,6 +1,6 @@
 # concat
 
-複数の `.nitpicker` アーカイブを 1 つに結合し、新しいアーカイブを作成します。クロールは一切行いません。
+複数の`.nitpicker`アーカイブを 1 つに結合し、新しいアーカイブを作成します。クロールは一切行いません。
 
 ## 基本形
 
@@ -15,7 +15,7 @@ npx @nitpicker/cli concat blog.nitpicker docs.nitpicker -o merged
 npx @nitpicker/cli concat a.nitpicker b.nitpicker c.nitpicker -o merged --verbose
 ```
 
-`-o/--output` は必須です。出力先が既に存在する場合はエラーになります（上書きしません）。
+`-o/--output`は必須です。出力先が既に存在する場合はエラーになります（上書きしません）。
 
 ## 結合ルール
 
@@ -23,15 +23,15 @@ npx @nitpicker/cli concat a.nitpicker b.nitpicker c.nitpicker -o merged --verbos
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `roots`                                        | 全ソースの和集合。引数の順で並び、重複は1つに                                                                           |
 | 同一 URL が複数ソースにある場合                | 「最も情報量の多い観測」が勝つ：内部ページ(scraped済み) > 外部リンク(HEADのみ) > 未取得。同順位は後の引数のソースが勝つ |
-| スコープ内だが未取得の外部URL                  | 昇格させず `is_external=1` のまま残す。件数と対処法（`crawl <out> --append <root>`）を完了後に表示                      |
+| スコープ内だが未取得の外部URL                  | 昇格させず`is_external=1`のまま残す。件数と対処法（`crawl <out> --append <root>`）を完了後に表示                        |
 | `disableQueries` / `fromList`                  | 全ソースで完全一致が必須。不一致はエラーで停止（設定が違うと URL の同一性判定が揃わないため）                           |
 | その他の設定値                                 | 先頭のアーカイブの値を採用                                                                                              |
 | `excludes` / `excludeKeywords` / `excludeUrls` | 全ソースの和集合                                                                                                        |
 
 ## 引き継がれるもの・引き継がれないもの
 
-- 引き継ぐ: クロールエラー・ネットワーク断・dedupe-cap 等の履歴、`--inventory`/`--recrawl` の投入済み URL リスト、テンプレートの名前（`events テンプレート A` 等。再分類時の名前の継承元になる）
-- ページのテンプレート分類は結合後のアーカイブ全体で再実行されます（ソースごとのテンプレートキーは別々の分類結果由来で衝突しうるため、コピーではなく再導出します）。`--skip-templates` でスキップできます
+- 引き継ぐ: クロールエラー・ネットワーク断・dedupe-cap 等の履歴、`--inventory`/`--recrawl`の投入済み URL リスト、テンプレートの名前（`events テンプレート A`等。再分類時の名前の継承元になる）
+- ページのテンプレート分類は結合後のアーカイブ全体で再実行されます（ソースごとのテンプレートキーは別々の分類結果由来で衝突しうるため、コピーではなく再導出します）。`--skip-templates`でスキップできます
 - viewer read model は常に無条件で再構築されます
 
 ## 後続の作業
@@ -43,7 +43,7 @@ npx @nitpicker/cli concat a.nitpicker b.nitpicker c.nitpicker -o merged --verbos
 
 | オプション         | 型            | 説明                                                               |
 | ------------------ | ------------- | ------------------------------------------------------------------ |
-| `-o, --output`     | string (必須) | 出力 `.nitpicker` パス。`.nitpicker` 拡張子は省略可                |
+| `-o, --output`     | string (必須) | 出力`.nitpicker`パス。`.nitpicker`拡張子は省略可                   |
 | `--skip-templates` | boolean       | 出力アーカイブでのテンプレート再分類をスキップ                     |
 | `--verbose`        | boolean       | 各進捗行に ISO 8601 タイムスタンプを付けて追記出力（上書きしない） |
 
@@ -64,4 +64,4 @@ npx @nitpicker/cli concat a.nitpicker b.nitpicker c.nitpicker -o merged --verbos
 | `NITPICKER_NATIVE_THREADS`     | 論理コア数 | ネイティブ処理のスレッド数                                               |
 | `NITPICKER_NATIVE_CONCURRENCY` | 1          | 同時に走らせる非同期のネイティブ呼び出しの数（超えた分は順番に待ちます） |
 
-正の整数でない値は、作業を始める前に終了コード 1 で拒否します。詳細は [@nitpicker/core](../../core/README.md) を参照してください。
+正の整数でない値は、作業を始める前に終了コード 1 で拒否します。詳細は[@nitpicker/core](../../core/README.md)を参照してください。

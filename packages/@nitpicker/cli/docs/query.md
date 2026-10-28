@@ -1,6 +1,6 @@
 # query
 
-`.nitpicker` アーカイブをJSONで問い合わせます。MCPサーバーと同じ `@nitpicker/query` の関数群をCLIから呼び出します。
+`.nitpicker`アーカイブをJSONで問い合わせます。MCPサーバーと同じ`@nitpicker/query`の関数群をCLIから呼び出します。
 
 ## 基本形
 
@@ -24,7 +24,7 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `--offset`, `-o` | number  | スキップ件数       |
 | `--pretty`       | boolean | JSONを整形して出力 |
 
-`--limit` と `--offset` は対応するサブコマンドでのみ有効です。
+`--limit`と`--offset`は対応するサブコマンドでのみ有効です。
 
 ## サブコマンド一覧
 
@@ -40,7 +40,7 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `images`                     | 画像一覧と画像品質フィルタ                                             |
 | `duplicates`                 | title/descriptionの重複                                                |
 | `duplicate-clusters`         | 同一body_hashクラスタの集約（trap兆候でソート）                        |
-| `dedupe-cap-events`          | `--dedupe-cap` の同一クラスタ soft cap 発火履歴                        |
+| `dedupe-cap-events`          | `--dedupe-cap`の同一クラスタ soft cap 発火履歴                         |
 | `mismatches`                 | canonical/OGPメタデータの不一致                                        |
 | `headers`                    | セキュリティヘッダー確認                                               |
 | `resource-referrers`         | 指定リソースの参照元ページ                                             |
@@ -57,10 +57,10 @@ npx @nitpicker/cli query ./site.nitpicker page-detail --url https://example.com/
 | `isolated-clusters`          | inventory由来の孤立クラスタ                                            |
 | `get-isolated-cluster`       | 指定代表URLの孤立クラスタ詳細                                          |
 | `unused-resources`           | 参照元がないinventory由来リソース                                      |
-| `list-reconcile-runs`        | `--inventory`/`--recrawl` の取り込み実行履歴                           |
+| `list-reconcile-runs`        | `--inventory`/`--recrawl`の取り込み実行履歴                            |
 | `console-logs`               | 捕捉したconsoleログ・ページエラー（内容ごとに全ページ横断で集約）      |
 | `page-console-logs`          | 指定URLのconsoleログ・ページエラー明細                                 |
-| `match-urls`                 | URLリストとアーカイブの突合診断（`report --urls` の未マッチ調査用）    |
+| `match-urls`                 | URLリストとアーカイブの突合診断（`report --urls`の未マッチ調査用）     |
 | `match-selector`             | 保存済みHTMLにCSSセレクタに一致する要素を持つページを列挙              |
 
 ## サブコマンド別オプション
@@ -96,9 +96,9 @@ npx @nitpicker/cli query ./site.nitpicker pages --status-min 400 --sort-by url -
 | `--limit`, `-l`           | number  | 最大取得件数                   |
 | `--offset`, `-o`          | number  | スキップ件数                   |
 
-`--content-type-category` は `html`、`pdf`、`csv`、`word`、`excel`、`powerpoint`、`image`、`css`、`javascript`、`json`、`xml`、`font`、`audio`、`video`、`archive`、`text`、`other`、`unknown` を指定できます。指定時は既定のHTML中心フィルタを外し、PDFなどの非HTMLページも対象になります。
+`--content-type-category`は`html`、`pdf`、`csv`、`word`、`excel`、`powerpoint`、`image`、`css`、`javascript`、`json`、`xml`、`font`、`audio`、`video`、`archive`、`text`、`other`、`unknown`を指定できます。指定時は既定のHTML中心フィルタを外し、PDFなどの非HTMLページも対象になります。
 
-`--directory` はそのディレクトリのページ自身と配下すべてに一致します（`search-html` / `match-selector` も同じ意味、`report --html-dirs` とも同じ）。境界は `/` 区切りで、`/blog` は `/blog`・`/blog/`・`/blog?page=2`・`/blog/2024/post` に一致し、`/blogging` や `/en/blog/post` には一致しません。パスだけ（`/blog`）なら全ホストが対象で、`https://example.com/blog` のようにURLで書くとそのホストに限定します（スキームとポートは比較しません）。スキームのない `example.com/blog` はホストではなくパス `/example.com/blog` として扱います。パスはURLに保存されている形（パーセントエンコード済み）と大文字小文字を区別して比較し、`%` や `_` はワイルドカードではなく文字そのものとして扱います。空白だけの値やHTTP(S)以外のURLは、アーカイブを開く前にエラー（exit code 1）になります。
+`--directory`はそのディレクトリのページ自身と配下すべてに一致します（`search-html`/`match-selector`も同じ意味、`report --html-dirs`とも同じ）。境界は`/`区切りで、`/blog`は`/blog`・`/blog/`・`/blog?page=2`・`/blog/2024/post`に一致し、`/blogging`や`/en/blog/post`には一致しません。パスだけ（`/blog`）なら全ホストが対象で、`https://example.com/blog`のようにURLで書くとそのホストに限定します（スキームとポートは比較しません）。スキームのない`example.com/blog`はホストではなくパス`/example.com/blog`として扱います。パスはURLに保存されている形（パーセントエンコード済み）と大文字小文字を区別して比較し、`%`や`_`はワイルドカードではなく文字そのものとして扱います。空白だけの値やHTTP(S)以外のURLは、アーカイブを開く前にエラー（exit code 1）になります。
 
 ### `page-detail`
 
@@ -117,15 +117,15 @@ npx @nitpicker/cli query ./site.nitpicker inbound-links --url https://example.co
 npx @nitpicker/cli query ./site.nitpicker inbound-links --url https://example.com/ --limit 100 --cursor <前回のnextCursor>
 ```
 
-| オプション       | 型               | 説明                                        |
-| ---------------- | ---------------- | ------------------------------------------- |
-| `--url`          | string, required | 対象ページURL                               |
-| `--limit`, `-l`  | number           | 最大取得件数。`0` で件数（`total`）のみ取得 |
-| `--offset`, `-o` | number           | スキップ件数（ページ番号ジャンプ用）        |
-| `--cursor`       | string           | 前回の結果の `nextCursor`/`prevCursor`      |
-| `--direction`    | string           | `--cursor` と併用。`next`（既定）/ `prev`   |
+| オプション       | 型               | 説明                                       |
+| ---------------- | ---------------- | ------------------------------------------ |
+| `--url`          | string, required | 対象ページURL                              |
+| `--limit`, `-l`  | number           | 最大取得件数。`0`で件数（`total`）のみ取得 |
+| `--offset`, `-o` | number           | スキップ件数（ページ番号ジャンプ用）       |
+| `--cursor`       | string           | 前回の結果の`nextCursor`/`prevCursor`      |
+| `--direction`    | string           | `--cursor`と併用。`next`（既定）/ `prev`   |
 
-`viewer_anchor_facts` read model のみを読みます。read model が未構築・古い場合は `viewer-build` の実行を促すエラーで失敗します（フォールバックなし）。
+`viewer_anchor_facts` read model のみを読みます。read model が未構築・古い場合は`viewer-build`の実行を促すエラーで失敗します（フォールバックなし）。
 
 ### `html`
 
@@ -146,20 +146,20 @@ npx @nitpicker/cli query ./site.nitpicker links --type external --include-redire
 npx @nitpicker/cli query ./site.nitpicker links --dest-url-pattern '%.pdf' --pretty
 ```
 
-| オプション                   | 型      | 説明                                                                                  |
-| ---------------------------- | ------- | ------------------------------------------------------------------------------------- |
-| `--type`                     | string  | `broken` / `external` / `all`（既定 `all`）                                           |
-| `--url-pattern`              | string  | SQL LIKEパターン。リンク元またはリンク先URLに一致                                     |
-| `--source-url-pattern`       | string  | SQL LIKEパターン。リンク元ページURLだけに一致                                         |
-| `--dest-url-pattern`         | string  | SQL LIKEパターン。redirect解決後のリンク先URLだけに一致                               |
-| `--status`                   | number  | リンク先のHTTP statusで完全一致                                                       |
-| `--sort-by`                  | string  | `sourceUrl` / `destUrl` / `status` / `isExternal` / `textContent`（既定 `sourceUrl`） |
-| `--sort-order`               | string  | `asc` / `desc`                                                                        |
-| `--include-redirect-sources` | boolean | redirect-source行を含め、redirect解決前のリンクを見る                                 |
-| `--limit`, `-l`              | number  | 最大取得件数                                                                          |
-| `--offset`, `-o`             | number  | スキップ件数                                                                          |
+| オプション                   | 型      | 説明                                                                                 |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `--type`                     | string  | `broken` / `external` / `all`（既定`all`）                                           |
+| `--url-pattern`              | string  | SQL LIKEパターン。リンク元またはリンク先URLに一致                                    |
+| `--source-url-pattern`       | string  | SQL LIKEパターン。リンク元ページURLだけに一致                                        |
+| `--dest-url-pattern`         | string  | SQL LIKEパターン。redirect解決後のリンク先URLだけに一致                              |
+| `--status`                   | number  | リンク先のHTTP statusで完全一致                                                      |
+| `--sort-by`                  | string  | `sourceUrl` / `destUrl` / `status` / `isExternal` / `textContent`（既定`sourceUrl`） |
+| `--sort-order`               | string  | `asc` / `desc`                                                                       |
+| `--include-redirect-sources` | boolean | redirect-source行を含め、redirect解決前のリンクを見る                                |
+| `--limit`, `-l`              | number  | 最大取得件数                                                                         |
+| `--offset`, `-o`             | number  | スキップ件数                                                                         |
 
-既定ではredirect先のcanonical destinationまで解決して判定します。`--include-redirect-sources` は診断用です。
+既定ではredirect先のcanonical destinationまで解決して判定します。`--include-redirect-sources`は診断用です。
 
 ### `resources`
 
@@ -173,7 +173,7 @@ npx @nitpicker/cli query ./site.nitpicker resources --content-type-category font
 | `--url-pattern`           | string  | SQL LIKEパターンでリソースURLを絞り込み                                                                                 |
 | `--status`                | number  | HTTP statusで完全一致                                                                                                   |
 | `--content-type`          | string  | content type prefixで絞り込み                                                                                           |
-| `--content-type-category` | string  | Content-Typeカテゴリで絞り込み（`font` / `css` / `javascript` / `image` など。`pages` と同じ分類）                      |
+| `--content-type-category` | string  | Content-Typeカテゴリで絞り込み（`font` / `css` / `javascript` / `image`など。`pages`と同じ分類）                        |
 | `--is-external`           | boolean | external/internalで絞り込み                                                                                             |
 | `--sort-by`               | string  | `url` / `status` / `statusText` / `contentType` / `contentLength` / `isExternal` / `referrerCount` / `compress` / `cdn` |
 | `--sort-order`            | string  | `asc` / `desc`                                                                                                          |
@@ -189,17 +189,17 @@ npx @nitpicker/cli query ./site.nitpicker pages-by-resource --content-type-categ
 npx @nitpicker/cli query ./site.nitpicker pages-by-resource --url-pattern '%fonts.example.net%' --resources-limit 5 --pretty
 ```
 
-| オプション                | 型      | 説明                                                                                 |
-| ------------------------- | ------- | ------------------------------------------------------------------------------------ |
-| `--url-pattern`           | string  | SQL LIKEパターンでリソースURLを絞り込み（※`--content-type-category` とどちらか必須） |
-| `--content-type-category` | string  | Content-Typeカテゴリで絞り込み（※`--url-pattern` とどちらか必須）                    |
-| `--is-external`           | boolean | external/internalのリソースに限定                                                    |
-| `--status`                | number  | リソースのHTTP statusで完全一致                                                      |
-| `--resources-limit`       | number  | ページごとに添える一致リソースURLのサンプル数（既定 20）                             |
-| `--limit`, `-l`           | number  | 最大取得件数                                                                         |
-| `--offset`, `-o`          | number  | スキップ件数                                                                         |
+| オプション                | 型      | 説明                                                                                |
+| ------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| `--url-pattern`           | string  | SQL LIKEパターンでリソースURLを絞り込み（※`--content-type-category`とどちらか必須） |
+| `--content-type-category` | string  | Content-Typeカテゴリで絞り込み（※`--url-pattern`とどちらか必須）                    |
+| `--is-external`           | boolean | external/internalのリソースに限定                                                   |
+| `--status`                | number  | リソースのHTTP statusで完全一致                                                     |
+| `--resources-limit`       | number  | ページごとに添える一致リソースURLのサンプル数（既定 20）                            |
+| `--limit`, `-l`           | number  | 最大取得件数                                                                        |
+| `--offset`, `-o`          | number  | スキップ件数                                                                        |
 
-条件に一致するリソースを読み込んでいるページを返す、`resources` の逆引きです。各ページに `matchedResourceCount` と一致リソースURLのサンプル（`matchedResources`）が付きます。完全一致のリソースURLから引く場合は `resource-referrers` を使います。
+条件に一致するリソースを読み込んでいるページを返す、`resources`の逆引きです。各ページに`matchedResourceCount`と一致リソースURLのサンプル（`matchedResources`）が付きます。完全一致のリソースURLから引く場合は`resource-referrers`を使います。
 
 ### `resource-hosts`
 
@@ -224,32 +224,32 @@ npx @nitpicker/cli query ./site.nitpicker search-html --pattern 'fonts.example.o
 npx @nitpicker/cli query ./site.nitpicker search-html --pattern '/font-family\s*:\s*"?Sample/i' --directory /blog --limit 0
 ```
 
-| オプション         | 型               | 説明                                                                                      |
-| ------------------ | ---------------- | ----------------------------------------------------------------------------------------- |
-| `--pattern`        | string, required | 通常の文字列はリテラル部分一致、`/pattern/flags` は正規表現（下の「パターンの契約」）     |
-| `--literal`        | boolean          | `--pattern` を、`/…/flags` の形でも常に文字列そのものとして探す（`/static/images/` など） |
-| `--url-pattern`    | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                            |
-| `--directory`      | string           | ディレクトリでスキャン対象ページを絞り込み（`pages` の `--directory` と同じ意味）         |
-| `--snippet-length` | number           | スニペットの文字数（Unicodeスカラー値、0以上の整数。既定 160）                            |
-| `--limit`, `-l`    | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                                       |
-| `--offset`, `-o`   | number           | スキップ件数                                                                              |
+| オプション         | 型               | 説明                                                                                   |
+| ------------------ | ---------------- | -------------------------------------------------------------------------------------- |
+| `--pattern`        | string, required | 通常の文字列はリテラル部分一致、`/pattern/flags`は正規表現（下の「パターンの契約」）   |
+| `--literal`        | boolean          | `--pattern`を、`/…/flags`の形でも常に文字列そのものとして探す（`/static/images/`など） |
+| `--url-pattern`    | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                         |
+| `--directory`      | string           | ディレクトリでスキャン対象ページを絞り込み（`pages`の`--directory`と同じ意味）         |
+| `--snippet-length` | number           | スニペットの文字数（Unicodeスカラー値、0以上の整数。既定 160）                         |
+| `--limit`, `-l`    | number           | 最大取得件数（既定 100）。`0`で件数（`total`）のみ                                     |
+| `--offset`, `-o`   | number           | スキップ件数                                                                           |
 
-保存済みのHTMLスナップショット（`html` サブコマンドが返すもの）の生マークアップを検索します。アーカイブへの書き込みはありません。`<script>` `<style>` やインラインstyle・全属性も対象です（DOMのテキストノードだけでなく生マークアップ全体を見ます）。
+保存済みのHTMLスナップショット（`html`サブコマンドが返すもの）の生マークアップを検索します。アーカイブへの書き込みはありません。`<script>` `<style>`やインラインstyle・全属性も対象です（DOMのテキストノードだけでなく生マークアップ全体を見ます）。
 
 #### パターンの契約
 
-`/pattern/flags` の `pattern` は、Rustの正規表現エンジン（`regex` crate）の構文で解釈します。JavaScriptの正規表現とは次の点が違います。
+`/pattern/flags`の`pattern`は、Rustの正規表現エンジン（`regex` crate）の構文で解釈します。JavaScriptの正規表現とは次の点が違います。
 
 - **構文**: 後方参照（`\1`）・先読み（`(?=…)` `(?!…)`）・後読み（`(?<=…)` `(?<!…)`）は使えません。パターンの検証時（アーカイブを開く前）に、何が使えないかを示すエラー（exit code 1）で拒否します。コンパイル後のサイズが上限を超える巨大なパターンも同じです。その代わり、照合にかかる時間はHTMLの長さに比例し、パターンによる指数的な遅延は起きません。
-- **JavaScriptの記法との違い**: JavaScriptで有効でもRustでは使えない・意味が変わるものがあります。使えない（エラーになる）: リテラルの `{`（`a{`。`\{` と書く）、`a{,3}`、文字クラス内の範囲にクラスを使う `[\w-.]`、`[^]`、`\0`、`\cJ`。意味が変わる: `\<` `\>` はリテラルではなく単語の境界、`i` はUnicodeの大文字小文字の畳み込み（`k` が `K`（ケルビン記号U+212A）にも一致）。HTMLの `<` `>` を探すときにエスケープは不要です。
-- **flags**: `i`（大文字小文字を区別しない）、`m`（`^` `$` が各行に一致）、`s`（`.` が改行にも一致）が有効です。`g` と `u` は指定しても指定しなくても常に有効で、`d` `v` `y` はエラーです。`/…/` の後ろが `g` `i` `m` `s` `u` `d` `v` `y` 以外の文字（`/assets/js/x` など）なら、全体をリテラル文字列として探します。`/static/images/` のように `/` で挟まれた文字列や、リテラル文字列が `/` と上記の1文字で終わる場合（`/a/s` など）は正規表現として読まれるので、文字列そのものとして探したいときは `--literal` を付けてください（`--literal` の `--pattern` は、`/` や flags の形に見えても全体がテキストです）。
-- **マッチの単位**: Unicodeスカラー値です。JavaScript（`u` なし）ではUTF-16コード単位だったため、`.` は絵文字（サロゲートペア）に2回一致していましたが、1回で一致します。
-- **文字クラス**: `\d` `\w` `\s` `\b` はUnicodeの定義です（`\d` はUnicodeの数字を含み、`\w` は日本語や `é` を含みます）。`.` が一致しないのは `\r` と `\n` です（U+2028・U+2029 には一致します）。`m` の `^` `$` は `\n`・`\r`・`\r\n` を行末とみなします（CRLFのテキストでも `$` が効きます）。
-- **パターン内のフラグ**: `(?i)` や `(?x)` のようなRustのインラインフラグも、そのまま使えます（`/…/` の後ろのflagsとは別に、パターンの一部として解釈されます）。
-- **`matchCount`**: 重なりのないマッチの数です。`\b` のように空文字列に一致しうるパターンは、境界ごとに1と数えます（空文字列そのものに一致するパターンは、全位置に一致してしまうため拒否します）。
-- **スニペット**: 先に文書全体の空白（JavaScriptの `\s` と同じ集合）の連続を1つの半角スペースにまとめて前後を除き、そのうえで最初のマッチの中心を窓の中心にした `--snippet-length` 文字（Unicodeスカラー値）を切り出します。インデントの深いHTMLでも、見える文字数は `--snippet-length` に近くなります（窓を先に切っていた旧実装では、空白ぶんだけ短くなっていました）。`--snippet-length` は0以上4,294,967,295以下の整数で（`0` ならスニペットは空文字列）、それ以外（負数・小数・`NaN`）は `RangeError` でexit code 1になります（MCPでは `isError`）。
+- **JavaScriptの記法との違い**: JavaScriptで有効でもRustでは使えない・意味が変わるものがあります。使えない（エラーになる）: リテラルの`{`（`a{`。`\{`と書く）、`a{,3}`、文字クラス内の範囲にクラスを使う`[\w-.]`、`[^]`、`\0`、`\cJ`。意味が変わる: `\<` `\>`はリテラルではなく単語の境界、`i`はUnicodeの大文字小文字の畳み込み（`k`が`K`（ケルビン記号U+212A）にも一致）。HTMLの`<` `>`を探すときにエスケープは不要です。
+- **flags**: `i`（大文字小文字を区別しない）、`m`（`^` `$`が各行に一致）、`s`（`.`が改行にも一致）が有効です。`g`と`u`は指定しても指定しなくても常に有効で、`d` `v` `y`はエラーです。`/…/`の後ろが`g` `i` `m` `s` `u` `d` `v` `y`以外の文字（`/assets/js/x`など）なら、全体をリテラル文字列として探します。`/static/images/`のように`/`で挟まれた文字列や、リテラル文字列が`/`と上記の1文字で終わる場合（`/a/s`など）は正規表現として読まれるので、文字列そのものとして探したいときは`--literal`を付けてください（`--literal`の`--pattern`は、`/`や flags の形に見えても全体がテキストです）。
+- **マッチの単位**: Unicodeスカラー値です。JavaScript（`u`なし）ではUTF-16コード単位だったため、`.`は絵文字（サロゲートペア）に2回一致していましたが、1回で一致します。
+- **文字クラス**: `\d` `\w` `\s` `\b`はUnicodeの定義です（`\d`はUnicodeの数字を含み、`\w`は日本語や`é`を含みます）。`.`が一致しないのは`\r`と`\n`です（U+2028・U+2029 には一致します）。`m`の`^` `$`は`\n`・`\r`・`\r\n`を行末とみなします（CRLFのテキストでも`$`が効きます）。
+- **パターン内のフラグ**: `(?i)`や`(?x)`のようなRustのインラインフラグも、そのまま使えます（`/…/`の後ろのflagsとは別に、パターンの一部として解釈されます）。
+- **`matchCount`**: 重なりのないマッチの数です。`\b`のように空文字列に一致しうるパターンは、境界ごとに1と数えます（空文字列そのものに一致するパターンは、全位置に一致してしまうため拒否します）。
+- **スニペット**: 先に文書全体の空白（JavaScriptの`\s`と同じ集合）の連続を1つの半角スペースにまとめて前後を除き、そのうえで最初のマッチの中心を窓の中心にした`--snippet-length`文字（Unicodeスカラー値）を切り出します。インデントの深いHTMLでも、見える文字数は`--snippet-length`に近くなります（窓を先に切っていた旧実装では、空白ぶんだけ短くなっていました）。`--snippet-length`は0以上4,294,967,295以下の整数で（`0`ならスニペットは空文字列）、それ以外（負数・小数・`NaN`）は`RangeError`でexit code 1になります（MCPでは`isError`）。
 
-結果は `{ items: [{ url, matchCount, snippet }], total, offset, limit, scannedSnapshots, candidatePages }` です。全ユニークHTMLを展開する線形スキャンなので、大きなアーカイブでは時間がかかります（stderrに進捗が出ます）。まず `--limit 0` で `total` を確認するのが安全です。`candidatePages` が0、またはページ数より極端に少ない場合はHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。CSS/JSファイルの本文は保存されていないため検索できません。展開できないスナップショット（zstdのデータが壊れているもの、展開後が1文書約1.5 GiBを超えるもの）があると、「該当なし」にはせず、そのスナップショットの `page_html_blobs` の hash を示すエラー（exit code 1）で走査を止めます（`match-selector` も同じ）。約1.5 GiBはクローラーが保存できる最大のバイト数なので、クローラーが保存したHTMLがこの上限で弾かれることはありません。
+結果は`{ items: [{ url, matchCount, snippet }], total, offset, limit, scannedSnapshots, candidatePages }`です。全ユニークHTMLを展開する線形スキャンなので、大きなアーカイブでは時間がかかります（stderrに進捗が出ます）。まず`--limit 0`で`total`を確認するのが安全です。`candidatePages`が0、またはページ数より極端に少ない場合はHTMLが保存されておらず、`total: 0`は「該当なし」を意味しません。CSS/JSファイルの本文は保存されていないため検索できません。展開できないスナップショット（zstdのデータが壊れているもの、展開後が1文書約1.5 GiBを超えるもの）があると、「該当なし」にはせず、そのスナップショットの`page_html_blobs`の hash を示すエラー（exit code 1）で走査を止めます（`match-selector`も同じ）。約1.5 GiBはクローラーが保存できる最大のバイト数なので、クローラーが保存したHTMLがこの上限で弾かれることはありません。
 
 ### `match-selector`
 
@@ -259,33 +259,33 @@ npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'img:not([al
 npx @nitpicker/cli query ./site.nitpicker match-selector --selector 'table:not([class])' --directory /news --limit 0
 ```
 
-| オプション       | 型               | 説明                                                                              |
-| ---------------- | ---------------- | --------------------------------------------------------------------------------- |
-| `--selector`     | string, required | CSSセレクタ（カンマ区切りリスト可。対応文法は下記）                               |
-| `--url-pattern`  | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                    |
-| `--directory`    | string           | ディレクトリでスキャン対象ページを絞り込み（`pages` の `--directory` と同じ意味） |
-| `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0` で件数（`total`）のみ                               |
-| `--offset`, `-o` | number           | スキップ件数                                                                      |
+| オプション       | 型               | 説明                                                                           |
+| ---------------- | ---------------- | ------------------------------------------------------------------------------ |
+| `--selector`     | string, required | CSSセレクタ（カンマ区切りリスト可。対応文法は下記）                            |
+| `--url-pattern`  | string           | SQL LIKEパターンでスキャン対象ページを絞り込み                                 |
+| `--directory`    | string           | ディレクトリでスキャン対象ページを絞り込み（`pages`の`--directory`と同じ意味） |
+| `--limit`, `-l`  | number           | 最大取得件数（既定 100）。`0`で件数（`total`）のみ                             |
+| `--offset`, `-o` | number           | スキップ件数                                                                   |
 
 保存済みのHTMLスナップショットに、セレクタに一致する要素を1つ以上持つページを返します。ページ単位の存在判定で、一致要素の位置や個数は返しません。アーカイブへの書き込みはありません（本コマンドはDOMを構築しません）。
 
-**対応するセレクタ**: 複合セレクタ（`*` / タグ / `.class` / `#id` / `[attr]` `[attr=v]` `[attr~=v]` `[attr|=v]` `[attr^=v]` `[attr$=v]` `[attr*=v]`、`i` / `s` フラグ付き）、子孫結合子（`a b`）、子結合子（`a > b`）、`:first-child` `:nth-child(An+B)` `:first-of-type` `:nth-of-type(An+B)`、`:not(複合セレクタ)`、カンマ区切りリスト。
+**対応するセレクタ**: 複合セレクタ（`*`/タグ/`.class`/`#id`/`[attr]` `[attr=v]` `[attr~=v]` `[attr|=v]` `[attr^=v]` `[attr$=v]` `[attr*=v]`、`i`/`s`フラグ付き）、子孫結合子（`a b`）、子結合子（`a > b`）、`:first-child` `:nth-child(An+B)` `:first-of-type` `:nth-of-type(An+B)`、`:not(複合セレクタ)`、カンマ区切りリスト。
 
-**対応しないセレクタ**: 要素より後ろのマークアップが分からないと判定できないもの（`+` `~` 結合子、`:last-child` `:only-child` `:nth-last-*` `:has()`）、`:is()` `:where()`、`:root` `:empty` などの状態系疑似クラス、疑似要素、名前空間、`:nth-child()` の `of S`、`:not()` に渡すリスト・結合子・入れ子の `:not()`。これらは近似せず、対応文法の一覧つきのエラー（exit code 1）で拒否します。保存HTMLはUTF-8でペアにならないサロゲートを持てないため、そのような文字を含むセレクタ（コピー&ペーストで途切れた絵文字など）も同じエラーで拒否します。
+**対応しないセレクタ**: 要素より後ろのマークアップが分からないと判定できないもの（`+` `~`結合子、`:last-child` `:only-child` `:nth-last-*` `:has()`）、`:is()` `:where()`、`:root` `:empty`などの状態系疑似クラス、疑似要素、名前空間、`:nth-child()`の`of S`、`:not()`に渡すリスト・結合子・入れ子の`:not()`。これらは近似せず、対応文法の一覧つきのエラー（exit code 1）で拒否します。保存HTMLはUTF-8でペアにならないサロゲートを持てないため、そのような文字を含むセレクタ（コピー&ペーストで途切れた絵文字など）も同じエラーで拒否します。
 
-結果は `{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }` です。`items` は `pageId` 順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は `search-html` と同じ（HTMLスナップショットを持つ、skipされていないページ。`--url-pattern` / `--directory` の絞り込みも同じ意味）で、絞り込むと `candidatePages` / `scannedSnapshots` / `total` は絞り込み後のページだけを数えます。絞り込みなしで `candidatePages` が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0` は「該当なし」を意味しません。展開できないスナップショット（zstdのデータが壊れているもの、展開後が1文書約1.5 GiBを超えるもの）があると、「不一致」にはせず、その hash を示すエラー（exit code 1）で走査を止めます。stderrに進捗が出ます。
+結果は`{ selector, items: [{ pageId, url }], total, offset, limit, scannedSnapshots, candidatePages, prefilteredSnapshots, tokenizedSnapshots, matchedSnapshots }`です。`items`は`pageId`順です。全ユニークHTMLを展開する線形スキャンで、同一HTMLは1回だけ判定してページへ展開します。走査対象は`search-html`と同じ（HTMLスナップショットを持つ、skipされていないページ。`--url-pattern`/`--directory`の絞り込みも同じ意味）で、絞り込むと`candidatePages`/`scannedSnapshots`/`total`は絞り込み後のページだけを数えます。絞り込みなしで`candidatePages`が0またはページ数より極端に少なければHTMLが保存されておらず、`total: 0`は「該当なし」を意味しません。展開できないスナップショット（zstdのデータが壊れているもの、展開後が1文書約1.5 GiBを超えるもの）があると、「不一致」にはせず、その hash を示すエラー（exit code 1）で走査を止めます。stderrに進捗が出ます。
 
-`prefilteredSnapshots` と `tokenizedSnapshots` は判定の経路を示します。必要なリテラル（id・クラス・属性値・`<タグ名`・属性名のうち、1つの複合セレクタにつき1つ）を導出できるセレクタは、まずそれらが順に現れるかを確認し、現れない文書はマークアップを一度も読まずに却下します（`prefilteredSnapshots`）。リテラルを導出できないセレクタ（`:not(.zz) > :not(.yy)` のように `:not()` だけで作ったものなど）はこの確認を通りません。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav` など）は、開始タグを順に読んで判定します。結合子・`:nth-*`・`<` `>` を含む属性値のセレクタと、`<template` を含む文書は開タグスタックで評価し、`tokenizedSnapshots` に数えます。判定は各スナップショットの展開から並列に行います。
+`prefilteredSnapshots`と`tokenizedSnapshots`は判定の経路を示します。必要なリテラル（id・クラス・属性値・`<タグ名`・属性名のうち、1つの複合セレクタにつき1つ）を導出できるセレクタは、まずそれらが順に現れるかを確認し、現れない文書はマークアップを一度も読まずに却下します（`prefilteredSnapshots`）。リテラルを導出できないセレクタ（`:not(.zz) > :not(.yy)`のように`:not()`だけで作ったものなど）はこの確認を通りません。残りのうち、1つの開始タグだけで決まるセレクタ（`img[alt]` `.nav`など）は、開始タグを順に読んで判定します。結合子・`:nth-*`・`<` `>`を含む属性値のセレクタと、`<template`を含む文書は開タグスタックで評価し、`tokenizedSnapshots`に数えます。判定は各スナップショットの展開から並列に行います。
 
-MCPツール `match_selector` も同じ関数を呼び、同じ結果を返します（`selector` / `url-pattern` / `directory` / `limit` / `offset` に相当する引数を取ります）。非対応のセレクタは対応文法の一覧つきのエラー（`isError`）で拒否されます。
+MCPツール`match_selector`も同じ関数を呼び、同じ結果を返します（`selector`/`url-pattern`/`directory`/`limit`/`offset`に相当する引数を取ります）。非対応のセレクタは対応文法の一覧つきのエラー（`isError`）で拒否されます。
 
-**判定の契約**: 結果は「保存文字列を次の規則で解釈した木」に対する判定で、元のDOMとの一致は保証しません（直列化は単射ではなく、たとえば `script` のテキストが `</script><img><script>` のDOMと、空の `script`・`img`・空の `script` が並ぶDOMは同じ文字列になります）。
+**判定の契約**: 結果は「保存文字列を次の規則で解釈した木」に対する判定で、元のDOMとの一致は保証しません（直列化は単射ではなく、たとえば`script`のテキストが`</script><img><script>`のDOMと、空の`script`・`img`・空の`script`が並ぶDOMは同じ文字列になります）。
 
-1. `<!--` から最初の `-->` まで、`<![CDATA[` から最初の `]]>` まで、`<!` から最初の `>` まではタグではない
-2. `script` `style` `xmp` `iframe` `noembed` `noframes` `plaintext` `noscript` は、開始タグだけを要素として判定し、`</名前` に続く空白・`/`・`>` までの内容はタグではない（終了タグが無ければ文書末尾まで。`plaintext` は常に末尾まで）。名前だけで判定し、`svg` 内などの名前空間は見ない。`noscript` はスクリプト有効で直列化されるため、中身はテキストとして扱う
-3. それ以外の開始タグ・終了タグを対応づけて木を作る。HTML5の暗黙閉じ規則は適用しない（`<p><div></div></p>` は `p > div` に一致する）。void要素と `/>` は子を持たない。スタック先頭と名前が違う終了タグは無視し、閉じられていない要素は書かれたとおり開いたままにする（`<div><b></div><p>` では `p` は `b` の子になる）。開始タグの属性はHTMLのトークナイザと同じ規則で読み（名前は空白・`/`・`>`・`=` まで、値は二重引用符・単一引用符、または引用符なしで空白・`>` まで）、引用符つき属性値の中の `<` `>` はタグの始まり・終わりではない。属性名に `"` を含んでもよい（ソースの引用符が欠けたページは、ブラウザがそう直列化する）。`>` で閉じられない開始タグはタグではなくテキストとして扱う
-4. `<template>` の子孫は探索しない（`querySelectorAll` が到達しないため）。`template` 要素自身は判定対象
-5. 属性値は `&amp;` `&lt;` `&gt;` `&quot;` `&nbsp;` だけを復号する。タグ名と属性名は大文字小文字を区別しない（DOMはHTML要素だけを区別しない扱いにするので、SVGの `linearGradient` は `lineargradient` でも一致する。DOMより広く一致する側に倒している）。属性値は `i` フラグがなければ区別するが、HTMLが区別しないと定める属性（`type` `rel` `lang` `target` `method` など）は `s` フラグがない限り区別しない。`~=` の区切りはASCII空白のみ。属性名が重複しているときは最初のものを使う（HTMLパーサと同じ）。タグ名・属性名・`i` フラグでの値の比較は、どれもASCIIの大文字小文字だけを無視する（`K`（ケルビン記号 U+212A）は `k` に一致しない）。直列化出力でないHTMLは対象外で、不正なUTF-8は U+FFFD として読む
+1. `<!--`から最初の`-->`まで、`<![CDATA[`から最初の`]]>`まで、`<!`から最初の`>`まではタグではない
+2. `script` `style` `xmp` `iframe` `noembed` `noframes` `plaintext` `noscript`は、開始タグだけを要素として判定し、`</名前`に続く空白・`/`・`>`までの内容はタグではない（終了タグが無ければ文書末尾まで。`plaintext`は常に末尾まで）。名前だけで判定し、`svg`内などの名前空間は見ない。`noscript`はスクリプト有効で直列化されるため、中身はテキストとして扱う
+3. それ以外の開始タグ・終了タグを対応づけて木を作る。HTML5の暗黙閉じ規則は適用しない（`<p><div></div></p>`は`p > div`に一致する）。void要素と`/>`は子を持たない。スタック先頭と名前が違う終了タグは無視し、閉じられていない要素は書かれたとおり開いたままにする（`<div><b></div><p>`では`p`は`b`の子になる）。開始タグの属性はHTMLのトークナイザと同じ規則で読み（名前は空白・`/`・`>`・`=`まで、値は二重引用符・単一引用符、または引用符なしで空白・`>`まで）、引用符つき属性値の中の`<` `>`はタグの始まり・終わりではない。属性名に`"`を含んでもよい（ソースの引用符が欠けたページは、ブラウザがそう直列化する）。`>`で閉じられない開始タグはタグではなくテキストとして扱う
+4. `<template>`の子孫は探索しない（`querySelectorAll`が到達しないため）。`template`要素自身は判定対象
+5. 属性値は`&amp;` `&lt;` `&gt;` `&quot;` `&nbsp;`だけを復号する。タグ名と属性名は大文字小文字を区別しない（DOMはHTML要素だけを区別しない扱いにするので、SVGの`linearGradient`は`lineargradient`でも一致する。DOMより広く一致する側に倒している）。属性値は`i`フラグがなければ区別するが、HTMLが区別しないと定める属性（`type` `rel` `lang` `target` `method`など）は`s`フラグがない限り区別しない。`~=`の区切りはASCII空白のみ。属性名が重複しているときは最初のものを使う（HTMLパーサと同じ）。タグ名・属性名・`i`フラグでの値の比較は、どれもASCIIの大文字小文字だけを無視する（`K`（ケルビン記号 U+212A）は`k`に一致しない）。直列化出力でないHTMLは対象外で、不正なUTF-8は U+FFFD として読む
 
 ### `images`
 
@@ -308,10 +308,10 @@ npx @nitpicker/cli query ./site.nitpicker images --missing-alt --pretty
 npx @nitpicker/cli query ./site.nitpicker duplicates --field title --pretty
 ```
 
-| オプション      | 型     | 説明                                      |
-| --------------- | ------ | ----------------------------------------- |
-| `--field`       | string | `title` / `description`。省略時は `title` |
-| `--limit`, `-l` | number | 最大取得件数                              |
+| オプション      | 型     | 説明                                     |
+| --------------- | ------ | ---------------------------------------- |
+| `--field`       | string | `title` / `description`。省略時は`title` |
+| `--limit`, `-l` | number | 最大取得件数                             |
 
 ### `mismatches`
 
@@ -365,10 +365,10 @@ npx @nitpicker/cli query ./site.nitpicker count-pages-by-technology --technology
 | オプション         | 型               | 説明                                                                                                                                                 |
 | ------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--technology`     | string, required | 技術名（例: `Next.js`, `Google Tag Manager`）                                                                                                        |
-| `--min-confidence` | number           | `page_technologies.confidence` の下限（0-100）                                                                                                       |
+| `--min-confidence` | number           | `page_technologies.confidence`の下限（0-100）                                                                                                        |
 | `--signal-type`    | string           | 検出シグナル種別で絞り込み（`wappalyzer` / `meta-generator` / `html-marker` / `url-pattern` / `scoped-attr` / `weak-marker` / `js-license-comment`） |
-| `--limit`, `-l`    | number           | `pages-by-technology` の最大取得件数                                                                                                                 |
-| `--offset`, `-o`   | number           | `pages-by-technology` のスキップ件数                                                                                                                 |
+| `--limit`, `-l`    | number           | `pages-by-technology`の最大取得件数                                                                                                                  |
+| `--offset`, `-o`   | number           | `pages-by-technology`のスキップ件数                                                                                                                  |
 
 ### `pages-by-jsonld-type` / `count-pages-by-jsonld-type`
 
@@ -377,11 +377,11 @@ npx @nitpicker/cli query ./site.nitpicker pages-by-jsonld-type --type Article --
 npx @nitpicker/cli query ./site.nitpicker count-pages-by-jsonld-type --type Product
 ```
 
-| オプション       | 型               | 説明                                  |
-| ---------------- | ---------------- | ------------------------------------- |
-| `--type`         | string, required | JSON-LD type                          |
-| `--limit`, `-l`  | number           | `pages-by-jsonld-type` の最大取得件数 |
-| `--offset`, `-o` | number           | `pages-by-jsonld-type` のスキップ件数 |
+| オプション       | 型               | 説明                                 |
+| ---------------- | ---------------- | ------------------------------------ |
+| `--type`         | string, required | JSON-LD type                         |
+| `--limit`, `-l`  | number           | `pages-by-jsonld-type`の最大取得件数 |
+| `--offset`, `-o` | number           | `pages-by-jsonld-type`のスキップ件数 |
 
 ### `technology-inventory`
 
@@ -436,7 +436,7 @@ npx @nitpicker/cli query ./site.nitpicker isolated-pages --pretty
 | `--limit`, `-l`  | number | 最大取得件数 |
 | `--offset`, `-o` | number | スキップ件数 |
 
-`crawl --inventory` で登録されたページのうち、通常クロール集合から孤立している単独ページを返します。
+`crawl --inventory`で登録されたページのうち、通常クロール集合から孤立している単独ページを返します。
 
 ### `isolated-clusters`
 
@@ -449,7 +449,7 @@ npx @nitpicker/cli query ./site.nitpicker isolated-clusters --pretty
 | `--limit`, `-l`  | number | 最大取得件数 |
 | `--offset`, `-o` | number | スキップ件数 |
 
-`crawl --inventory` で登録されたページ同士でつながる、通常クロール集合から孤立したクラスタを返します。
+`crawl --inventory`で登録されたページ同士でつながる、通常クロール集合から孤立したクラスタを返します。
 
 ### `get-isolated-cluster`
 
@@ -457,9 +457,9 @@ npx @nitpicker/cli query ./site.nitpicker isolated-clusters --pretty
 npx @nitpicker/cli query ./site.nitpicker get-isolated-cluster --representative-url https://example.com/orphan/ --pretty
 ```
 
-| オプション             | 型               | 説明                              |
-| ---------------------- | ---------------- | --------------------------------- |
-| `--representative-url` | string, required | `isolated-clusters` で得た代表URL |
+| オプション             | 型               | 説明                             |
+| ---------------------- | ---------------- | -------------------------------- |
+| `--representative-url` | string, required | `isolated-clusters`で得た代表URL |
 
 ### `unused-resources`
 
@@ -472,7 +472,7 @@ npx @nitpicker/cli query ./site.nitpicker unused-resources --pretty
 | `--limit`, `-l`  | number | 最大取得件数 |
 | `--offset`, `-o` | number | スキップ件数 |
 
-`crawl --inventory` で登録されたリソースのうち、参照元ページがないものを返します。
+`crawl --inventory`で登録されたリソースのうち、参照元ページがないものを返します。
 
 ### `list-reconcile-runs`
 
@@ -485,7 +485,7 @@ npx @nitpicker/cli query ./site.nitpicker list-reconcile-runs --pretty
 | `--limit`, `-l`  | number | 最大取得件数 |
 | `--offset`, `-o` | number | スキップ件数 |
 
-`crawl --inventory` / `crawl --recrawl` の実行履歴を新しい順に返します。両方とも同じ `list_reconcile_runs` テーブルに記録され、`list_label` の `inventory-`/`recrawl-` prefix で由来を区別できます。
+`crawl --inventory`/`crawl --recrawl`の実行履歴を新しい順に返します。両方とも同じ`list_reconcile_runs`テーブルに記録され、`list_label`の`inventory-`/`recrawl-` prefix で由来を区別できます。
 
 ### `console-logs`
 
@@ -493,15 +493,15 @@ npx @nitpicker/cli query ./site.nitpicker list-reconcile-runs --pretty
 npx @nitpicker/cli query ./site.nitpicker console-logs --type error --sort-by totalCount --sort-order desc --pretty
 ```
 
-| オプション       | 型     | 説明                                                                   |
-| ---------------- | ------ | ---------------------------------------------------------------------- |
-| `--type`         | string | consoleメッセージのtypeで絞り込み（`error` / `warn` / `pageerror` 等） |
-| `--sort-by`      | string | `totalCount` / `pageCount` / `text` / `type`。省略時は `totalCount`    |
-| `--sort-order`   | string | `asc` / `desc`。省略時は `desc`                                        |
-| `--limit`, `-l`  | number | 最大取得件数                                                           |
-| `--offset`, `-o` | number | スキップ件数                                                           |
+| オプション       | 型     | 説明                                                                  |
+| ---------------- | ------ | --------------------------------------------------------------------- |
+| `--type`         | string | consoleメッセージのtypeで絞り込み（`error` / `warn` / `pageerror`等） |
+| `--sort-by`      | string | `totalCount` / `pageCount` / `text` / `type`。省略時は`totalCount`    |
+| `--sort-order`   | string | `asc` / `desc`。省略時は`desc`                                        |
+| `--limit`, `-l`  | number | 最大取得件数                                                          |
+| `--offset`, `-o` | number | スキップ件数                                                          |
 
-捕捉した console メッセージ・ページエラーを内容ごとに全ページ横断で集約して返します。同一内容が複数ページで発生していれば `pageCount`（発生ページ数）と `totalCount`（総出現数）で件数を確認できます。
+捕捉した console メッセージ・ページエラーを内容ごとに全ページ横断で集約して返します。同一内容が複数ページで発生していれば`pageCount`（発生ページ数）と`totalCount`（総出現数）で件数を確認できます。
 
 ### `page-console-logs`
 
@@ -513,7 +513,7 @@ npx @nitpicker/cli query ./site.nitpicker page-console-logs --url https://exampl
 | ---------- | ---------------- | ------------- |
 | `--url`    | string, required | 対象ページURL |
 
-指定ページで捕捉された console メッセージ・ページエラーを発生順に返します。`args`（引数）・発生箇所・スタックトレース（`pageerror` のみ）を含みます。
+指定ページで捕捉された console メッセージ・ページエラーを発生順に返します。`args`（引数）・発生箇所・スタックトレース（`pageerror`のみ）を含みます。
 
 ### `match-urls`
 
@@ -525,7 +525,7 @@ npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
 | ---------- | ---------------- | ------------------------------------------------ |
 | `--urls`   | string, required | 1行1URLのリストファイル（空行・`#`コメント許容） |
 
-リスト内の各URLについて、アーカイブに存在するか（`found`）・redirect先・external/skip判定・ステータス等を入力順のまま返します。`results`（URLごとの詳細）・`invalidLines`（URL形式として無効だった行）・`summary`（`total`/`invalid`/`found`/`notFound`件数）を含みます。`report -H --urls` / `report -S --urls` がレポートに載せなかったURLの理由（未収録・redirect化・PDF等の対象外カテゴリ）を突き止める診断用コマンドです。
+リスト内の各URLについて、アーカイブに存在するか（`found`）・redirect先・external/skip判定・ステータス等を入力順のまま返します。`results`（URLごとの詳細）・`invalidLines`（URL形式として無効だった行）・`summary`（`total`/`invalid`/`found`/`notFound`件数）を含みます。`report -H --urls`/`report -S --urls`がレポートに載せなかったURLの理由（未収録・redirect化・PDF等の対象外カテゴリ）を突き止める診断用コマンドです。
 
 ## 全オプション一覧
 
@@ -534,7 +534,7 @@ npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
 | `--limit`, `-l`              | number  | ページネーション                                                                                                                                     |
 | `--offset`, `-o`             | number  | ページネーション                                                                                                                                     |
 | `--cursor`                   | string  | `resource-referrers` / `duplicates` / `mismatches` / `inbound-links`                                                                                 |
-| `--direction`                | string  | `duplicates` / `mismatches` / `inbound-links`（`--cursor` と併用）                                                                                   |
+| `--direction`                | string  | `duplicates` / `mismatches` / `inbound-links`（`--cursor`と併用）                                                                                    |
 | `--url`                      | string  | `page-detail` / `inbound-links` / `html` / `resource-referrers` / `page-jsonld` / `page-jsonld-overview` / `page-technologies` / `page-console-logs` |
 | `--status`                   | number  | `pages`                                                                                                                                              |
 | `--status-min`               | number  | `pages`                                                                                                                                              |
@@ -568,11 +568,11 @@ npx @nitpicker/cli query ./site.nitpicker match-urls --urls ./urls.txt --pretty
 
 ## ネイティブ処理の環境変数
 
-`match-selector` / `search-html` の走査や URL の並び替えなどのネイティブ処理が使うスレッド数と同時実行数は、環境変数で変えられます。
+`match-selector`/`search-html`の走査や URL の並び替えなどのネイティブ処理が使うスレッド数と同時実行数は、環境変数で変えられます。
 
 | 環境変数                       | 既定       | 内容                                                                     |
 | ------------------------------ | ---------- | ------------------------------------------------------------------------ |
 | `NITPICKER_NATIVE_THREADS`     | 論理コア数 | ネイティブ処理のスレッド数                                               |
 | `NITPICKER_NATIVE_CONCURRENCY` | 1          | 同時に走らせる非同期のネイティブ呼び出しの数（超えた分は順番に待ちます） |
 
-正の整数でない値は、作業を始める前に終了コード 1 で拒否します。詳細は [@nitpicker/core](../../core/README.md) を参照してください。
+正の整数でない値は、作業を始める前に終了コード 1 で拒否します。詳細は[@nitpicker/core](../../core/README.md)を参照してください。

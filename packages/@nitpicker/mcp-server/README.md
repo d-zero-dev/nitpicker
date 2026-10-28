@@ -1,8 +1,8 @@
 # @nitpicker/mcp-server
 
-`.nitpicker` アーカイブを Model Context Protocol (MCP) 経由で問い合わせるためのサーバーです。
+`.nitpicker`アーカイブを Model Context Protocol (MCP) 経由で問い合わせるためのサーバーです。
 
-内部では [@nitpicker/query](../query/README.md) を使い、AIアシスタントなどからアーカイブ内容を参照できるようにします。
+内部では[@nitpicker/query](../query/README.md)を使い、AIアシスタントなどからアーカイブ内容を参照できるようにします。
 
 ## セットアップ
 
@@ -19,11 +19,11 @@ Claude Desktop の設定ファイルに以下を追加します。
 }
 ```
 
-stdio トランスポートで起動し、`.nitpicker` アーカイブを開いてページ、リンク、リソース、分析結果などを問い合わせます。
+stdio トランスポートで起動し、`.nitpicker`アーカイブを開いてページ、リンク、リソース、分析結果などを問い合わせます。
 
-`search_html` と `match_selector` は、クライアントがリクエストをキャンセルしたとき、または接続が切れたときに、走査を途中で止めます。
+`search_html`と`match_selector`は、クライアントがリクエストをキャンセルしたとき、または接続が切れたときに、走査を途中で止めます。
 
-ネイティブ処理は、次の環境変数で調整できます。複数の呼び出しが並行したときは、上限を超えた分が順番に待ちます。正の整数でない値は、起動時にエラーにします。詳細は [@nitpicker/core](../core/README.md) を参照してください。
+ネイティブ処理は、次の環境変数で調整できます。複数の呼び出しが並行したときは、上限を超えた分が順番に待ちます。正の整数でない値は、起動時にエラーにします。詳細は[@nitpicker/core](../core/README.md)を参照してください。
 
 - `NITPICKER_NATIVE_THREADS`: スレッド数（既定は論理コア数）
 - `NITPICKER_NATIVE_CONCURRENCY`: 同時に走らせる非同期のネイティブ呼び出しの数（既定は 1）
@@ -32,7 +32,7 @@ stdio トランスポートで起動し、`.nitpicker` アーカイブを開い�
 
 | ツール                        | 説明                                                              |
 | ----------------------------- | ----------------------------------------------------------------- |
-| `open_archive`                | `.nitpicker` ファイルを開き、archiveIdを返す                      |
+| `open_archive`                | `.nitpicker`ファイルを開き、archiveIdを返す                       |
 | `close_archive`               | アーカイブを閉じる                                                |
 | `get_summary`                 | サイト全体の概要統計                                              |
 | `list_pages`                  | ページ一覧                                                        |
