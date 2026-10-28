@@ -49,9 +49,7 @@ describe('viewer read path on a migrated archive', () => {
 
 	it('viewer read model が migrated archive の entity テーブルから構築できる', async () => {
 		const knex = archive!.getKnex();
-		const viewerPages = (await knex('viewer_pages').select('url')) as {
-			url: string;
-		}[];
+		const viewerPages = await knex('viewer_pages').select<{ url: string }[]>('url');
 		const urls = viewerPages.map((p) => p.url);
 		expect(urls).toContain('http://localhost/a');
 		expect(urls).toContain('http://localhost/b');
@@ -78,9 +76,9 @@ describe('viewer read path on a migrated archive', () => {
 		// `page_html_ref` was rebuilt (FK retarget) — the hash join to
 		// `page_html_blobs` must still resolve the original body.
 		const knex = archive!.getKnex();
-		const rows = (await knex('page_html_ref')
+		const rows = await knex('page_html_ref')
 			.join('page_html_blobs', 'page_html_blobs.hash', 'page_html_ref.hash')
-			.select('page_html_blobs.body as body')) as { body: ArrayBuffer }[];
+			.select<{ body: ArrayBuffer }[]>('page_html_blobs.body as body');
 		expect(rows).toHaveLength(1);
 		// libsql returns BLOB columns as ArrayBuffer, not Node Buffer.
 		expect(Buffer.from(rows[0]!.body).toString()).toContain('<body>A</body>');

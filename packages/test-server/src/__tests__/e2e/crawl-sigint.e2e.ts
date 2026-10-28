@@ -145,10 +145,10 @@ async function findStubWithBodyHash(cwd: string): Promise<string | null> {
 	const stubDir = path.join(cwd, stub);
 	const accessor = await Archive.connect(stubDir);
 	try {
-		const [row] = (await accessor
+		const [row] = await accessor
 			.getKnex()('page_meta')
 			.whereNotNull('body_hash')
-			.count({ count: '*' })) as { count: number }[];
+			.count<{ count: number }[]>({ count: '*' });
 		return Number(row?.count ?? 0) > 0 ? stubDir : null;
 	} finally {
 		await accessor.close();
