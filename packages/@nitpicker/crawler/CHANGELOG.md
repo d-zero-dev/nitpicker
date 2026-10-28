@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+### Features
+
+- **crawler:** match JS resource license banners with the native matcher ([edce476](https://github.com/d-zero-dev/nitpicker/commit/edce4768afeaff48ae84b49498ff9acef90fbc4a)), closes [#430](https://github.com/d-zero-dev/nitpicker/issues/430)
+
 # [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
 
 ### Features

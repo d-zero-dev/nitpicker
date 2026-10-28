@@ -3,6 +3,65 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+### Bug Fixes
+
+- **archive:** send pages a read skips without HTML and check each read's page count ([f587082](https://github.com/d-zero-dev/nitpicker/commit/f5870824bef0de73612b88e257886dea7e49331f))
+- **archive:** surface the original error when SQLite rolls a transaction back by itself ([93638f2](https://github.com/d-zero-dev/nitpicker/commit/93638f2a2ff6535638bc4a4010bd7397382db889))
+- **core:** decide streaming samples upfront and tell which pages each read uses ([981ec6b](https://github.com/d-zero-dev/nitpicker/commit/981ec6bf303a508e1db65e53ef6658dff53c91f2))
+- **core:** find the body with capture-free regex searches and sharpen loader diagnostics ([1b23419](https://github.com/d-zero-dev/nitpicker/commit/1b23419d821492eb67647c3abaf6cfd55816f499)), closes [#425](https://github.com/d-zero-dev/nitpicker/issues/425)
+- **core:** require a tag-name boundary after body when extracting the body ([f26bf0c](https://github.com/d-zero-dev/nitpicker/commit/f26bf0cacb7a4113802d3dcac6ed7e49d147e5eb)), closes [#434](https://github.com/d-zero-dev/nitpicker/issues/434)
+- **query:** number isolated components in a deterministic order ([917b134](https://github.com/d-zero-dev/nitpicker/commit/917b13416507a2f6a389f5ac564f795d1eab8eed)), closes [#434](https://github.com/d-zero-dev/nitpicker/issues/434)
+- **report-google-sheets:** retry rate-limit errors from a different gaxios version ([96973be](https://github.com/d-zero-dev/nitpicker/commit/96973be6eb5416e43f93db987fc1a4f17acad62a))
+- **test-server:** rebuild the report/query e2e fixture for viewer read model v36 ([ad4a702](https://github.com/d-zero-dev/nitpicker/commit/ad4a702116ba0c03f66beb9839676b0e06eab96d))
+
+### Features
+
+- **archive:** add a wrapper for the native stored-HTML selector matcher ([48592d8](https://github.com/d-zero-dev/nitpicker/commit/48592d82a862a8e56a76222c5576bb4b6290ab9b))
+- **archive:** add helpers that free finished statements and tune a connection for a bulk write ([d8fa8d4](https://github.com/d-zero-dev/nitpicker/commit/d8fa8d498775535912072c6fcb6b287cc4a8305c))
+- **archive:** classify templates with the native run and drop the TypeScript engine ([6ff6825](https://github.com/d-zero-dev/nitpicker/commit/6ff6825eeac31397f4c51fd79ddc6a9ddcd32187))
+- **archive:** classify templates with the native Stage A ([bdec678](https://github.com/d-zero-dev/nitpicker/commit/bdec67857a1db32e68f22fc57ea56afa3d864721))
+- **archive:** detect structural technology signals with the native matcher ([8c7b41b](https://github.com/d-zero-dev/nitpicker/commit/8c7b41b444e045e9c2d00c4070937deecff02ff2)), closes [#430](https://github.com/d-zero-dev/nitpicker/issues/430)
+- **archive:** hash stored HTML from bytes and keep the JS body-hash stages out of the build ([a8d6fe9](https://github.com/d-zero-dev/nitpicker/commit/a8d6fe973bbdc94d8f6afd6de08939a98f091176)), closes [#425](https://github.com/d-zero-dev/nitpicker/issues/425)
+- **archive:** limit the JS-side decode too, and name an undecodable snapshot ([bf59a6f](https://github.com/d-zero-dev/nitpicker/commit/bf59a6fbdf7dde5dcdcf48016a34c69146cfb76c))
+- **archive:** pass an abort signal to the native snapshot scans and expose the settings check ([9f176cc](https://github.com/d-zero-dev/nitpicker/commit/9f176ccd956944ed8f0b82bbe4f273daacd9716c))
+- **archive:** pass the memory limit to the classifier and return the blocks it sampled ([5403642](https://github.com/d-zero-dev/nitpicker/commit/54036421932f6bd9ca99473376fc8aa03ed4e2ad))
+- **archive:** route alias keys and grouping through the native addon ([9c405ef](https://github.com/d-zero-dev/nitpicker/commit/9c405ef66b7e7d47a4d4e3f2de44ecaf02f2241c))
+- **archive:** stop holding every Page handle before template classification ([c5ddc81](https://github.com/d-zero-dev/nitpicker/commit/c5ddc8159298f0c6a8913e08f0e2b19ec84954a1))
+- **archive:** wrap the native snapshot search and pattern check ([02a4ca1](https://github.com/d-zero-dev/nitpicker/commit/02a4ca11b5b9b9680e7bbfa4a60bb30ff46446c1))
+- **cli:** add --template-memory-budget and report the blocks the classifier sampled ([617b970](https://github.com/d-zero-dev/nitpicker/commit/617b9703e924c8b5f37bb940741aa8dfc0f5090b))
+- **cli:** refuse a bad search-html pattern before opening the archive and add --literal ([50dd1ca](https://github.com/d-zero-dev/nitpicker/commit/50dd1ca4b724bbeb32fd968a124921412b4c0eee))
+- **cli:** refuse an invalid native pool setting before a command starts ([19e98e3](https://github.com/d-zero-dev/nitpicker/commit/19e98e3cd247051338c415f882dced0fa7135f7e))
+- **cli:** show the stored-HTML listing step of template classification ([df575d1](https://github.com/d-zero-dev/nitpicker/commit/df575d10803472794222bf79dea08adae772e1bc))
+- **core:** add native union-find, alias keys and alias grouping ([51d370e](https://github.com/d-zero-dev/nitpicker/commit/51d370e6fe44b35bf1ccc2a1bd5dd0ed6ca2db1c))
+- **core:** add nitpicker_url_key and computeUrlSortRanks ([3f7d64a](https://github.com/d-zero-dev/nitpicker/commit/3f7d64a7c45a6e827033552a856bc6e41d545b33))
+- **core:** cluster every block whole unless its table or the held pages are too large ([903f1ee](https://github.com/d-zero-dev/nitpicker/commit/903f1ee606690497af8b11aa47106d123f2f952b))
+- **core:** fold identical comparison sets before the Stage A similarity table ([8a05c9c](https://github.com/d-zero-dev/nitpicker/commit/8a05c9c6d26042e170b45de328ea5f42da5b0533))
+- **core:** fuse the body hash stages and port structural technology detection ([54e704a](https://github.com/d-zero-dev/nitpicker/commit/54e704a157f178086eb966ecaac106d24c6ca44f)), closes [#430](https://github.com/d-zero-dev/nitpicker/issues/430)
+- **core:** hold less of each page's parse results until its block is clustered ([91cba17](https://github.com/d-zero-dev/nitpicker/commit/91cba17326962981bba02aef025b752d1632e500))
+- **core:** judge stored HTML snapshots against CSS selectors natively ([8b0ed9a](https://github.com/d-zero-dev/nitpicker/commit/8b0ed9a1d6d152ff80063c430a3d8cd282355cf0))
+- **core:** run asynchronous native calls on a dedicated pool, with a concurrency limit and cancellation ([babbd2f](https://github.com/d-zero-dev/nitpicker/commit/babbd2f0a50e078fb8235e04e0d591582ac066bd))
+- **core:** run Stage A of template classification natively ([b1b9b0f](https://github.com/d-zero-dev/nitpicker/commit/b1b9b0f18eca3530f5e2fd0f2bc07846cf2e8647))
+- **core:** run the whole template classification natively ([69f78ab](https://github.com/d-zero-dev/nitpicker/commit/69f78ab1ef6b67142557f40c5ba7b8d29fc2f0d3)), closes [#426](https://github.com/d-zero-dev/nitpicker/issues/426)
+- **core:** search stored HTML snapshots natively under a defined pattern contract ([2f90df2](https://github.com/d-zero-dev/nitpicker/commit/2f90df2e93b6b94180572006c8186480e4a95278))
+- **core:** stop a zstd snapshot at the most a crawl can store, and on cancel ([76c708f](https://github.com/d-zero-dev/nitpicker/commit/76c708fee6fb52695cc217c532fc58447042ed04))
+- **crawler:** match JS resource license banners with the native matcher ([edce476](https://github.com/d-zero-dev/nitpicker/commit/edce4768afeaff48ae84b49498ff9acef90fbc4a)), closes [#430](https://github.com/d-zero-dev/nitpicker/issues/430)
+- **mcp-server:** describe the search_html pattern contract and add a literal argument ([3f138ac](https://github.com/d-zero-dev/nitpicker/commit/3f138ac9c96ab8a60fc1ec8346120864a289df1f))
+- **mcp-server:** stop search_html and match_selector when the client cancels ([7929483](https://github.com/d-zero-dev/nitpicker/commit/7929483e834ea2b1a8ed0131037f7a944870cc30))
+- **query:** free each statement's native memory while building the viewer read model ([44c161a](https://github.com/d-zero-dev/nitpicker/commit/44c161a6982d6c2d620b971cc1f7bc34be09b4f8))
+- **query:** rank URLs with the native total-order key ([c5765e4](https://github.com/d-zero-dev/nitpicker/commit/c5765e471987fb74b9f483fd992a971ab233550a))
+- **query:** run match-selector on the native matcher in parallel batches ([d65de37](https://github.com/d-zero-dev/nitpicker/commit/d65de37992b4a7126a1ce3f2f97a0d9c54c76133))
+- **query:** search stored HTML through the native matcher and read patterns by contract ([9108f4f](https://github.com/d-zero-dev/nitpicker/commit/9108f4fd80e6bf9e46cc8f9b1633757cbeb94839))
+- **query:** stop a snapshot scan when the caller's signal aborts ([025e256](https://github.com/d-zero-dev/nitpicker/commit/025e256854b468ff4e032964b10739c57ab6ce31))
+- **query:** stop the body_hash backfill on an undecodable snapshot, naming it ([0fa7192](https://github.com/d-zero-dev/nitpicker/commit/0fa7192591212e2291c306bda276f71bbc728711))
+- **query:** stream isolated-cluster edges and group aliases natively ([dada267](https://github.com/d-zero-dev/nitpicker/commit/dada2671e89e906acc2c9f895522fa35246a9073))
+- **repo:** add the Rust @nitpicker/core addon and compute body_hash with it ([4563fa3](https://github.com/d-zero-dev/nitpicker/commit/4563fa3d1ec4b0818a1d3a0b287e8bbb2d79b7cd)), closes [#425](https://github.com/d-zero-dev/nitpicker/issues/425)
+
+### Performance Improvements
+
+- **query:** read link graph edges by one scan instead of a two-sided join ([18bb6b7](https://github.com/d-zero-dev/nitpicker/commit/18bb6b758f5d43c2395dbcedbd309d2ef42747ac))
+
 # [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
 
 ### Bug Fixes

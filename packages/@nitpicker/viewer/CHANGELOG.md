@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+### Features
+
+- **query:** rank URLs with the native total-order key ([c5765e4](https://github.com/d-zero-dev/nitpicker/commit/c5765e471987fb74b9f483fd992a971ab233550a))
+
 # [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
 
 ### Bug Fixes

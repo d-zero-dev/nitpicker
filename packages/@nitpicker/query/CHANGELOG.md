@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+### Bug Fixes
+
+- **query:** number isolated components in a deterministic order ([917b134](https://github.com/d-zero-dev/nitpicker/commit/917b13416507a2f6a389f5ac564f795d1eab8eed)), closes [#434](https://github.com/d-zero-dev/nitpicker/issues/434)
+
+### Features
+
+- **query:** free each statement's native memory while building the viewer read model ([44c161a](https://github.com/d-zero-dev/nitpicker/commit/44c161a6982d6c2d620b971cc1f7bc34be09b4f8))
+- **query:** rank URLs with the native total-order key ([c5765e4](https://github.com/d-zero-dev/nitpicker/commit/c5765e471987fb74b9f483fd992a971ab233550a))
+- **query:** run match-selector on the native matcher in parallel batches ([d65de37](https://github.com/d-zero-dev/nitpicker/commit/d65de37992b4a7126a1ce3f2f97a0d9c54c76133))
+- **query:** search stored HTML through the native matcher and read patterns by contract ([9108f4f](https://github.com/d-zero-dev/nitpicker/commit/9108f4fd80e6bf9e46cc8f9b1633757cbeb94839))
+- **query:** stop a snapshot scan when the caller's signal aborts ([025e256](https://github.com/d-zero-dev/nitpicker/commit/025e256854b468ff4e032964b10739c57ab6ce31))
+- **query:** stop the body_hash backfill on an undecodable snapshot, naming it ([0fa7192](https://github.com/d-zero-dev/nitpicker/commit/0fa7192591212e2291c306bda276f71bbc728711))
+- **query:** stream isolated-cluster edges and group aliases natively ([dada267](https://github.com/d-zero-dev/nitpicker/commit/dada2671e89e906acc2c9f895522fa35246a9073))
+
+### Performance Improvements
+
+- **query:** read link graph edges by one scan instead of a two-sided join ([18bb6b7](https://github.com/d-zero-dev/nitpicker/commit/18bb6b758f5d43c2395dbcedbd309d2ef42747ac))
+
 # [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
 
 ### Bug Fixes

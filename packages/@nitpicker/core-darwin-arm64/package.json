@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/core-darwin-arm64",
-	"version": "0.24.0",
+	"version": "0.25.0",
 	"description": "Prebuilt @nitpicker/core native addon for macOS on Apple silicon",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",

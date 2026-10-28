@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+### Features
+
+- **mcp-server:** describe the search_html pattern contract and add a literal argument ([3f138ac](https://github.com/d-zero-dev/nitpicker/commit/3f138ac9c96ab8a60fc1ec8346120864a289df1f))
+- **mcp-server:** stop search_html and match_selector when the client cancels ([7929483](https://github.com/d-zero-dev/nitpicker/commit/7929483e834ea2b1a8ed0131037f7a944870cc30))
+
 # [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
 
 ### Features

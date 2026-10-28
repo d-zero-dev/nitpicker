@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+### Features
+
+- **cli:** add --template-memory-budget and report the blocks the classifier sampled ([617b970](https://github.com/d-zero-dev/nitpicker/commit/617b9703e924c8b5f37bb940741aa8dfc0f5090b))
+- **cli:** refuse a bad search-html pattern before opening the archive and add --literal ([50dd1ca](https://github.com/d-zero-dev/nitpicker/commit/50dd1ca4b724bbeb32fd968a124921412b4c0eee))
+- **cli:** refuse an invalid native pool setting before a command starts ([19e98e3](https://github.com/d-zero-dev/nitpicker/commit/19e98e3cd247051338c415f882dced0fa7135f7e))
+- **cli:** show the stored-HTML listing step of template classification ([df575d1](https://github.com/d-zero-dev/nitpicker/commit/df575d10803472794222bf79dea08adae772e1bc))
+- **query:** rank URLs with the native total-order key ([c5765e4](https://github.com/d-zero-dev/nitpicker/commit/c5765e471987fb74b9f483fd992a971ab233550a))
+
 # [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
 
 ### Features
