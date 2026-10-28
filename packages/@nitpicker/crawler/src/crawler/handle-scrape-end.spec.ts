@@ -54,7 +54,7 @@ function createMockResult(overrides?: Partial<PageData>): PageData {
  * @returns A minimally-populated {@link AnchorData}.
  */
 function makeAnchor(href: string): AnchorData {
-	return { href: parseUrl(href)!, textContent: '' } as AnchorData;
+	return { href: parseUrl(href)!, textContent: '' };
 }
 
 /**

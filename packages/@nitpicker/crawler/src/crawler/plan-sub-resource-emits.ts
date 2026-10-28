@@ -76,13 +76,10 @@ export function planSubResourceEmits(
 	const responseEmits: PlannedResponseEmit[] = [];
 	const referrerEmits: PlannedReferrerEmit[] = [];
 	for (const { resource, pageUrl } of resources) {
-		const { isNew } = handleResourceResponse(
-			resource as CrawlerEventTypes['response']['resource'],
-			seenResources,
-		);
+		const { isNew } = handleResourceResponse(resource, seenResources);
 		if (isNew) {
 			responseEmits.push({
-				resource: resource as CrawlerEventTypes['response']['resource'],
+				resource: resource,
 				source: subResourceSource,
 			});
 		}
