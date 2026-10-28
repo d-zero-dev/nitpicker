@@ -70,9 +70,8 @@ export async function listReconcileRuns(
 		return { items: [], total: 0 };
 	}
 
-	const countResult = (await knex('list_reconcile_runs').count('id as total')) as {
-		total: number;
-	}[];
+	const countResult =
+		await knex('list_reconcile_runs').count<{ total: number }[]>('id as total');
 	const total = countResult[0]?.total ?? 0;
 
 	const [hasInvalidSkipped, hasExcludeSkipped] = await Promise.all([

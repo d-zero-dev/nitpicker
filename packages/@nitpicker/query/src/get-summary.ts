@@ -344,7 +344,7 @@ export async function getSummary(accessor: ArchiveAccessor): Promise<SummaryResu
 		) satisfies ErrorKindCount[];
 	}
 
-	const meta = metaRows[0] ?? ({} as Record<string, number>);
+	const meta = metaRows[0] ?? {};
 	const metaTotal = Number(meta.total ?? 0);
 	let metadataFulfillment = {
 		title: 0,

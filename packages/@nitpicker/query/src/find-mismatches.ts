@@ -224,8 +224,9 @@ export async function findMismatches(
  * @param column - Primary key column to count.
  */
 async function count(query: Knex.QueryBuilder, column: string) {
-	const result = (await query.clone().clearSelect().count(`${column} as total`)) as {
-		total: number;
-	}[];
+	const result = await query
+		.clone()
+		.clearSelect()
+		.count<{ total: number }[]>(`${column} as total`);
 	return Number(result[0]?.total ?? 0);
 }

@@ -70,17 +70,17 @@ export interface HeaderCheckInsertRow {
 export async function computeHeaderCheckInsertRows(
 	trx: Knex,
 ): Promise<HeaderCheckInsertRow[]> {
-	const rows = (await trx('content_items as ci')
+	const rows = await trx('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 		.leftJoin('header_flags as hf', 'hf.header_set_id', 'ci.header_set_id')
 		.where({ 'ci.scraped': 1, 'ci.is_external': 0, 'ctr.raw': 'text/html' })
 		.whereNull('ci.redirect_dest_id')
-		.select(
+		.select<HeaderCheckSourceRow[]>(
 			'ci.id as id',
 			'ur.url as url',
 			...buildHeaderPresenceSelects(trx, 'hf'),
-		)) as HeaderCheckSourceRow[];
+		);
 
 	const naturalUrlRankByPageId = buildPageNaturalUrlRankMap(rows);
 	return rows.map((row) => {

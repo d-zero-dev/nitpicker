@@ -143,7 +143,7 @@ describe('createIsolatedClusterRun: native versus the reference algorithm', () =
 
 			// The same edges in uneven batches: the batching must not matter.
 			const batched = createIsolatedClusterRun(candidateIds, hops);
-			for (let start = 0; start < edges.length; ) {
+			for (let start = 0; start < edges.length;) {
 				const size = 2 * (1 + next(4));
 				batched.unionEdges(edges.slice(start, start + size));
 				start += size;

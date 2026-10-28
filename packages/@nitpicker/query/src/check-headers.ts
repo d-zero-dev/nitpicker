@@ -72,9 +72,9 @@ export async function checkHeaders(
 		}
 	}
 
-	const countResult = (await baseQuery.clone().count('ci.id as total')) as {
-		total: number;
-	}[];
+	const countResult = await baseQuery
+		.clone()
+		.count<{ total: number }[]>('ci.id as total');
 	const totalCount = countResult[0]?.total ?? 0;
 
 	const dataQuery = baseQuery

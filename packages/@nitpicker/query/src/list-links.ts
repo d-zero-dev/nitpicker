@@ -148,10 +148,10 @@ export async function listLinks(
 		baseQuery.whereRaw(`${statusExpression} = ?`, [options.status]);
 	}
 
-	const countResult = (await baseQuery
+	const countResult = await baseQuery
 		.clone()
 		.clearSelect()
-		.sum('ae.count as total')) as { total: number | null }[];
+		.sum<{ total: number | null }[]>('ae.count as total');
 	const total = countResult[0]?.total ?? 0;
 
 	const sortColumns: Record<

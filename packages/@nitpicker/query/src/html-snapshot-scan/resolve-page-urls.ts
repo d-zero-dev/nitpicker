@@ -19,13 +19,10 @@ export async function resolvePageUrls(
 ): Promise<Map<number, string>> {
 	const urlByPageId = new Map<number, string>();
 	for (let i = 0; i < pageIds.length; i += SQLITE_IN_CHUNK) {
-		const rows = (await knex('content_items as ci')
+		const rows = await knex('content_items as ci')
 			.join('url_refs as ur', 'ur.id', 'ci.url_id')
 			.whereIn('ci.id', pageIds.slice(i, i + SQLITE_IN_CHUNK))
-			.select('ci.id as pageId', 'ur.url as url')) as {
-			pageId: number;
-			url: string;
-		}[];
+			.select<{ pageId: number; url: string }[]>('ci.id as pageId', 'ur.url as url');
 		for (const row of rows) {
 			urlByPageId.set(row.pageId, row.url);
 		}

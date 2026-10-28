@@ -72,9 +72,9 @@ export async function listExternalLinks(
 		.clearSelect()
 		.select(knex.raw(`${destIdExpression} as "destId"`))
 		.groupBy(knex.raw(destIdExpression));
-	const countResult = (await knex
-		.count('* as total')
-		.from(groupedIds.as('grouped_destinations'))) as { total: number }[];
+	const countResult = await knex
+		.from(groupedIds.as('grouped_destinations'))
+		.count<{ total: number }[]>('* as total');
 	const total = Number(countResult[0]?.total ?? 0);
 
 	if (sortColumns[sortBy].type === 'url') {

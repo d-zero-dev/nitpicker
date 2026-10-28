@@ -96,20 +96,20 @@ export async function backfillAliasOfId(
 ): Promise<void> {
 	const knex = accessor.getKnex();
 
-	const candidates = (await knex('content_items as ci')
+	const candidates = await knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.join('page_meta as pm', 'pm.page_id', 'ci.id')
 		.where({ 'ci.scraped': 1, 'ci.is_external': 0 })
 		.whereNull('ci.redirect_dest_id')
 		.whereNotNull('pm.title_text_id')
-		.select(
+		.select<AliasCandidateRow[]>(
 			'ci.id as id',
 			'ur.url as url',
 			'ci.url_id as urlId',
 			'pm.title_text_id as titleTextId',
 			'pm.canonical_url_id as canonicalUrlId',
 			'pm.body_hash as bodyHash',
-		)) as AliasCandidateRow[];
+		);
 
 	// Normalized in place: a second array of candidate objects would double
 	// the rows' footprint.

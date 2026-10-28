@@ -63,11 +63,9 @@ export async function listUnusedResources(
 		return query;
 	};
 
-	const countResult = (await baseWhere(knex('resource_items as ri')).count(
-		'ri.id as total',
-	)) as {
-		total: number;
-	}[];
+	const countResult = await baseWhere(knex('resource_items as ri')).count<
+		{ total: number }[]
+	>('ri.id as total');
 	const total = countResult[0]?.total ?? 0;
 
 	const rowQuery = baseWhere(knex('resource_items as ri')).select(

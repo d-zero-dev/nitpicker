@@ -109,9 +109,8 @@ export async function* computeAnchorFactRows(
 	const destUrlExpression =
 		'COALESCE("canonical_alias_url"."url", "canonical_url"."url", "alias_canonical_url"."url", "dest_url"."url")';
 
-	const maxIdRows = (await trx('content_items').max('id as maxId')) as {
-		maxId: number | null;
-	}[];
+	const maxIdRows =
+		await trx('content_items').max<{ maxId: number | null }[]>('id as maxId');
 	const maxId = maxIdRows[0]?.maxId ?? 0;
 
 	for (let rangeStart = 0; rangeStart < maxId; rangeStart += chunkSize) {

@@ -76,7 +76,7 @@ describe('viewer-read-model-worker-entry', () => {
 		vi.resetModules();
 		mockPostMessage.mockClear();
 		mockClose.mockClear().mockResolvedValue();
-		mockKnexRaw.mockClear().mockResolvedValue(undefined as never);
+		mockKnexRaw.mockClear().mockResolvedValue();
 		mockConnect.mockReset().mockResolvedValue({
 			close: mockClose,
 			getKnex: () => ({ raw: mockKnexRaw }),

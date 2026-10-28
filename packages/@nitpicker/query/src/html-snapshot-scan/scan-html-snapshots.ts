@@ -66,13 +66,13 @@ function splitIntoBatches(rows: readonly BlobRow[]): BlobRow[][] {
  * @returns The rows of those hashes.
  */
 async function readBlobRows(knex: Knex, hashes: readonly Buffer[]): Promise<BlobRow[]> {
-	const rows = (await knex('page_html_blobs')
+	const rows = await knex('page_html_blobs')
 		.whereIn('hash', hashes as Buffer[])
-		.select('hash', 'body', 'codec')) as {
-		hash: Uint8Array;
-		body: Uint8Array;
-		codec: string;
-	}[];
+		.select<{ hash: Uint8Array; body: Uint8Array; codec: string }[]>(
+			'hash',
+			'body',
+			'codec',
+		);
 	return rows.map((row) => ({
 		hash: toBuffer(row.hash),
 		// An `ArrayBuffer` from the driver, or a view of the right bytes: `Buffer.from`
@@ -121,13 +121,11 @@ async function findMatchedHashes(
 	for (const batch of splitIntoBatches(rows)) {
 		const verdicts = await params
 			.judgeBatch(
-				batch.map(
-					({ hash, body, codec }): StoredSnapshotBlob => ({
-						hash: hash.toString('hex'),
-						body,
-						codec,
-					}),
-				),
+				batch.map(({ hash, body, codec }): StoredSnapshotBlob => ({
+					hash: hash.toString('hex'),
+					body,
+					codec,
+				})),
 			)
 			.catch((error: unknown) => {
 				throw nameFailedSnapshot(error, batch);
@@ -243,12 +241,12 @@ export async function scanHtmlSnapshots(
 	signal?.throwIfAborted();
 	const matchedPages: MatchedSnapshotPage[] = [];
 	for (let i = 0; i < matchedHashes.length; i += SQLITE_IN_CHUNK) {
-		const rows = (await candidates()
+		const rows = await candidates()
 			.whereIn('phr.hash', matchedHashes.slice(i, i + SQLITE_IN_CHUNK))
-			.select('phr.page_id as pageId', 'phr.hash as hash')) as {
-			pageId: number;
-			hash: Uint8Array;
-		}[];
+			.select<{ pageId: number; hash: Uint8Array }[]>(
+				'phr.page_id as pageId',
+				'phr.hash as hash',
+			);
 		for (const row of rows) {
 			matchedPages.push({ pageId: row.pageId, hash: toBuffer(row.hash).toString('hex') });
 		}

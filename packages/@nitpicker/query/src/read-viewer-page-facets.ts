@@ -92,13 +92,10 @@ export async function readViewerPageFacets(
 	}
 
 	const hasPageTemplates = await hasPageTemplatesTable(knex);
-	const templateKeys = hasPageTemplates
-		? (
-				(await knex('page_templates').distinct('template_key')) as {
-					template_key: string;
-				}[]
-			).map((row) => row.template_key)
+	const templateKeyRows = hasPageTemplates
+		? await knex('page_templates').distinct<{ template_key: string }[]>('template_key')
 		: [];
+	const templateKeys = templateKeyRows.map((row) => row.template_key);
 	// Same live-read rationale as `templateKeys`: labels are written by
 	// the template classification step, never by the read-model build, and
 	// `page_template_labels` is one narrow row per key.

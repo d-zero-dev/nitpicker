@@ -84,10 +84,10 @@ export async function listViewerIsolatedClusters(
 	}
 	applyEqualityOrInFilter(baseQuery, 'representative_status', options.status);
 
-	const countResult = (await baseQuery
+	const countResult = await baseQuery
 		.clone()
 		.clearSelect()
-		.count('component_id as total')) as { total: number }[];
+		.count<{ total: number }[]>('component_id as total');
 	const total = Number(countResult[0]?.total ?? 0);
 
 	const rows = (await applyIsolatedClusterOrder(

@@ -31,5 +31,5 @@ export function makeBeholderMeta(overrides: Record<string, unknown> = {}): Meta 
 		},
 		originTrial: [],
 		...overrides,
-	} as Meta;
+	};
 }

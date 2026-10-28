@@ -20,9 +20,8 @@ export async function getViewerLinkGraph(
 	const knex = accessor.getKnex();
 	const requestedLimit = options.limit;
 
-	const countResult = (await knex('viewer_graph_nodes').count('page_id as total')) as {
-		total: number;
-	}[];
+	const countResult =
+		await knex('viewer_graph_nodes').count<{ total: number }[]>('page_id as total');
 	const totalNodes = Number(countResult[0]?.total ?? 0);
 
 	const nodeQuery = knex('viewer_graph_nodes')

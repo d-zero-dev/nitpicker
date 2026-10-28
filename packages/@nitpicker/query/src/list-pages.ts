@@ -416,20 +416,20 @@ async function getPageListFacets(
 	hasPageTemplates: boolean,
 	hasLabelsJoin: boolean,
 ): Promise<PageListFacets> {
-	const rows = (await createPageListBaseQuery(
+	const rows = await createPageListBaseQuery(
 		knex,
 		contentTypeCategory,
 		hasPageTemplates,
 		hasLabelsJoin,
 	)
 		.clone()
-		.distinct(
+		.distinct<PageFacetRow[]>(
 			'ci.status as status',
 			'pm.lang as lang',
 			'ci.is_external as isExternal',
 			templateKeySelectColumn(knex, hasPageTemplates),
 			...templateLabelSelectColumns(knex, hasLabelsJoin),
-		)) as PageFacetRow[];
+		);
 	const templateLabelsByKey: PageListFacets['templateLabelsByKey'] = {};
 	for (const row of rows) {
 		if (row.templateKey != null && row.templateLabelOrdinal != null) {

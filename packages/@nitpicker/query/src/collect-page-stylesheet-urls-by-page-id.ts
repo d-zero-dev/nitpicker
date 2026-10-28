@@ -36,13 +36,10 @@ export async function collectPageStylesheetUrlsByPageId(
 ): Promise<Map<number, readonly string[]>> {
 	const knex = accessor.getKnex();
 
-	const cssResources = (await knex('resource_items as ri')
+	const cssResources = await knex('resource_items as ri')
 		.join('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id')
 		.where('ctr.category', 'css')
-		.select('ri.id as id', 'ri.url_id as urlId')) as {
-		id: number;
-		urlId: number | null;
-	}[];
+		.select<{ id: number; urlId: number | null }[]>('ri.id as id', 'ri.url_id as urlId');
 
 	// A CSS resource identified by a `data:` URI (routed to `blob_refs`
 	// instead of `url_refs`, `resource_items.url_blob_id`) has no stylesheet
@@ -59,10 +56,9 @@ export async function collectPageStylesheetUrlsByPageId(
 		cssResourcesWithUrl.map((r) => r.urlId),
 		SQLITE_IN_CHUNK,
 		async (chunk) => {
-			const rows = (await knex('url_refs').whereIn('id', chunk).select('id', 'url')) as {
-				id: number;
-				url: string;
-			}[];
+			const rows = await knex('url_refs')
+				.whereIn('id', chunk)
+				.select<{ id: number; url: string }[]>('id', 'url');
 			for (const row of rows) {
 				cssUrlById.set(row.id, row.url);
 			}
@@ -82,12 +78,12 @@ export async function collectPageStylesheetUrlsByPageId(
 		cssResourcesWithUrl.map((r) => r.id),
 		SQLITE_IN_CHUNK,
 		async (chunk) => {
-			const rows = (await knex('resource_ref_edges')
+			const rows = await knex('resource_ref_edges')
 				.whereIn('resource_id', chunk)
-				.select('resource_id as resourceId', 'page_id as pageId')) as {
-				resourceId: number;
-				pageId: number;
-			}[];
+				.select<{ resourceId: number; pageId: number }[]>(
+					'resource_id as resourceId',
+					'page_id as pageId',
+				);
 			// Avoid `push(...rows)`: on large real archives this chunk array can
 			// be large enough to overflow V8's argument-spread limit even though
 			// the underlying data itself fits in memory.
