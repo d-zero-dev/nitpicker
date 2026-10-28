@@ -398,7 +398,7 @@ describe('report command', () => {
 	it('exits with error when neither output is selected', async () => {
 		await expect(
 			report(['test.nitpicker'], {
-				sheet: undefined as unknown as string,
+				sheet: undefined,
 				credentials: './credentials.json',
 				all: undefined,
 				verbose: undefined,
