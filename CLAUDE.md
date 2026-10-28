@@ -1,6 +1,6 @@
 # Nitpicker - AI Agent Guide
 
-Nitpicker は Web サイト全体をヘッドレスブラウザでクロールし、メタデータ・リンク構造・リソース・HTML スナップショットを `.nitpicker` アーカイブ（tar + SQLite）に保存するクローラー＋監査ツール。保存したアーカイブを Google Sheets レポートやローカルビューアで確認できる。Lerna + Yarn Workspaces のモノレポ（`@nitpicker/*` + test-server）。
+Nitpicker は Web サイト全体をヘッドレスブラウザでクロールし、メタデータ・リンク構造・リソース・HTML スナップショットを`.nitpicker`アーカイブ（tar + SQLite）に保存するクローラー＋監査ツール。保存したアーカイブを Google Sheets レポートやローカルビューアで確認できる。Lerna + Yarn Workspaces のモノレポ（`@nitpicker/*` + test-server）。
 
 ## 実装把握の入口
 
@@ -8,7 +8,7 @@ Nitpicker は Web サイト全体をヘッドレスブラウザでクロール�
 
 ## viewer UI 開発
 
-`@nitpicker/viewer` の `web/components/*` はデータ取得（react-query hooks・API 呼び出し）に直接関係しない UI のみの改善であれば、Storybook（`yarn workspace @nitpicker/viewer storybook`）で対象コンポーネントを単独表示しながら確認・改善すること。データ取得を伴う変更（画面・API の追加等）は ARCHITECTURE.md の Reading paths を参照。
+`@nitpicker/viewer`の`web/components/*`はデータ取得（react-query hooks・API 呼び出し）に直接関係しない UI のみの改善であれば、Storybook（`yarn workspace @nitpicker/viewer storybook`）で対象コンポーネントを単独表示しながら確認・改善すること。データ取得を伴う変更（画面・API の追加等）は ARCHITECTURE.md の Reading paths を参照。
 
 ## CLI コマンド
 
@@ -37,7 +37,7 @@ npx @nitpicker/cli concat <a> <b> [...] -o <out>       # 複数アーカイブ�
 npx @nitpicker/cli split <archive> <URL> [...] -o <out> # 指定スコープ配下だけを新アーカイブに抽出（範囲外の被参照ページは external stub 化。テンプレート分類は出力で再実行）
 ```
 
-フラグの相互排他・挙動の詳細は `--help` と各コマンド実装（`packages/@nitpicker/cli/src/commands/`）の JSDoc を参照。
+フラグの相互排他・挙動の詳細は`--help`と各コマンド実装（`packages/@nitpicker/cli/src/commands/`）の JSDoc を参照。
 
 ## テスト・ビルド・lint
 
@@ -51,71 +51,71 @@ yarn build                                         # 全パッケージビルド
 yarn lint                                          # lint + prettier + cspell + rustfmt + clippy
 ```
 
-- **Rust ツールチェーン必須**: `@nitpicker/core` は Rust（napi-rs）のネイティブアドオンで、`yarn build` が `cargo build` を呼ぶ。バージョンはルートの `rust-toolchain.toml` で固定（rustup が自動取得）。セットアップは CONTRIBUTING.md。ローカルでは cargo も `yarn test:rust` / `yarn lint` 経由で実行し、直接叩かない（CI の `rust-test` ジョブだけは `yarn install` を省くため `test:rust` と同じコマンドを直接実行しており、`test:rust` を変えたら `.github/workflows/ci.yml` も合わせる）
-- **ネイティブアドオンは prebuilt 配布のみ・フォールバックなし**: 対応は darwin-arm64 と linux-x64（glibc 2.28 以上）。ローカルビルドは `packages/@nitpicker/core/core.<platform>.node`（gitignore 済み）に置かれ、ローダーが優先的に読む
+- **Rust ツールチェーン必須**: `@nitpicker/core`は Rust（napi-rs）のネイティブアドオンで、`yarn build`が`cargo build`を呼ぶ。バージョンはルートの`rust-toolchain.toml`で固定（rustup が自動取得）。セットアップは CONTRIBUTING.md。ローカルでは cargo も`yarn test:rust`/`yarn lint`経由で実行し、直接叩かない（CI の`rust-test`ジョブだけは`yarn install`を省くため`test:rust`と同じコマンドを直接実行しており、`test:rust`を変えたら`.github/workflows/ci.yml`も合わせる）
+- **ネイティブアドオンは prebuilt 配布のみ・フォールバックなし**: 対応は darwin-arm64 と linux-x64（glibc 2.28 以上）。ローカルビルドは`packages/@nitpicker/core/core.<platform>.node`（gitignore 済み）に置かれ、ローダーが優先的に読む
 
 - **1関数1ファイルにはユニットテスト必須**。バグ修正や仕様が明確な変更はテストファースト
-- E2E で外部リンクは `127.0.0.1` でシミュレートする（`localhost` と別ホスト名扱い）
-- **git worktree からのビルドは `NX_WORKSPACE_ROOT_PATH` 必須**: リポジトリ内部にネストした worktree（`.claude/worktrees/*` 等）から素の `yarn build` を実行すると、Nx がルートをメインチェックアウトに誤解決し、成功表示のまま成果物がメイン側に書かれる（worktree の `lib/` は生成されない）。`NX_WORKSPACE_ROOT_PATH=<worktree絶対パス> yarn build` でルートを明示すること
+- E2E で外部リンクは`127.0.0.1`でシミュレートする（`localhost`と別ホスト名扱い）
+- **git worktree からのビルドは`NX_WORKSPACE_ROOT_PATH`必須**: リポジトリ内部にネストした worktree（`.claude/worktrees/*`等）から素の`yarn build`を実行すると、Nx がルートをメインチェックアウトに誤解決し、成功表示のまま成果物がメイン側に書かれる（worktree の`lib/`は生成されない）。`NX_WORKSPACE_ROOT_PATH=<worktree絶対パス> yarn build`でルートを明示すること
 
 ## コマンド制約
 
-- **yarn のみ使用**: npm / npx 直実行は禁止。`yarn <script>` 経由で実行する
-- **全体実行の強制**: 時間がかかっても `yarn build` / `yarn lint` / `yarn test` のリポジトリ全体実行を使う。`tsc` / `eslint` / `prettier` の単発実行・ファイルスコープ実行（`npx eslint <file>`、`prettier --write <file>`、`tsc -p <pkg>` 等）は禁止
+- **yarn のみ使用**: npm/npx 直実行は禁止。`yarn <script>`経由で実行する
+- **全体実行の強制**: 時間がかかっても`yarn build`/`yarn lint`/`yarn test`のリポジトリ全体実行を使う。`tsc`/`eslint`/`prettier`の単発実行・ファイルスコープ実行（`npx eslint <file>`、`prettier --write <file>`、`tsc -p <pkg>`等）は禁止
 - **パッケージディレクトリに cd しない**: 常にリポジトリルートから実行する
-- **コマンドの連続実行禁止**: `&&` / `;` / 改行連結をしない。1 回の実行で 1 コマンドのみ（permissions のパターンマッチを守るため）
+- **コマンドの連続実行禁止**: `&&`/`;`/改行連結をしない。1 回の実行で 1 コマンドのみ（permissions のパターンマッチを守るため）
 
 ## 依存関係の追加
 
-- バージョンは固定で追加する（`yarn add foo@1.2.3`）。`^` / `~` を付けない（`.yarnrc.yml` の `defaultSemverRangePrefix: ''` で既定化されている）
-- **追加したら `.github/renovate.json` の `packageRules` を確認する**。そのパッケージが既存の `groupName` グループに入るべきか、新しいグループを作るべきかを判断する
-  - `config:recommended` は `group:monorepos` を含むため、**同一 monorepo から公開されるパッケージ群（`@puppeteer/*`、`@tanstack/*`、`@testing-library/*` など）は設定なしで自動的に束ねられる**。手で書く必要はない
+- バージョンは固定で追加する（`yarn add foo@1.2.3`）。`^`/`~`を付けない（`.yarnrc.yml`の`defaultSemverRangePrefix: ''`で既定化されている）
+- **追加したら`.github/renovate.json`の`packageRules`を確認する**。そのパッケージが既存の`groupName`グループに入るべきか、新しいグループを作るべきかを判断する
+  - `config:recommended`は`group:monorepos`を含むため、**同一 monorepo から公開されるパッケージ群（`@puppeteer/*`、`@tanstack/*`、`@testing-library/*`など）は設定なしで自動的に束ねられる**。手で書く必要はない
   - 手当てが必要なのは Renovate が推測できない**ベンダー横断の結合**:
     - 本体と型定義のペア（`debug` + `@types/debug`）。DefinitelyTyped は別リポジトリで公開されるため自動グループ化されない
     - peer dependency で結ばれた別ベンダーのパッケージ
-    - `resolutions` で固定しているパッケージとその利用側（現在は `google-auth-library`）
-    - 自前の `@d-zero/*` パッケージ群（configs と runtime で分ける）
-    - 併用が前提のツール群（`knex` + `libsql` など）
-  - 判断基準は「**片方だけバージョンが上がった状態でビルドと型チェックが通るか**」。通らないなら同じ `groupName` にまとめる
+    - `resolutions`で固定しているパッケージとその利用側（現在は`google-auth-library`）
+    - 自前の`@d-zero/*`パッケージ群（configs と runtime で分ける）
+    - 併用が前提のツール群（`knex` + `libsql`など）
+  - 判断基準は「**片方だけバージョンが上がった状態でビルドと型チェックが通るか**」。通らないなら同じ`groupName`にまとめる
 - グループ化を怠ると、Renovate が個別に PR を作り、片方だけマージされた中間状態で CI が赤になる。結果として**両方の PR がマージできなくなる**
-- グルーピングの現状は `git branch -r --list 'origin/renovate/*'` で確認できる。`*-monorepo` サフィックスのブランチは `group:monorepos` による自動グループ
+- グルーピングの現状は`git branch -r --list 'origin/renovate/*'`で確認できる。`*-monorepo`サフィックスのブランチは`group:monorepos`による自動グループ
 
 ## ドキュメント原則
 
 情報は置き場で役割が決まる。**コードには How、テストコードには What、コミットログには Why、コードコメントには Why not**（Why が必要なときは Why も書く）。
 
-- **JSDoc = 公開 API（export）の API ユーザー向け文書**: IDE ホバーで実装を読まない読者に届くため、WHAT / HOW / WHY を適切に書き、`@example` を必須とする。メインの公開 API は README にも載せる
-- **非公開 API の JSDoc は必須にしない**: ただし複雑な内部モジュールの設計 WHY / Why not はファイルレベル JSDoc が推奨置き場
-- **計画相対概念の禁止**: 実装計画に由来する相対概念（Phase/Step 番号、「本 PR」「今回」「旧実装」「導入予定」）を JSDoc・テスト名・ドキュメントに書かない。現在の挙動と意図的な不在（Why not）として自己完結に書く。コードコメント・JSDoc・テスト名に issue / PR 番号も書かず、理由そのものを書く（例外は PR 本文とコミットメッセージ）。リトマス試験:「その語彙はコードに実在するか、計画会話にしか存在しないか」
-- **ドキュメントと実装の矛盾**: 実装詳細の矛盾は実装が正としてドキュメントを直す。ARCHITECTURE.md の不変条件・境界との矛盾は実装が設計違反の可能性を先に調査する（検出ゲートは PR ごとの `/product-manager` チェック）
+- **JSDoc = 公開 API（export）の API ユーザー向け文書**: IDE ホバーで実装を読まない読者に届くため、WHAT/HOW/WHY を適切に書き、`@example`を必須とする。メインの公開 API は README にも載せる
+- **非公開 API の JSDoc は必須にしない**: ただし複雑な内部モジュールの設計 WHY/Why not はファイルレベル JSDoc が推奨置き場
+- **計画相対概念の禁止**: 実装計画に由来する相対概念（Phase/Step 番号、「本 PR」「今回」「旧実装」「導入予定」）を JSDoc・テスト名・ドキュメントに書かない。現在の挙動と意図的な不在（Why not）として自己完結に書く。コードコメント・JSDoc・テスト名に issue/PR 番号も書かず、理由そのものを書く（例外は PR 本文とコミットメッセージ）。リトマス試験:「その語彙はコードに実在するか、計画会話にしか存在しないか」
+- **ドキュメントと実装の矛盾**: 実装詳細の矛盾は実装が正としてドキュメントを直す。ARCHITECTURE.md の不変条件・境界との矛盾は実装が設計違反の可能性を先に調査する（検出ゲートは PR ごとの`/product-manager`チェック）
 
 ## ディレクトリ・構造ルール
 
 - **1ファイル1エクスポート**: 同居可能なのはファイルスコープに閉じた非エクスポート内部関数のみ
-- **index.ts 禁止**: モジュール公開は package.json の `exports` フィールドで行う
-- **型は types.ts に集約**: ドメインごとに専用 `types.ts`
-- **interface 優先**: `type` はユニオン・交差・マップ型など `type` でしか書けない場合のみ
-- **パラメータ 3 つ以上は名前付きオブジェクト**、オプショナル設定は `Partial<OptionsType>`
+- **index.ts 禁止**: モジュール公開は package.json の`exports`フィールドで行う
+- **型は types.ts に集約**: ドメインごとに専用`types.ts`
+- **interface 優先**: `type`はユニオン・交差・マップ型など`type`でしか書けない場合のみ
+- **パラメータ 3 つ以上は名前付きオブジェクト**、オプショナル設定は`Partial<OptionsType>`
 - **exports で公開 API を厳選**: モノレポ内パッケージ間でも exports 経由でのみアクセスする
 
 ## コーディング規約
 
-- `import { describe, it, expect } from 'vitest'` を明示（Vitest 4 の要件）
-- `@d-zero/shared` はサブパスエクスポート形式（`@d-zero/shared/delay`）
-- CLI の進捗表示は `console.log` ではなく `Lanes` を使う
-- 禁止パターン（decorator / `Promise.race` の timer 放置 / 派生文字列を作る sort 等）は ARCHITECTURE.md の「不変条件・負の知識」を正とする
+- `import { describe, it, expect } from 'vitest'`を明示（Vitest 4 の要件）
+- `@d-zero/shared`はサブパスエクスポート形式（`@d-zero/shared/delay`）
+- CLI の進捗表示は`console.log`ではなく`Lanes`を使う
+- 禁止パターン（decorator/`Promise.race`の timer 放置/派生文字列を作る sort 等）は ARCHITECTURE.md の「不変条件・負の知識」を正とする
 
 ## 判断基準
 
 - **変更・修正・レビュー指摘を採用するかは 2 つで決める**: クローラー兼監査ツールとして、対象サイトの実際の状態（ページ・リンク・リソース・HTML・メタデータ）を漏れなく重複なく正確にアーカイブに記録すること、そしてクエリ・レポート・ビューアがその記録と一致すること（Summary の件数と Pages のフィルタ結果の一致、CLI 終了コードの契約など ARCHITECTURE.md の不変条件）。製品の振る舞いでない変更（tooling・docs・CI・skills）では「宣言した意図に対する正しさ」と「既存コードとの一貫性」。実装コスト、diff の大きさ、影響件数、「軽微」は基準ではなく、スキップ・先送り・質問の理由にならない
-- **基準が決めることは聞かずにやる**。質問は、基準が決めないことと、リポジトリ外への書き込みのためにある（質問の種別は `impl` スキルが定める）。Claude は「持ち越す」「スキップする」「そのままにする」を自分で決めない。それらは質問に対するユーザーの回答としてだけ存在し、「あとで」「別 PR で」「意図的に変更しない」と書く応答・PR 本文・コミットは、その質問と回答を指せなければならない
+- **基準が決めることは聞かずにやる**。質問は、基準が決めないことと、リポジトリ外への書き込みのためにある（質問の種別は`impl`スキルが定める）。Claude は「持ち越す」「スキップする」「そのままにする」を自分で決めない。それらは質問に対するユーザーの回答としてだけ存在し、「あとで」「別 PR で」「意図的に変更しない」と書く応答・PR 本文・コミットは、その質問と回答を指せなければならない
 - **レビュー指摘は直すか、証拠を添えてユーザーに出す**。「false positive」「元からあった」「意図どおり」はユーザーに対して主張することであって、Claude が 1 人で指摘を閉じる手段ではない
 
 ## セキュリティ
 
-- `.env` 等の機密ファイルを読み取り・編集・コミットしない（判断は `.gitignore` を参考にする）
-- コミット前に `git diff --staged` で機密情報（API キー、トークン、パスワード、企業名、顧客情報）を確認する
-- **サンプル値は予約済み慣例に従う**: ドメインは `example.com` / `*.example` / `*.test` 等（RFC 2606/6761）、IP は TEST-NET。実在の無関係ドメイン・未取得の創作ドメイン・案件識別子・dogfooding 由来の実データを成果物に残さない（詳細は `.claude/skills/git/SKILL.md`）
+- `.env`等の機密ファイルを読み取り・編集・コミットしない（判断は`.gitignore`を参考にする）
+- コミット前に`git diff --staged`で機密情報（API キー、トークン、パスワード、企業名、顧客情報）を確認する
+- **サンプル値は予約済み慣例に従う**: ドメインは`example.com`/`*.example`/`*.test`等（RFC 2606/6761）、IP は TEST-NET。実在の無関係ドメイン・未取得の創作ドメイン・案件識別子・dogfooding 由来の実データを成果物に残さない（詳細は`.claude/skills/git/SKILL.md`）
 - 環境変数やシークレットをコードにハードコードしない
 - **yarn dlx は完全禁止**、npx は原則使わない。依存追加はバージョン固定（`yarn add foo@1.2.3`）で信頼性を確認してから。yarn.lock の手動編集禁止
 
@@ -135,5 +135,5 @@ yarn lint                                          # lint + prettier + cspell + 
 
 ## AI 操作プロトコル
 
-- **exports を壊さない**: package.json の `exports` は差分追記のみ。既存パスを削除しない
+- **exports を壊さない**: package.json の`exports`は差分追記のみ。既存パスを削除しない
 - **アーキテクチャガード**: 変更後に構造ルールと ARCHITECTURE.md の不変条件に違反していないかセルフチェックする

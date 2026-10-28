@@ -1,8 +1,8 @@
 # @nitpicker/report-google-sheets
 
-`.nitpicker` アーカイブのクロール結果をGoogle Sheetsへ出力する内部パッケージです。
+`.nitpicker`アーカイブのクロール結果をGoogle Sheetsへ出力する内部パッケージです。
 
-通常は [@nitpicker/cli](../cli/README.md) の `report` コマンドから利用します。
+通常は[@nitpicker/cli](../cli/README.md)の`report`コマンドから利用します。
 
 ## 関連リンク
 

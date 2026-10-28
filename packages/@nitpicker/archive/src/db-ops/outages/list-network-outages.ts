@@ -34,10 +34,9 @@ export async function listNetworkOutages(knex: Knex): Promise<OutageWindow[]> {
 		return [];
 	}
 
-	const rows = (await knex('network_outages').select('started_at', 'ended_at')) as {
-		started_at: number;
-		ended_at: number | null;
-	}[];
+	const rows = await knex('network_outages').select<
+		{ started_at: number; ended_at: number | null }[]
+	>('started_at', 'ended_at');
 	if (rows.length === 0) {
 		return [];
 	}

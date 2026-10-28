@@ -89,10 +89,10 @@ export async function getViewerIsolatedCluster(
 	applyEqualityOrInFilter(baseQuery, 'status', options.status);
 	applyEqualityOrInFilter(baseQuery, 'source', options.source);
 
-	const countResult = (await baseQuery
+	const countResult = await baseQuery
 		.clone()
 		.clearSelect()
-		.count('page_id as total')) as { total: number }[];
+		.count<{ total: number }[]>('page_id as total');
 	const total = Number(countResult[0]?.total ?? 0);
 	const limit = options.limit ?? total;
 	const offset = options.offset ?? 0;

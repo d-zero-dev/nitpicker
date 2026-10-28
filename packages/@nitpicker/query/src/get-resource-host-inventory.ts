@@ -77,28 +77,28 @@ export async function getResourceHostInventory(
 	const sortBy = options.sortBy ?? 'resourceCount';
 	const order = options.sortOrder ?? (sortBy === 'host' ? 'asc' : 'desc');
 
-	const typeRows = (await createResourceQuery(knex, options)
+	const typeRows = await createResourceQuery(knex, options)
 		.leftJoin('content_type_refs as ctr', 'ctr.id', 'ri.content_type_id')
 		.groupBy('ur.host', 'ur.port', 'ri.is_external', 'ctr.raw')
-		.select(
+		.select<(HostKeyRow & { contentType: string | null; count: number | string })[]>(
 			'ur.host as host',
 			'ur.port as port',
 			'ri.is_external as isExternal',
 			'ctr.raw as contentType',
 			knex.raw('count(*) as "count"'),
-		)) as (HostKeyRow & { contentType: string | null; count: number | string })[];
+		);
 
-	const pageRows = (await createResourceQuery(knex, options)
+	const pageRows = await createResourceQuery(knex, options)
 		.join('resource_ref_edges as rre', 'rre.resource_id', 'ri.id')
 		.join('content_items as ci', 'ci.id', 'rre.page_id')
 		.where((qb) => excludeSkippedPages(qb, 'ci.is_skipped'))
 		.groupBy('ur.host', 'ur.port', 'ri.is_external')
-		.select(
+		.select<(HostKeyRow & { pageCount: number | string })[]>(
 			'ur.host as host',
 			'ur.port as port',
 			'ri.is_external as isExternal',
 			knex.raw('count(distinct "rre"."page_id") as "pageCount"'),
-		)) as (HostKeyRow & { pageCount: number | string })[];
+		);
 	const pageCountByOrigin = new Map(
 		pageRows.map((row) => [originKey(row), Number(row.pageCount)]),
 	);

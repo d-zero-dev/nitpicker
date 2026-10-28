@@ -31,13 +31,13 @@ export async function loadTemplateClusterLabels(
 		return labels;
 	}
 	await eachSplitted(templateKeys, SQLITE_IN_CHUNK, async (chunk) => {
-		const rows = (await knex('page_template_labels')
+		const rows = await knex('page_template_labels')
 			.whereIn('template_key', chunk)
-			.select('template_key as templateKey', 'section', 'ordinal')) as {
-			templateKey: string;
-			section: string | null;
-			ordinal: number;
-		}[];
+			.select<{ templateKey: string; section: string | null; ordinal: number }[]>(
+				'template_key as templateKey',
+				'section',
+				'ordinal',
+			);
 		for (const row of rows) {
 			labels.set(row.templateKey, { section: row.section, ordinal: row.ordinal });
 		}

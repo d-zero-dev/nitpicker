@@ -55,9 +55,8 @@ export async function listNetworkOutages(
 		return { items: [], total: 0 };
 	}
 
-	const countResult = (await knex('network_outages').count('id as total')) as {
-		total: number;
-	}[];
+	const countResult =
+		await knex('network_outages').count<{ total: number }[]>('id as total');
 	const total = Number(countResult[0]?.total ?? 0);
 
 	const rows = (await knex('network_outages')

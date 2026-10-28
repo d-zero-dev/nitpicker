@@ -418,7 +418,7 @@ describe('startCrawl', () => {
 	it('initializedCallback 発火後に CrawlerOrchestrator.crawling 自体が失敗しても、シグナルリスナーが蓄積せず display も fail() で解放される（issue #294 code review: crawling()/#setUrlOrder() 自体の失敗はハンドラ登録後に起こり得る）', async () => {
 		const before = process.listenerCount('SIGINT');
 		mockCrawling.mockImplementationOnce(async (_urls, _opts, cb) => {
-			await cb?.({} as OrchestratorType, { baseUrl: 'https://example.com' } as never);
+			await cb?.({}, { baseUrl: 'https://example.com' });
 			throw new Error('crawling() itself failed after initializedCallback');
 		});
 		const { startCrawl } = await import('./crawl.js');
@@ -804,7 +804,7 @@ describe('crawl', () => {
 	it('--append: initializedCallback 発火後に factory 自体が失敗しても、シグナルハンドラは蓄積しない（issue #294 code review: crawling()/#setUrlOrder() 自体の失敗はハンドラ登録後に起こり得る）', async () => {
 		const before = process.listenerCount('SIGINT');
 		mockAppend.mockImplementationOnce(async (_path, _urls, _opts, cb) => {
-			await cb?.({} as OrchestratorType, { baseUrl: 'https://example.com' } as never);
+			await cb?.({}, { baseUrl: 'https://example.com' });
 			throw new Error('crawling() itself failed after initializedCallback');
 		});
 		const { crawl } = await import('./crawl.js');

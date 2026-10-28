@@ -44,13 +44,15 @@ export async function loadTemplateClusterReasons(
 	}
 
 	await eachSplitted(templateKeys, SQLITE_IN_CHUNK, async (chunk) => {
-		const rows = (await knex('page_template_clusters')
+		const rows = await knex('page_template_clusters')
 			.whereIn('template_key', chunk)
-			.select('template_key as templateKey', 'reason_json as reasonJson', 'codec')) as {
-			templateKey: string;
-			reasonJson: Buffer | null;
-			codec: 'zstd' | 'none' | null;
-		}[];
+			.select<
+				{
+					templateKey: string;
+					reasonJson: Buffer | null;
+					codec: 'zstd' | 'none' | null;
+				}[]
+			>('template_key as templateKey', 'reason_json as reasonJson', 'codec');
 
 		for (const row of rows) {
 			const decoded = decodeJsonRef(row.reasonJson, row.codec);

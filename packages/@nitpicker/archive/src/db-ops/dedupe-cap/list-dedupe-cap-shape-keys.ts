@@ -24,8 +24,7 @@ export async function listDedupeCapShapeKeys(knex: Knex): Promise<string[]> {
 	if (!hasTable) {
 		return [];
 	}
-	const rows = (await knex('dedupe_cap_events').distinct('shape_key')) as {
-		shape_key: string;
-	}[];
+	const rows =
+		await knex('dedupe_cap_events').distinct<{ shape_key: string }[]>('shape_key');
 	return rows.map((row) => row.shape_key);
 }

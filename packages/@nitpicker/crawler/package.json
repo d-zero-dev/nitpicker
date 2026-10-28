@@ -30,7 +30,7 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/beholder": "5.0.0",
+		"@d-zero/beholder": "5.0.1",
 		"@d-zero/dealer": "1.14.0",
 		"@d-zero/shared": "0.23.0",
 		"@nitpicker/archive": "0.25.0",
@@ -38,7 +38,7 @@
 		"debug": "4.4.3",
 		"follow-redirects": "1.16.1",
 		"knex": "3.3.0",
-		"puppeteer": "25.5.0",
+		"puppeteer": "25.15.0",
 		"robots-parser": "3.0.1"
 	},
 	"devDependencies": {

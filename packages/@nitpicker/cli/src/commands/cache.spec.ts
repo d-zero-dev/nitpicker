@@ -126,7 +126,7 @@ describe('cache command', () => {
 			];
 			mockListArchiveCacheEntries.mockResolvedValue(entries);
 			const { cache } = await import('./cache.js');
-			await cache(['list'], { json: true } as never);
+			await cache(['list'], { json: true });
 
 			expect(consoleLogSpy).toHaveBeenCalledWith(JSON.stringify(entries));
 		});

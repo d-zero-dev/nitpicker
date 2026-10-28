@@ -14,9 +14,15 @@ export async function getVideosOfPage(
 	pageId: number,
 ): Promise<MainContentVideoRow[]> {
 	return knex
-		.select<
-			MainContentVideoRow[]
-		>('id', 'pageId', 'order', 'src', 'poster', 'width', 'height')
+		.select<MainContentVideoRow[]>(
+			'id',
+			'pageId',
+			'order',
+			'src',
+			'poster',
+			'width',
+			'height',
+		)
 		.from('page_main_content_videos')
 		.where('pageId', pageId)
 		.orderBy('order', 'asc');

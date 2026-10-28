@@ -80,16 +80,16 @@ export async function listPagesByResource(
 	>({ count: 'rre.page_id' });
 	const total = Number(totalRow?.count ?? 0);
 
-	const pages = (await createEdgeQuery(knex, options)
+	const pages = await createEdgeQuery(knex, options)
 		.groupBy('rre.page_id', 'ur.url')
 		.orderBy('rre.page_id')
 		.limit(limit)
 		.offset(offset)
-		.select(
+		.select<{ pageId: number; url: string; matchedResourceCount: number | string }[]>(
 			'rre.page_id as pageId',
 			'ur.url as url',
 			knex.raw('count(distinct "rre"."resource_id") as "matchedResourceCount"'),
-		)) as { pageId: number; url: string; matchedResourceCount: number | string }[];
+		);
 
 	const sampleByPageId = new Map<number, string[]>();
 	for (let i = 0; i < pages.length; i += SQLITE_IN_CHUNK) {
@@ -104,14 +104,11 @@ export async function listPagesByResource(
 				),
 			)
 			.as('ranked');
-		const rows = (await knex
+		const rows = await knex
 			.from(ranked)
 			.where('rn', '<=', resourcesLimit)
 			.orderBy([{ column: 'pageId' }, { column: 'rn' }])
-			.select('pageId', 'resourceUrl')) as {
-			pageId: number;
-			resourceUrl: string | null;
-		}[];
+			.select<{ pageId: number; resourceUrl: string | null }[]>('pageId', 'resourceUrl');
 		for (const row of rows) {
 			if (row.resourceUrl == null) {
 				continue;

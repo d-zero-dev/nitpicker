@@ -33,8 +33,8 @@ export async function countDuplicateGroups(
 		.groupBy(textIdColumn)
 		.having(knex.raw('count(*)'), '>', 1);
 
-	const result = (await knex.count('* as total').from(groups.as('duplicateGroups'))) as {
-		total: number | string;
-	}[];
+	const result = await knex
+		.from(groups.as('duplicateGroups'))
+		.count<{ total: number | string }[]>('* as total');
 	return Number(result[0]?.total ?? 0);
 }

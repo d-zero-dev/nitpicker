@@ -69,9 +69,9 @@ describe('Network outage detection gate (real DNS failures, injected probe)', ()
 		});
 
 		it('both unresolvable roots are still recorded in crawl_errors', async () => {
-			const rows = (await result.accessor
+			const rows = await result.accessor
 				.getKnex()('crawl_errors')
-				.select('url', 'message')) as { url: string; message: string }[];
+				.select<{ url: string; message: string }[]>('url', 'message');
 			for (const host of INVALID_HOSTS.slice(0, 2)) {
 				const row = rows.find((r) => r.url.includes(host));
 				expect(row, `expected a crawl_errors row for ${host}`).toBeDefined();
@@ -129,9 +129,9 @@ describe('Network outage detection gate (real DNS failures, injected probe)', ()
 		});
 
 		it('every root URL is still recorded in crawl_errors once the gate reopens (none silently lost)', async () => {
-			const rows = (await result.accessor
+			const rows = await result.accessor
 				.getKnex()('crawl_errors')
-				.select('url', 'message')) as { url: string; message: string }[];
+				.select<{ url: string; message: string }[]>('url', 'message');
 			for (const host of INVALID_HOSTS) {
 				const row = rows.find((r) => r.url.includes(host));
 				expect(row, `expected a crawl_errors row for ${host}`).toBeDefined();

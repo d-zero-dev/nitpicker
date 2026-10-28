@@ -2,12 +2,7 @@
  * The six landmark types a cluster reason's `landmarks` recognizes.
  */
 export type TemplateClusterLandmarkType =
-	| 'header'
-	| 'footer'
-	| 'nav'
-	| 'aside'
-	| 'form'
-	| 'search';
+	'header' | 'footer' | 'nav' | 'aside' | 'form' | 'search';
 
 /**
  * Why a Pass-0 block (one of possibly several that merged into a final

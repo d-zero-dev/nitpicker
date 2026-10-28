@@ -184,12 +184,7 @@ export function registerLinksRoute(app: Hono, context: ArchiveContext): void {
 			urlPattern,
 			status: resolveLiveFilterValue(status),
 			sortBy: q.sortBy as
-				| 'sourceUrl'
-				| 'destUrl'
-				| 'status'
-				| 'isExternal'
-				| 'textContent'
-				| undefined,
+				'sourceUrl' | 'destUrl' | 'status' | 'isExternal' | 'textContent' | undefined,
 			sortOrder,
 			// Issue #294: a cold connection's first URL-typed sort lazily
 			// builds the URL natural-sort TEMP table, which can take a while

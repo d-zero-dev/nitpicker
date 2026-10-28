@@ -95,7 +95,7 @@ describe('loadPageClusterCandidates', () => {
 				audios: [],
 				canvases: [],
 			},
-		} as never);
+		});
 	}
 
 	beforeAll(async () => {

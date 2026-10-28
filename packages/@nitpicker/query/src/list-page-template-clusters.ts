@@ -64,10 +64,9 @@ export async function listPageTemplateClusters(
 		return { hasClassification: false, clusters: [] };
 	}
 
-	const rows = (await knex('page_templates').select(
-		'page_id as pageId',
-		'template_key as templateKey',
-	)) as { pageId: number; templateKey: string }[];
+	const rows = await knex('page_templates').select<
+		{ pageId: number; templateKey: string }[]
+	>('page_id as pageId', 'template_key as templateKey');
 
 	// `page_templates` is provisioned by `createTemplateTables` on every fresh
 	// archive regardless of whether it was ever classified — table presence
@@ -99,10 +98,10 @@ export async function listPageTemplateClusters(
 			rows.map((r) => r.pageId),
 			SQLITE_IN_CHUNK,
 			async (chunk) => {
-				const urlRows = (await knex('content_items as ci')
+				const urlRows = await knex('content_items as ci')
 					.join('url_refs as ur', 'ur.id', 'ci.url_id')
 					.whereIn('ci.id', chunk)
-					.select('ci.id as id', 'ur.url as url')) as { id: number; url: string }[];
+					.select<{ id: number; url: string }[]>('ci.id as id', 'ur.url as url');
 				for (const urlRow of urlRows) {
 					urlByPageId.set(urlRow.id, urlRow.url);
 				}

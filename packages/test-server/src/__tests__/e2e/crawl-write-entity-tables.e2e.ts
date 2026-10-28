@@ -84,9 +84,7 @@ describe('crawler write path targets entity tables directly (issue #196)', () =>
 		// archive ハンドルで行う。
 		await buildViewerReadModel(result.archive);
 		const knex = result.accessor.getKnex();
-		const viewerPages = (await knex('viewer_pages').select('url')) as {
-			url: string;
-		}[];
+		const viewerPages = await knex('viewer_pages').select<{ url: string }[]>('url');
 		expect(viewerPages.length).toBeGreaterThan(0);
 		expect(viewerPages.map((p) => p.url)).toContain(
 			`http://localhost:${TEST_SERVER_PORT}/resource-reuse/`,
@@ -98,9 +96,9 @@ describe('crawler write path targets entity tables directly (issue #196)', () =>
 		// を採取できていれば、少なくとも 1 行は `unknown/<n>` 合成マーカー
 		// ではない実パス（`html/...` 形式）になる。
 		const knex = result.accessor.getKnex();
-		const rows = (await knex('image_items as ii')
+		const rows = await knex('image_items as ii')
 			.join('text_refs as tr', 'ii.dom_path_text_id', 'tr.id')
-			.select('tr.text as domPath')) as { domPath: string }[];
+			.select<{ domPath: string }[]>('tr.text as domPath');
 		expect(rows.length).toBeGreaterThan(0);
 		const realPaths = rows.filter((r) => r.domPath.startsWith('html/'));
 		expect(

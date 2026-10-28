@@ -28,10 +28,10 @@ describe('resolvePageUrls', () => {
 				html: `<p>${n}</p>`,
 			})),
 		});
-		const rows = (await archive
+		const rows = await archive
 			.getKnex()('content_items as ci')
 			.join('url_refs as ur', 'ur.id', 'ci.url_id')
-			.select('ci.id as id', 'ur.url as url')) as { id: number; url: string }[];
+			.select<{ id: number; url: string }[]>('ci.id as id', 'ur.url as url');
 		idByUrl = new Map(rows.map((row) => [row.url, row.id]));
 	});
 

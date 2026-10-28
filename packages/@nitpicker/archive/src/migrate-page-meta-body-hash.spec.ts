@@ -54,9 +54,9 @@ describe('migratePageMetaBodyHash', () => {
 
 		expect(await instance.schema.hasColumn('page_meta', 'body_hash')).toBe(true);
 
-		const indexes = (await instance.raw(
+		const indexes = await instance.raw<{ name: string }[]>(
 			"SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'page_meta'",
-		)) as { name: string }[];
+		);
 		expect(indexes.map((i) => i.name)).toContain('idx_page_meta_body_hash');
 
 		// Pre-existing row and columns survive untouched, new column is NULL.
@@ -99,9 +99,9 @@ describe('migratePageMetaBodyHash', () => {
 
 		await migratePageMetaBodyHash(instance);
 
-		const indexes = (await instance.raw(
+		const indexes = await instance.raw<{ name: string }[]>(
 			"SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'page_meta'",
-		)) as { name: string }[];
+		);
 		expect(indexes.map((i) => i.name)).toContain('idx_page_meta_body_hash');
 
 		await instance.destroy();

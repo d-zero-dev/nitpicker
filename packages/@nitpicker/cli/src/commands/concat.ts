@@ -133,7 +133,8 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 	};
 
 	try {
-		let pipeline = TaskList.from(undefined as void);
+		// eslint-disable-next-line unicorn/no-useless-undefined -- `from<T>(value: T)` has no optional/default parameter; omitting it is a TS2554 error
+		let pipeline = TaskList.from<void>(undefined);
 		for (const [index, inputPath] of inputPaths.entries()) {
 			const label =
 				inputPaths.length > 1

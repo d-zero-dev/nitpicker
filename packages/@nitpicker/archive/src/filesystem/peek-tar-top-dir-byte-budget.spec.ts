@@ -23,11 +23,11 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 		open: async (...args: Parameters<typeof actual.open>) => {
 			const handle = await actual.open(...args);
 			const originalRead = handle.read.bind(handle);
-			handle.read = (async (...readArgs: Parameters<typeof handle.read>) => {
+			handle.read = async (...readArgs: Parameters<typeof handle.read>) => {
 				const result = await originalRead(...readArgs);
 				totalBytesRead += result.bytesRead;
 				return result;
-			}) as typeof handle.read;
+			};
 			return handle;
 		},
 	};

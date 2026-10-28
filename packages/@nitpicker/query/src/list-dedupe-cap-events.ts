@@ -24,11 +24,11 @@ async function countCapturedPagesByEventId(
 	const capturedCountByEventId = new Map<number, number>();
 	for (let i = 0; i < eventIds.length; i += SQLITE_IN_CHUNK) {
 		const chunk = eventIds.slice(i, i + SQLITE_IN_CHUNK);
-		const countRows = (await knex('content_items')
+		const countRows = await knex('content_items')
 			.whereIn('dedupe_cap_event_id', chunk)
 			.groupBy('dedupe_cap_event_id')
 			.select('dedupe_cap_event_id as eventId')
-			.count('id as count')) as { eventId: number; count: number }[];
+			.count<{ eventId: number; count: number }[]>('id as count');
 		for (const row of countRows) {
 			capturedCountByEventId.set(row.eventId, Number(row.count));
 		}
@@ -52,11 +52,11 @@ async function findArchivedSampleUrls(
 	const uniqueUrls = [...new Set(sampleUrls)];
 	for (let i = 0; i < uniqueUrls.length; i += SQLITE_IN_CHUNK) {
 		const chunk = uniqueUrls.slice(i, i + SQLITE_IN_CHUNK);
-		const archivedRows = (await knex('content_items as ci')
+		const archivedRows = await knex('content_items as ci')
 			.join('url_refs as ur', 'ur.id', 'ci.url_id')
 			.where('ci.scraped', 1)
 			.whereIn('ur.url', chunk)
-			.select('ur.url as url')) as { url: string }[];
+			.select<{ url: string }[]>('ur.url as url');
 		for (const row of archivedRows) {
 			archivedSampleUrls.add(row.url);
 		}
@@ -114,9 +114,8 @@ export async function listDedupeCapEvents(
 		return { items: [], total: 0 };
 	}
 
-	const countResult = (await knex('dedupe_cap_events').count('id as total')) as {
-		total: number;
-	}[];
+	const countResult =
+		await knex('dedupe_cap_events').count<{ total: number }[]>('id as total');
 	const total = Number(countResult[0]?.total ?? 0);
 
 	const rows = (await knex('dedupe_cap_events')

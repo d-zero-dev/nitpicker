@@ -72,7 +72,7 @@ export async function computeDuplicateGroupRows(trx: Knex): Promise<{
 	let nextGroupId = 1;
 	for (const field of fields) {
 		const textIdColumn = `pm.${field}_text_id`;
-		const rows = (await trx('content_items as ci')
+		const rows = await trx('content_items as ci')
 			.join('content_type_refs as ctr', 'ctr.id', 'ci.content_type_id')
 			.join('page_meta as pm', 'pm.page_id', 'ci.id')
 			.join('text_refs as tr', 'tr.id', textIdColumn)
@@ -82,10 +82,10 @@ export async function computeDuplicateGroupRows(trx: Knex): Promise<{
 			.whereNot('tr.text', '')
 			.groupBy(textIdColumn)
 			.having(trx.raw('count(*) > 1'))
-			.select(trx.raw('"tr"."text" as value'), trx.raw('count(*) as cnt'))) as {
-			value: string;
-			cnt: number | string;
-		}[];
+			.select<{ value: string; cnt: number | string }[]>(
+				trx.raw('"tr"."text" as value'),
+				trx.raw('count(*) as cnt'),
+			);
 		await releaseFinishedStatements();
 
 		const valueToGroupId = groupIdByValue.get(field)!;

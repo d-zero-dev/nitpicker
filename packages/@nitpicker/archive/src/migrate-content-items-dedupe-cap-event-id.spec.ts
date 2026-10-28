@@ -74,9 +74,9 @@ describe('migrateContentItemsDedupeCapEventId', () => {
 
 		await migrateContentItemsDedupeCapEventId(instance);
 
-		const indexes = (await instance.raw(
+		const indexes = await instance.raw<{ name: string }[]>(
 			"SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'content_items'",
-		)) as { name: string }[];
+		);
 		expect(indexes.map((i) => i.name)).not.toContain(
 			'idx_content_items_dedupe_cap_event_id',
 		);

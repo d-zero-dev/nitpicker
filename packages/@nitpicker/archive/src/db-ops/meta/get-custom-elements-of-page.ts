@@ -14,9 +14,14 @@ export async function getCustomElementsOfPage(
 	pageId: number,
 ): Promise<MainContentCustomElementRow[]> {
 	return knex
-		.select<
-			MainContentCustomElementRow[]
-		>('id', 'pageId', 'order', 'nodeName', 'elementId', 'classList')
+		.select<MainContentCustomElementRow[]>(
+			'id',
+			'pageId',
+			'order',
+			'nodeName',
+			'elementId',
+			'classList',
+		)
 		.from('page_main_content_custom_elements')
 		.where('pageId', pageId)
 		.orderBy('order', 'asc');

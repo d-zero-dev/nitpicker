@@ -196,8 +196,7 @@ describe('getCachedSummary', () => {
 		await getCachedSummary(context);
 
 		const isValid = vi.mocked(getOrComputeOnDisk).mock.calls[0]?.[3] as
-			| ((value: SummaryResult) => boolean)
-			| undefined;
+			((value: SummaryResult) => boolean) | undefined;
 		expect(isValid).toBeInstanceOf(Function);
 		expect(isValid?.(makeSummary('complete'))).toBe(true);
 		expect(

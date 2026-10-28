@@ -448,7 +448,7 @@ describe('createPageClusterFactory — 本文要素（contentRoot）のヒント
 				audios: [],
 				canvases: [],
 			},
-		} as never);
+		});
 	}
 
 	beforeAll(async () => {

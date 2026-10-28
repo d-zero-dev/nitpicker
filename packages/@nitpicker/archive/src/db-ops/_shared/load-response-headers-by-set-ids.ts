@@ -37,16 +37,16 @@ export async function loadResponseHeadersBySetIds(
 	const merged = new Map<number, Map<string, string[]>>();
 	for (let index = 0; index < headerSetIds.length; index += LOOKUP_CHUNK_SIZE) {
 		const chunk = headerSetIds.slice(index, index + LOOKUP_CHUNK_SIZE);
-		const headerRows = (await knex('header_set_entries as hse')
+		const headerRows = await knex('header_set_entries as hse')
 			.join('header_name_refs as hnr', 'hnr.id', 'hse.name_id')
 			.join('header_value_refs as hvr', 'hvr.id', 'hse.value_id')
 			.whereIn('hse.header_set_id', chunk)
 			.orderBy(['hse.header_set_id', 'hnr.name', 'hse.occurrence'])
-			.select(
+			.select<{ headerSetId: number; name: string; value: string }[]>(
 				'hse.header_set_id as headerSetId',
 				'hnr.name as name',
 				'hvr.value as value',
-			)) as { headerSetId: number; name: string; value: string }[];
+			);
 		for (const row of headerRows) {
 			const bySet = merged.get(row.headerSetId) ?? new Map<string, string[]>();
 			const values = bySet.get(row.name) ?? [];

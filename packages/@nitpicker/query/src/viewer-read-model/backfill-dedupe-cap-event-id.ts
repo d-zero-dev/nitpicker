@@ -94,10 +94,10 @@ export async function backfillDedupeCapEventId(
 		eventIdByShapeKey.set(row.shape_key, row.id);
 	}
 
-	const candidates = (await knex('content_items as ci')
+	const candidates = await knex('content_items as ci')
 		.join('url_refs as ur', 'ur.id', 'ci.url_id')
 		.where('ci.is_external', 0)
-		.select('ci.id as id', 'ur.url as url')) as { id: number; url: string }[];
+		.select<{ id: number; url: string }[]>('ci.id as id', 'ur.url as url');
 
 	const assignments: { id: number; eventId: number }[] = [];
 	for (const candidate of candidates) {

@@ -25,9 +25,9 @@ yarn test
 ### 必要な環境
 
 - **Node.js** 24 以上（Volta でバージョン管理推奨）
-- **Yarn** 4.x（`corepack enable` で自動有効化）
-- **npm は使用しない**: すべてのコマンドは `yarn` 経由で実行
-- **Rust ツールチェーン**（[rustup](https://rustup.rs/)）: `yarn build` が `@nitpicker/core` のネイティブアドオンを `cargo` でビルドするため必須。バージョンはリポジトリルートの `rust-toolchain.toml` で固定しており、rustup が初回の `cargo` 実行時に自動で取得する（rustfmt / clippy を含む）
+- **Yarn** 4.x（`corepack enable`で自動有効化）
+- **npm は使用しない**: すべてのコマンドは`yarn`経由で実行
+- **Rust ツールチェーン**（[rustup](https://rustup.rs/)）: `yarn build`が`@nitpicker/core`のネイティブアドオンを`cargo`でビルドするため必須。バージョンはリポジトリルートの`rust-toolchain.toml`で固定しており、rustup が初回の`cargo`実行時に自動で取得する（rustfmt/clippy を含む）
 - **開発できるホスト**: macOS（Apple silicon）と Linux x64（glibc、WSL2 を含む）。それ以外ではネイティブアドオンをビルド・読み込みできない
 
 ```sh
@@ -39,14 +39,14 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ### ブランチ戦略
 
-- `main` ブランチから feature ブランチを作成
+- `main`ブランチから feature ブランチを作成
 - ブランチ名: `feat/機能名`, `fix/バグ名`, `docs/ドキュメント名`
 
 ### コマンド制約
 
-- **パッケージディレクトリに `cd` しない**: 常にリポジトリルートからコマンドを実行
-- **ビルドは `yarn build` のみ**: `npx tsc`, `yarn tsc` 等は禁止
-- **対象を限定した操作**: ビルド検証は `yarn build` で全パッケージ一括実行
+- **パッケージディレクトリに`cd`しない**: 常にリポジトリルートからコマンドを実行
+- **ビルドは`yarn build`のみ**: `npx tsc`, `yarn tsc`等は禁止
+- **対象を限定した操作**: ビルド検証は`yarn build`で全パッケージ一括実行
 
 ```sh
 # 全パッケージビルド
@@ -70,7 +70,7 @@ yarn lint:check
 
 ### コミットメッセージ
 
-[Conventional Commits](https://www.conventionalcommits.org/) に準拠:
+[Conventional Commits](https://www.conventionalcommits.org/)に準拠:
 
 ```
 feat(crawler): add retry logic for failed requests
@@ -78,22 +78,22 @@ fix(query): prevent summary counts from being silently empty
 docs: update README with new CLI options
 ```
 
-`.commitlintrc` で設定されていますが、現在 Git フックには組み込まれていません。CI やレビュー時にコミットメッセージを確認してください。
+`.commitlintrc`で設定されていますが、現在 Git フックには組み込まれていません。CI やレビュー時にコミットメッセージを確認してください。
 
 ## コーディング規約
 
 ### ファイル構成
 
 - **1ファイル1エクスポート**: エクスポートする関数/クラスは1つのみ
-- **`index.ts` 禁止**: モジュールの公開は `package.json` の `exports` フィールドで行う
-- **型は `types.ts` に集約**: ドメインごとに専用 `types.ts` を作成
+- **`index.ts`禁止**: モジュールの公開は`package.json`の`exports`フィールドで行う
+- **型は`types.ts`に集約**: ドメインごとに専用`types.ts`を作成
 
 ### TypeScript
 
 - **JSDoc 必須**: すべての公開関数、クラス、interface、type に JSDoc を記述
-- **`interface` 優先**: `type` はユニオン型・交差型など `type` でしか定義できない場合のみ
+- **`interface`優先**: `type`はユニオン型・交差型など`type`でしか定義できない場合のみ
 - **パラメータ3つ以上**: 名前付きオブジェクトにまとめる
-- **Vitest 4**: `import { describe, it, expect } from 'vitest'` を明示的に記述
+- **Vitest 4**: `import { describe, it, expect } from 'vitest'`を明示的に記述
 
 ### テスト
 
@@ -102,33 +102,33 @@ docs: update README with new CLI options
 
 ### Google Sheets レポートシート
 
-`packages/@nitpicker/report-google-sheets/src/data/create-*.ts` に新規シートを追加する場合:
+`packages/@nitpicker/report-google-sheets/src/data/create-*.ts`に新規シートを追加する場合:
 
-- **行送信は library 任せ**: `createSheets()` は `sheet.appendRow(...data)` で行を都度送る。チャンク化（2500 行ごとの自動 flush）と遅延セル検出は `@d-zero/google-sheets` の `Sheet` が内部で処理するため、新規シート側で意識する必要はない
-- **遅延セル (`createCellData(() => ...)`) は使ってよい**: `appendRow()` は遅延セルを含む行を検出すると自動的に buffered モードに切り替わり、明示的な `flush()` まで送信を保留する。Page List の「Internal Referrers」列がこの仕組みに乗っている
-- **テストでガード**: 各 `create-*.spec.ts` には「`eachPage`／`eachResource` が返すセルが `Cell.prototype.provide` に揃っているか（=eager のみ）」を検証するアサーションがある。streaming 経路の高速性を維持するため、遅延セルを使う必要のないシートでは引き続き eager のみで実装すること。Page List 側の spec は逆向きで、少なくとも 1 つの遅延セルが含まれることをアサートしている
-- 詳細は `sheets/create-sheets.ts` / `sheets/run-finalize-resources.ts` の JSDoc と ARCHITECTURE.md の「不変条件・負の知識」を参照
+- **行送信は library 任せ**: `createSheets()`は`sheet.appendRow(...data)`で行を都度送る。チャンク化（2500 行ごとの自動 flush）と遅延セル検出は`@d-zero/google-sheets`の`Sheet`が内部で処理するため、新規シート側で意識する必要はない
+- **遅延セル (`createCellData(() => ...)`) は使ってよい**: `appendRow()`は遅延セルを含む行を検出すると自動的に buffered モードに切り替わり、明示的な`flush()`まで送信を保留する。Page List の「Internal Referrers」列がこの仕組みに乗っている
+- **テストでガード**: 各`create-*.spec.ts`には「`eachPage`／`eachResource`が返すセルが`Cell.prototype.provide`に揃っているか（=eager のみ）」を検証するアサーションがある。streaming 経路の高速性を維持するため、遅延セルを使う必要のないシートでは引き続き eager のみで実装すること。Page List 側の spec は逆向きで、少なくとも 1 つの遅延セルが含まれることをアサートしている
+- 詳細は`sheets/create-sheets.ts`/`sheets/run-finalize-resources.ts`の JSDoc と ARCHITECTURE.md の「不変条件・負の知識」を参照
 
 ## 互換性ポリシー
 
-- **`0.x` 系（現行）**: SemVer の仕様上、互換性保証の対象外。既存の公開 API・CLI オプション・アーカイブフォーマットは予告なく変更してよく、マイグレーションガイドも不要（実際に v0.12.0 でも `feat(viewer)!:` の破壊的変更をガイドなしでリリース済み）
-- **`1.0.0` 以降**: メジャーバージョンでの破壊的変更にはマイグレーションガイドが必須。マイナー/パッチへの破壊的変更混入は不可
-- **マイグレーションガイドの要件（`1.0.0` 以降のメジャーバージョンのみ）**:
+- **`0.x`系（現行）**: SemVer の仕様上、互換性保証の対象外。既存の公開 API・CLI オプション・アーカイブフォーマットは予告なく変更してよく、マイグレーションガイドも不要（実際に v0.12.0 でも`feat(viewer)!:`の破壊的変更をガイドなしでリリース済み）
+- **`1.0.0`以降**: メジャーバージョンでの破壊的変更にはマイグレーションガイドが必須。マイナー/パッチへの破壊的変更混入は不可
+- **マイグレーションガイドの要件（`1.0.0`以降のメジャーバージョンのみ）**:
   - 影響を受ける API・設定・データ構造の一覧
   - before → after の具体的な書き換え例
   - 段階的な移行手順（一括移行が困難な場合の中間状態を含む）
-- **非推奨化**: 削除予定バージョンと移行先を JSDoc `@deprecated` タグに明記する
+- **非推奨化**: 削除予定バージョンと移行先を JSDoc `@deprecated`タグに明記する
 
 ## PR ガイドライン
 
 1. 変更の目的を明確に記述
 2. テストを追加・更新
-3. `yarn build && yarn test && yarn lint:check` がパスすることを確認
-4. `1.0.0` 以降のメジャーバージョンでの破壊的変更にはマイグレーションガイドを同梱（`0.x` 系は対象外）
+3. `yarn build && yarn test && yarn lint:check`がパスすることを確認
+4. `1.0.0`以降のメジャーバージョンでの破壊的変更にはマイグレーションガイドを同梱（`0.x`系は対象外）
 
 ## パッケージ構成
 
-詳細は [ARCHITECTURE.md](./ARCHITECTURE.md) を参照。
+詳細は[ARCHITECTURE.md](./ARCHITECTURE.md)を参照。
 
 ## 外部依存パッケージ
 
@@ -143,4 +143,4 @@ docs: update README with new CLI options
 
 ## ライセンス
 
-Apache 2.0 — 詳細は [LICENSE](./LICENSE) を参照。
+Apache 2.0 — 詳細は[LICENSE](./LICENSE)を参照。

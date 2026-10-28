@@ -31,8 +31,7 @@ export async function resolveAliasAndRedirectChain(
 			.select('redirect_dest_id as redirectDestId', 'alias_of_id as aliasOfId')
 			.where('id', currentId)
 			.first()) as
-			| { redirectDestId: number | null; aliasOfId: number | null }
-			| undefined;
+			{ redirectDestId: number | null; aliasOfId: number | null } | undefined;
 		const nextId = row?.redirectDestId ?? row?.aliasOfId;
 		if (nextId == null || visited.has(nextId)) {
 			return currentId;

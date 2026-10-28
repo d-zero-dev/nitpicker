@@ -1,6 +1,6 @@
 # pipeline
 
-`crawl`、`report` を1コマンドで直列実行します。
+`crawl`、`report`を1コマンドで直列実行します。
 
 ## 基本形
 
@@ -15,9 +15,9 @@ npx @nitpicker/cli pipeline https://example.com --all
 npx @nitpicker/cli pipeline https://example.com --sheet <Google Sheets URL> --all
 ```
 
-`--sheet` を指定した場合だけ `report` ステップを実行します。指定しない場合は `crawl` までを実行します。
+`--sheet`を指定した場合だけ`report`ステップを実行します。指定しない場合は`crawl`までを実行します。
 
-crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の前提条件](./crawl.md#前提条件-puppeteer用chrome) を参照してください。
+crawlステップの前提条件（Puppeteer用Chromeが必要）は[crawl の前提条件](./crawl.md#前提条件-puppeteer用chrome)を参照してください。
 
 ## オプション一覧
 
@@ -37,28 +37,28 @@ crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の�
 | `--image-file-size-threshold`              | number             | 画像ファイルサイズのしきい値                                                           |
 | `--single`                                 | boolean            | 単一ページモード                                                                       |
 | `--max-excluded-depth`                     | number             | 指定深さを超えるクロールを避ける                                                       |
-| `--retry`                                  | number             | URLごとのスクレイプ失敗リトライ回数。既定は `3`                                        |
+| `--retry`                                  | number             | URLごとのスクレイプ失敗リトライ回数。既定は`3`                                         |
 | `--list`                                   | string, repeatable | 指定URLリストだけをクロール                                                            |
 | `--list-file`                              | string             | URLリストファイルだけをクロール                                                        |
 | `--user-agent`                             | string             | HTTPリクエストのUser-Agent                                                             |
 | `--header`                                 | string, repeatable | 追加リクエストヘッダ（`"Name: value"`）。スコープ内のURLにのみ送信し、値は保存しない   |
-| `--authorization`                          | string             | `--header "Authorization: <値>"` の短縮形                                              |
+| `--authorization`                          | string             | `--header "Authorization: <値>"`の短縮形                                               |
 | `--header-file`                            | string             | 追加リクエストヘッダを1行1ヘッダで書いたファイル                                       |
 | `--ignore-robots`                          | boolean            | robots.txt制限を無視                                                                   |
 | `--skip-technology-js-scan`                | boolean            | クロール完了後のJSリソース再取得（技術スタックのライセンスコメントスキャン）をスキップ |
 | `--skip-templates`                         | boolean            | クロール完了時のページのテンプレート分類をスキップ                                     |
 | `--main-content-selector`                  | string             | メインコンテンツ領域の自動検出を上書きするCSSセレクタ                                  |
-| `--output`, `-o`                           | string             | 出力 `.nitpicker` ファイルパス                                                         |
+| `--output`, `-o`                           | string             | 出力`.nitpicker`ファイルパス                                                           |
 | `--strict`                                 | boolean            | 外部リンクエラーを致命的エラーとして扱う                                               |
 
 ### report系
 
-| オプション            | 型      | 説明                                                                                                    |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| `--sheet`, `-S`       | string  | Google Sheets URLまたはDriveフォルダURL。指定時だけreportステップを実行                                 |
-| `--credentials`, `-C` | string  | 認証情報ファイル。未指定時は `GOOGLE_AUTH_CREDENTIALS` → `./credentials.json`（存在時）→ ADC の順に解決 |
-| `--all`               | boolean | 対話選択なしですべてのシートを生成                                                                      |
-| `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約                                                                |
+| オプション            | 型      | 説明                                                                                                   |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `--sheet`, `-S`       | string  | Google Sheets URLまたはDriveフォルダURL。指定時だけreportステップを実行                                |
+| `--credentials`, `-C` | string  | 認証情報ファイル。未指定時は`GOOGLE_AUTH_CREDENTIALS` → `./credentials.json`（存在時）→ ADC の順に解決 |
+| `--all`               | boolean | 対話選択なしですべてのシートを生成                                                                     |
+| `--dedupe-resources`  | boolean | Resourcesシートをcanonical URL単位で集約                                                               |
 
 ### 共通
 
@@ -76,4 +76,4 @@ crawlステップの前提条件（Puppeteer用Chromeが必要）は [crawl の�
 | `NITPICKER_NATIVE_THREADS`     | 論理コア数 | ネイティブ処理のスレッド数                                               |
 | `NITPICKER_NATIVE_CONCURRENCY` | 1          | 同時に走らせる非同期のネイティブ呼び出しの数（超えた分は順番に待ちます） |
 
-正の整数でない値は、作業を始める前に終了コード 1 で拒否します。詳細は [@nitpicker/core](../../core/README.md) を参照してください。
+正の整数でない値は、作業を始める前に終了コード 1 で拒否します。詳細は[@nitpicker/core](../../core/README.md)を参照してください。

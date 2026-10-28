@@ -23,10 +23,10 @@ import type Archive from '../archive.js';
  * ```
  */
 export async function collectPageIdsWithHtml(archive: Archive): Promise<Set<number>> {
-	const rows = (await archive
+	const rows = await archive
 		.getKnex()('page_html_ref as ref')
 		.join('page_html_blobs as blob', 'blob.hash', 'ref.hash')
 		.where('blob.size_raw', '>', 0)
-		.select('ref.page_id as pageId')) as { pageId: number }[];
+		.select<{ pageId: number }[]>('ref.page_id as pageId');
 	return new Set(rows.map((row) => row.pageId));
 }

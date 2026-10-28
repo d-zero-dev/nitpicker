@@ -57,22 +57,17 @@ export async function backfillBodyHashFromHtmlBlobs(
 	let lastPageId = 0;
 	let processed = 0;
 	for (;;) {
-		const rows = (await pendingQuery()
+		const rows = await pendingQuery()
 			.join('page_html_blobs as phb', 'phb.hash', 'phr.hash')
 			.andWhere('pm.page_id', '>', lastPageId)
 			.orderBy('pm.page_id')
 			.limit(CHUNK_SIZE)
-			.select(
+			.select<{ pageId: number; hash: Uint8Array; body: Uint8Array; codec: string }[]>(
 				'pm.page_id as pageId',
 				'phb.hash as hash',
 				'phb.body as body',
 				'phb.codec as codec',
-			)) as {
-			pageId: number;
-			hash: Uint8Array;
-			body: Uint8Array;
-			codec: string;
-		}[];
+			);
 		if (rows.length === 0) {
 			break;
 		}

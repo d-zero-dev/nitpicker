@@ -53,10 +53,10 @@ export async function paginateQuery<TRow, TItem>(
 }> {
 	const { baseQuery, countColumn, applySelect, limit, offset, mapRow } = options;
 
-	const countResult = (await baseQuery
+	const countResult = await baseQuery
 		.clone()
 		.clearSelect()
-		.count(`${countColumn} as total`)) as { total: number }[];
+		.count<{ total: number }[]>(`${countColumn} as total`);
 	// SQL count() always returns exactly one row
 	const total = Number(countResult[0]?.total ?? 0);
 

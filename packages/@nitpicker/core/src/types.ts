@@ -84,13 +84,7 @@ export type SelectorCombinator = 'descendant' | 'child';
 
 /** The attribute selector operators the matcher evaluates. */
 export type SelectorAttributeOperator =
-	| 'exists'
-	| 'equals'
-	| 'includes'
-	| 'dash'
-	| 'prefix'
-	| 'suffix'
-	| 'substring';
+	'exists' | 'equals' | 'includes' | 'dash' | 'prefix' | 'suffix' | 'substring';
 
 /** One attribute condition of a compound (`[a]`, `[a^=v]`, `.cls`, `#id`, ...). */
 export interface SelectorAttributeTest {
@@ -232,11 +226,7 @@ export interface SnapshotMatchOutcome {
  * or a license banner at the top of a JS file.
  */
 export type StructuralTechnologySignalType =
-	| 'html-marker'
-	| 'url-pattern'
-	| 'scoped-attr'
-	| 'weak-marker'
-	| 'js-license-comment';
+	'html-marker' | 'url-pattern' | 'scoped-attr' | 'weak-marker' | 'js-license-comment';
 
 /**
  * One structural fingerprint definition (in `crates/nitpicker_tech_detect`)
@@ -498,12 +488,7 @@ export type TemplateBlockingReason =
  * ```
  */
 export type TemplateLandmarkType =
-	| 'header'
-	| 'footer'
-	| 'nav'
-	| 'aside'
-	| 'form'
-	| 'search';
+	'header' | 'footer' | 'nav' | 'aside' | 'form' | 'search';
 
 /**
  * What `createTemplateClassificationRun`'s progress callback shares with the

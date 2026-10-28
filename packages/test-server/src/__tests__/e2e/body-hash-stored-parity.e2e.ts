@@ -36,21 +36,17 @@ describe('body_hash stored by the JavaScript implementation (e2e)', () => {
 		await fs.copyFile(FIXTURE, filePath);
 		const archive = await Archive.open({ filePath, cwd });
 		try {
-			const rows = (await archive
+			const rows = await archive
 				.getKnex()('page_meta as pm')
 				.join('page_html_ref as phr', 'phr.page_id', 'pm.page_id')
 				.join('page_html_blobs as phb', 'phb.hash', 'phr.hash')
 				.whereNotNull('pm.body_hash')
 				.orderBy('pm.page_id')
-				.select(
+				.select<{ bodyHash: Uint8Array; body: Uint8Array; codec: string }[]>(
 					'pm.body_hash as bodyHash',
 					'phb.body as body',
 					'phb.codec as codec',
-				)) as {
-				bodyHash: Uint8Array;
-				body: Uint8Array;
-				codec: string;
-			}[];
+				);
 
 			// The fixture holds exactly two crawled pages (`/` and `/about`).
 			expect(rows).toHaveLength(2);

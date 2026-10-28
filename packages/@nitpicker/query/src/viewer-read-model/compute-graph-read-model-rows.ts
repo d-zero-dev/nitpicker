@@ -47,7 +47,7 @@ export async function* computeGraphReadModelRows(
 
 	let lastEdgeId = 0;
 	for (;;) {
-		const rows = (await trx('viewer_anchor_facts as facts')
+		const rows = await trx('viewer_anchor_facts as facts')
 			.join('viewer_pages as source', 'facts.source_page_id', '=', 'source.page_id')
 			.join('viewer_pages as dest', 'facts.dest_page_id', '=', 'dest.page_id')
 			.where({
@@ -60,11 +60,11 @@ export async function* computeGraphReadModelRows(
 			.where('facts.edge_id', '>', lastEdgeId)
 			.orderBy('facts.edge_id', 'asc')
 			.limit(chunkSize)
-			.select(
+			.select<{ edgeId: number; sourcePageId: number; targetPageId: number }[]>(
 				'facts.edge_id as edgeId',
 				'facts.source_page_id as sourcePageId',
 				'facts.dest_page_id as targetPageId',
-			)) as { edgeId: number; sourcePageId: number; targetPageId: number }[];
+			);
 		await releaseFinishedStatements();
 
 		if (rows.length === 0) {

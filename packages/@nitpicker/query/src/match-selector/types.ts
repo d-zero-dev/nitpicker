@@ -3,13 +3,7 @@ export type Combinator = 'descendant' | 'child';
 
 /** Attribute selector operators the engine evaluates. */
 export type AttributeOperator =
-	| 'exists'
-	| 'equals'
-	| 'includes'
-	| 'dash'
-	| 'prefix'
-	| 'suffix'
-	| 'substring';
+	'exists' | 'equals' | 'includes' | 'dash' | 'prefix' | 'suffix' | 'substring';
 
 /** One attribute condition of a compound (`[a]`, `[a^=v]`, `.cls`, `#id`, ...). */
 export interface AttributeTest {

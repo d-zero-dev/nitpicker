@@ -109,14 +109,11 @@ describe('scanHtmlSnapshots with a batch judge', () => {
 				Promise.resolve(batch.map((blob) => wanted.has(htmlOf(blob)))),
 		});
 
-		const urlById = new Map(
-			(
-				(await archive
-					.getKnex()('content_items as ci')
-					.join('url_refs as ur', 'ur.id', 'ci.url_id')
-					.select('ci.id as id', 'ur.url as url')) as { id: number; url: string }[]
-			).map((row) => [row.id, row.url]),
-		);
+		const urlRows = await archive
+			.getKnex()('content_items as ci')
+			.join('url_refs as ur', 'ur.id', 'ci.url_id')
+			.select<{ id: number; url: string }[]>('ci.id as id', 'ur.url as url');
+		const urlById = new Map(urlRows.map((row) => [row.id, row.url]));
 		expect(result.matchedPages.map((page) => urlById.get(page.pageId))).toEqual([
 			'https://example.com/1',
 			'https://example.com/dir/3',

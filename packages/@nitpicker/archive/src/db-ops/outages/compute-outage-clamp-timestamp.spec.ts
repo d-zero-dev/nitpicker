@@ -21,9 +21,9 @@ async function insertPageRow(
 	url: string,
 	lastCrawledAt: number | null,
 ): Promise<void> {
-	const [{ id: urlId }] = (await db('url_refs').insert({ url }).returning('id')) as {
-		id: number;
-	}[];
+	const [{ id: urlId }] = await db('url_refs')
+		.insert({ url })
+		.returning<{ id: number }[]>('id');
 	await db('content_items').insert({
 		url_id: urlId,
 		is_external: 0,

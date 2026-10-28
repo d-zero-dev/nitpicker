@@ -170,10 +170,9 @@ function labelPair(label: TemplateLabel): string {
  * @returns The previous membership; empty on a first run.
  */
 async function loadPreviousMembership(trx: Knex): Promise<Map<string, number[]>> {
-	const previousRows = (await trx('page_templates').select(
-		'page_id as pageId',
-		'template_key as templateKey',
-	)) as { pageId: number; templateKey: string }[];
+	const previousRows = await trx('page_templates').select<
+		{ pageId: number; templateKey: string }[]
+	>('page_id as pageId', 'template_key as templateKey');
 	const membership = new Map<string, number[]>();
 	for (const row of previousRows) {
 		const pageIds = membership.get(row.templateKey);
@@ -192,11 +191,9 @@ async function loadPreviousMembership(trx: Knex): Promise<Map<string, number[]>>
  * @returns Template key → label; empty on a first run.
  */
 async function loadPreviousLabels(trx: Knex): Promise<Map<string, TemplateLabel>> {
-	const labelRows = (await trx('page_template_labels').select(
-		'template_key as templateKey',
-		'section',
-		'ordinal',
-	)) as { templateKey: string; section: string | null; ordinal: number }[];
+	const labelRows = await trx('page_template_labels').select<
+		{ templateKey: string; section: string | null; ordinal: number }[]
+	>('template_key as templateKey', 'section', 'ordinal');
 	return new Map(
 		labelRows.map((row) => [
 			row.templateKey,

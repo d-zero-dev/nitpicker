@@ -6,11 +6,7 @@ import type { MismatchType } from '../types.js';
  * `mismatch_id`, the stable tie-breaker.
  */
 export type MismatchesSortColumn =
-	| 'url_sort_key'
-	| 'natural_url_rank'
-	| 'actual'
-	| 'expected'
-	| 'mismatch_id';
+	'url_sort_key' | 'natural_url_rank' | 'actual' | 'expected' | 'mismatch_id';
 
 /**
  * Resolved sort plan for one `sortBy`/`sortOrder` pair: which
@@ -78,10 +74,7 @@ export interface MismatchesCursorFilterKeyInput {
  * from the read model.
  */
 export type MismatchesEffectiveSortBy =
-	| 'urlBinary'
-	| 'urlNatural'
-	| 'actual'
-	| 'expected';
+	'urlBinary' | 'urlNatural' | 'actual' | 'expected';
 
 /**
  * Decoded shape of an opaque `/api/mismatches` viewer cursor.

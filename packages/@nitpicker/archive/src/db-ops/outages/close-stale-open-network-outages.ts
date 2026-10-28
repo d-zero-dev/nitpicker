@@ -33,9 +33,9 @@ export async function closeStaleOpenNetworkOutages(knex: Knex): Promise<void> {
 		return;
 	}
 
-	const openRows = (await knex('network_outages')
+	const openRows = await knex('network_outages')
 		.whereNull('ended_at')
-		.select('id', 'started_at')) as { id: number; started_at: number }[];
+		.select<{ id: number; started_at: number }[]>('id', 'started_at');
 	if (openRows.length === 0) {
 		return;
 	}

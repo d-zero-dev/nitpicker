@@ -57,7 +57,7 @@ function makeMeta(overrides: Partial<Meta> = {}): Meta {
 		},
 		originTrial: [],
 		...overrides,
-	} as Meta;
+	};
 }
 
 /**

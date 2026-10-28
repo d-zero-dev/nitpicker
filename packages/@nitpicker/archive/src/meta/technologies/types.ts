@@ -21,9 +21,7 @@ import type { StructuralTechnologySignalType } from '@nitpicker/core/types';
  * detect). The rest are structural signals this module detects itself.
  */
 export type TechnologySignalType =
-	| 'wappalyzer'
-	| 'meta-generator'
-	| StructuralTechnologySignalType;
+	'wappalyzer' | 'meta-generator' | StructuralTechnologySignalType;
 
 /**
  * One un-combined signal for one technology on one page. The unit that
