@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/core",
-	"version": "0.24.0",
+	"version": "0.25.0",
 	"description": "Native (Rust, Node-API) compute core for Nitpicker",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -102,7 +102,7 @@
 		"clean": "node scripts/build-native.mjs --clean && tsc --build --clean"
 	},
 	"optionalDependencies": {
-		"@nitpicker/core-darwin-arm64": "0.24.0",
-		"@nitpicker/core-linux-x64-gnu": "0.24.0"
+		"@nitpicker/core-darwin-arm64": "0.25.0",
+		"@nitpicker/core-linux-x64-gnu": "0.25.0"
 	}
 }

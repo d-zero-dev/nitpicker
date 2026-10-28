@@ -1,6 +1,6 @@
 {
 	"name": "@nitpicker/archive",
-	"version": "0.24.0",
+	"version": "0.25.0",
 	"description": "Read/write layer for .nitpicker archives (SQLite schema, migration, cache, concat/split, template classification)",
 	"author": "D-ZERO",
 	"license": "Apache-2.0",
@@ -344,7 +344,7 @@
 	"dependencies": {
 		"@d-zero/fs": "0.2.7",
 		"@d-zero/shared": "0.23.0",
-		"@nitpicker/core": "0.24.0",
+		"@nitpicker/core": "0.25.0",
 		"debug": "4.4.3",
 		"fs-extra": "11.4.1",
 		"knex": "3.3.0",

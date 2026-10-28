@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+### Bug Fixes
+
+- **report-google-sheets:** retry rate-limit errors from a different gaxios version ([96973be](https://github.com/d-zero-dev/nitpicker/commit/96973be6eb5416e43f93db987fc1a4f17acad62a))
+
 # [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
 
 **Note:** Version bump only for package @nitpicker/report-google-sheets

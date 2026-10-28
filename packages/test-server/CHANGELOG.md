@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
+
+### Bug Fixes
+
+- **test-server:** rebuild the report/query e2e fixture for viewer read model v36 ([ad4a702](https://github.com/d-zero-dev/nitpicker/commit/ad4a702116ba0c03f66beb9839676b0e06eab96d))
+
+### Features
+
+- **repo:** add the Rust @nitpicker/core addon and compute body_hash with it ([4563fa3](https://github.com/d-zero-dev/nitpicker/commit/4563fa3d1ec4b0818a1d3a0b287e8bbb2d79b7cd)), closes [#425](https://github.com/d-zero-dev/nitpicker/issues/425)
+
 # [0.24.0](https://github.com/d-zero-dev/nitpicker/compare/v0.23.1...v0.24.0) (2026-10-07)
 
 **Note:** Version bump only for package test-server
