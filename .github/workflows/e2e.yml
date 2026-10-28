@@ -43,7 +43,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.8.1
+          node-version: 26.12.1
           cache: yarn
       - run: yarn install --immutable
         env:
@@ -178,7 +178,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.8.1
+          node-version: 26.12.1
           cache: yarn
       - run: yarn install --immutable
         env:
