@@ -13,10 +13,10 @@ function tStub(): I18nValue['t'] {
 		'views.templateLabel.sectioned': '{section} template {letter}',
 		'views.templateLabel.siteWide': 'template {letter}',
 	};
-	return ((key: string, vars?: Record<string, string | number>) =>
+	return (key: string, vars?: Record<string, string | number>) =>
 		(dictionary[key] ?? key).replaceAll(/\{(\w+)\}/g, (_, name: string) =>
 			String(vars?.[name] ?? ''),
-		)) as I18nValue['t'];
+		);
 }
 
 describe('formatTemplateLabel', () => {

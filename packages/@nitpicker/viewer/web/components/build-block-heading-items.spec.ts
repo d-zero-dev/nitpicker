@@ -34,7 +34,7 @@ function group(
 	clusters: TemplateClusterSummary[],
 ): ClusterBlockGroup {
 	return {
-		block: { blockKey, kind } as ClusterBlockGroup['block'],
+		block: { blockKey, kind },
 		clusters,
 		pageCount: clusters.reduce((acc, c) => acc + c.pageCount, 0),
 	};

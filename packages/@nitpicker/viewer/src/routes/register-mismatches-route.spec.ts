@@ -57,7 +57,7 @@ function makeMeta(overrides: Record<string, unknown> = {}): Meta {
 		},
 		originTrial: [],
 		...overrides,
-	} as Meta;
+	};
 }
 
 /**

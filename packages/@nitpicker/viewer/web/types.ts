@@ -191,8 +191,7 @@ export interface ClusterHeadingParts {
  * key prefix this viewer build does not recognize.
  */
 export type ClusterBlockKind =
-	| TemplateClusterBlockingEvidence['reason']['kind']
-	| 'unknown';
+	TemplateClusterBlockingEvidence['reason']['kind'] | 'unknown';
 
 /** The block key parsed out of a `templateKey`, with its kind. */
 export interface ClusterBlockRef {
