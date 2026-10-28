@@ -510,15 +510,9 @@ export function createServer() {
 							await listConsoleLogs(accessor, {
 								type: optionalString(args, 'type'),
 								sortBy: optionalString(args, 'sortBy') as
-									| 'totalCount'
-									| 'pageCount'
-									| 'text'
-									| 'type'
-									| undefined,
+									'totalCount' | 'pageCount' | 'text' | 'type' | undefined,
 								sortOrder: optionalString(args, 'sortOrder') as
-									| 'asc'
-									| 'desc'
-									| undefined,
+									'asc' | 'desc' | undefined,
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
@@ -579,14 +573,9 @@ export function createServer() {
 								offset: optionalNumber(args, 'offset'),
 								urlPattern: optionalString(args, 'urlPattern'),
 								sortBy: optionalString(args, 'sortBy') as
-									| 'url'
-									| 'actual'
-									| 'expected'
-									| undefined,
+									'url' | 'actual' | 'expected' | undefined,
 								sortOrder: optionalString(args, 'sortOrder') as
-									| 'asc'
-									| 'desc'
-									| undefined,
+									'asc' | 'desc' | undefined,
 								cursor: optionalString(args, 'cursor'),
 								onSortProgress,
 							}),
