@@ -54,9 +54,9 @@ describe('migrateContentItemsAliasOfId', () => {
 
 		expect(await instance.schema.hasColumn('content_items', 'alias_of_id')).toBe(true);
 
-		const indexes = (await instance.raw(
+		const indexes = await instance.raw<{ name: string }[]>(
 			"SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'content_items'",
-		)) as { name: string }[];
+		);
 		expect(indexes.map((i) => i.name)).toContain('idx_content_items_alias_of_id');
 
 		// Pre-existing row and columns survive untouched, new column is NULL.
@@ -122,9 +122,9 @@ describe('migrateContentItemsAliasOfId', () => {
 
 		await migrateContentItemsAliasOfId(instance);
 
-		const indexes = (await instance.raw(
+		const indexes = await instance.raw<{ name: string }[]>(
 			"SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'content_items'",
-		)) as { name: string }[];
+		);
 		expect(indexes.map((i) => i.name)).toContain('idx_content_items_alias_of_id');
 
 		await instance.destroy();

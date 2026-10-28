@@ -375,9 +375,7 @@ export default class Page {
 		for (const col of FLAT_META_COLUMNS) {
 			out[col] = this.#raw[col];
 		}
-		return Object.freeze(out) as Readonly<
-			Record<(typeof FLAT_META_COLUMNS)[number], string | number | null>
-		>;
+		return Object.freeze(out);
 	}
 
 	/**

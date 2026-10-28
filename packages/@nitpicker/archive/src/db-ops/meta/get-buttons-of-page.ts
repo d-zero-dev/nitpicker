@@ -14,9 +14,16 @@ export async function getButtonsOfPage(
 	pageId: number,
 ): Promise<MainContentButtonRow[]> {
 	return knex
-		.select<
-			MainContentButtonRow[]
-		>('id', 'pageId', 'order', 'nodeName', 'role', 'type', 'text', 'disabled')
+		.select<MainContentButtonRow[]>(
+			'id',
+			'pageId',
+			'order',
+			'nodeName',
+			'role',
+			'type',
+			'text',
+			'disabled',
+		)
 		.from('page_main_content_buttons')
 		.where('pageId', pageId)
 		.orderBy('order', 'asc');

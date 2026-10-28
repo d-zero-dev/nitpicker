@@ -67,8 +67,7 @@ export async function loadPageClusterCandidates(
 	// Only for progress: counted once up front. The archive is not written
 	// while it is classified, so `done` ends at `total`.
 	const countRow = (await internalHtml().count({ count: '*' }).first()) as
-		| { count: number | string }
-		| undefined;
+		{ count: number | string } | undefined;
 	const total = Number(countRow?.count ?? 0);
 
 	const candidates: PageClusterCandidate[] = [];
@@ -76,20 +75,20 @@ export async function loadPageClusterCandidates(
 	let done = 0;
 
 	while (true) {
-		const rows = (await internalHtml()
+		const rows = await internalHtml()
 			.join('url_refs as ur', 'ur.id', 'ci.url_id')
 			.leftJoin('page_meta as pm', 'pm.page_id', 'ci.id')
 			.andWhere('ci.id', '>', lastId)
 			.orderBy('ci.id')
 			.limit(batchSize)
-			.select(
+			.select<CandidateRow[]>(
 				'ci.id as id',
 				'ur.url as url',
 				'pm.main_content_node_name as main_content_node_name',
 				'pm.main_content_id as main_content_id',
 				'pm.main_content_role as main_content_role',
 				'pm.main_content_class_list as main_content_class_list',
-			)) as CandidateRow[];
+			);
 		if (rows.length === 0) {
 			break;
 		}

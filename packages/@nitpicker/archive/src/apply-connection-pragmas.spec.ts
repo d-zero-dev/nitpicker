@@ -17,7 +17,7 @@ const __dirname = path.dirname(new URL(import.meta.url).pathname);
  * @returns The current value.
  */
 async function readPragma(knex: Knex, name: string): Promise<number> {
-	const [row] = (await knex.raw(`PRAGMA ${name}`)) as Record<string, number>[];
+	const [row] = await knex.raw<Record<string, number>[]>(`PRAGMA ${name}`);
 	return Number(row![name]);
 }
 

@@ -14,9 +14,15 @@ export async function getIframesOfPage(
 	pageId: number,
 ): Promise<MainContentIframeRow[]> {
 	return knex
-		.select<
-			MainContentIframeRow[]
-		>('id', 'pageId', 'order', 'src', 'title', 'width', 'height')
+		.select<MainContentIframeRow[]>(
+			'id',
+			'pageId',
+			'order',
+			'src',
+			'title',
+			'width',
+			'height',
+		)
 		.from('page_main_content_iframes')
 		.where('pageId', pageId)
 		.orderBy('order', 'asc');

@@ -38,9 +38,9 @@ const SRC = TRANSFER_SOURCE_ALIAS;
  * ```
  */
 export async function copyPageTemplateLabels(trx: Knex): Promise<void> {
-	const [sourceTable] = (await trx.raw(
+	const [sourceTable] = await trx.raw<{ name: string }[]>(
 		`SELECT name FROM ${SRC}.sqlite_master WHERE type = 'table' AND name = 'page_template_labels'`,
-	)) as { name: string }[];
+	);
 	if (sourceTable) {
 		await trx.raw(`
 			INSERT INTO main.page_template_labels (template_key, section, ordinal)

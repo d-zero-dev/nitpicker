@@ -14,9 +14,14 @@ export async function getTechnologySignalsOfPage(
 	pageId: number,
 ): Promise<TechnologySignalRow[]> {
 	return knex
-		.select<
-			TechnologySignalRow[]
-		>('id', 'pageId', 'technology', 'signalType', 'evidence', 'weight')
+		.select<TechnologySignalRow[]>(
+			'id',
+			'pageId',
+			'technology',
+			'signalType',
+			'evidence',
+			'weight',
+		)
 		.from('technology_signals')
 		.where('pageId', pageId)
 		.orderBy('id', 'asc');

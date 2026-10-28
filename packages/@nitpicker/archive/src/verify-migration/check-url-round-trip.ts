@@ -69,9 +69,11 @@ export async function checkUrlRoundTrip(trx: Knex): Promise<void> {
 	const sample = await trx('content_items as ci')
 		.leftJoin('pages as p', 'p.id', 'ci.id')
 		.leftJoin('url_refs as ur', 'ur.id', 'ci.url_id')
-		.select<
-			{ id: number; sourceUrl: string | null; roundTripUrl: string | null }[]
-		>('ci.id as id', 'p.url as sourceUrl', 'ur.url as roundTripUrl')
+		.select<{ id: number; sourceUrl: string | null; roundTripUrl: string | null }[]>(
+			'ci.id as id',
+			'p.url as sourceUrl',
+			'ur.url as roundTripUrl',
+		)
 		.whereRaw('(ci.id % ?) = 0', [stride])
 		.orderBy('ci.id')
 		.limit(SAMPLE_SIZE);

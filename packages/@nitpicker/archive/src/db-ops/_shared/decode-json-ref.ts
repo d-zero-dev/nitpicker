@@ -25,7 +25,7 @@ export function decodeJsonRef(
 	}
 	try {
 		if (codec === 'zstd') {
-			return zstdDecompressSync(body as Buffer).toString('utf8');
+			return zstdDecompressSync(body).toString('utf8');
 		}
 		return typeof body === 'string' ? body : body.toString('utf8');
 	} catch {

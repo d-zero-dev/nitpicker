@@ -28,9 +28,10 @@ export async function checkContentTypePreservation(trx: Knex): Promise<void> {
 		.whereNull('ci.content_type_id')
 		.whereNotNull('p.contentType')
 		.andWhere('p.contentType', '<>', '')
-		.select<
-			{ id: number; contentType: string }[]
-		>('ci.id as id', 'p.contentType as contentType')
+		.select<{ id: number; contentType: string }[]>(
+			'ci.id as id',
+			'p.contentType as contentType',
+		)
 		.limit(1);
 	if (sample.length > 0) {
 		const offending = sample[0]!;

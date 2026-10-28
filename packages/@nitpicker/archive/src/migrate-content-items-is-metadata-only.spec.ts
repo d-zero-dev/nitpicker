@@ -74,9 +74,9 @@ describe('migrateContentItemsIsMetadataOnly', () => {
 
 		await migrateContentItemsIsMetadataOnly(instance);
 
-		const indexes = (await instance.raw(
+		const indexes = await instance.raw<{ name: string }[]>(
 			"SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'content_items'",
-		)) as { name: string }[];
+		);
 		expect(indexes.map((i) => i.name)).not.toContain(
 			'idx_content_items_is_metadata_only',
 		);

@@ -14,9 +14,16 @@ export async function getMainContentTablesOfPage(
 	pageId: number,
 ): Promise<MainContentTableRow[]> {
 	return knex
-		.select<
-			MainContentTableRow[]
-		>('id', 'pageId', 'order', 'rows', 'cols', 'hasHeader', 'hasFooter', 'hasMergedCell')
+		.select<MainContentTableRow[]>(
+			'id',
+			'pageId',
+			'order',
+			'rows',
+			'cols',
+			'hasHeader',
+			'hasFooter',
+			'hasMergedCell',
+		)
 		.from('page_main_content_tables')
 		.where('pageId', pageId)
 		.orderBy('order', 'asc');

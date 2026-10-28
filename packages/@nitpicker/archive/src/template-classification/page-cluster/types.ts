@@ -48,8 +48,7 @@ export interface PageClusterPage {
  * archive query per read, so no read holds the corpus's HTML at once.
  */
 export type PageFactory = () =>
-	| Iterable<PageClusterPage>
-	| AsyncIterable<PageClusterPage>;
+	Iterable<PageClusterPage> | AsyncIterable<PageClusterPage>;
 
 /**
  * Progress of `resolvePageClusterKeys`, a union on `phase`:

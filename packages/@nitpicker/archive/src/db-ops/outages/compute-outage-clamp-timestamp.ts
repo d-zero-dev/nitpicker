@@ -25,12 +25,12 @@ import type { Knex } from 'knex';
  *   (a brand-new archive with no activity yet).
  */
 export async function computeOutageClampTimestamp(knex: Knex): Promise<number> {
-	const [crawlErrorsRow] = (await knex('crawl_errors').max(
-		'createdAt as maxCreatedAt',
-	)) as { maxCreatedAt: number | null }[];
-	const [contentItemsRow] = (await knex('content_items').max(
-		'last_crawled_at as maxLastCrawledAt',
-	)) as { maxLastCrawledAt: number | null }[];
+	const [crawlErrorsRow] = await knex('crawl_errors').max<
+		{ maxCreatedAt: number | null }[]
+	>('createdAt as maxCreatedAt');
+	const [contentItemsRow] = await knex('content_items').max<
+		{ maxLastCrawledAt: number | null }[]
+	>('last_crawled_at as maxLastCrawledAt');
 
 	const latestError = crawlErrorsRow?.maxCreatedAt ?? 0;
 	const latestCrawl = contentItemsRow?.maxLastCrawledAt ?? 0;
