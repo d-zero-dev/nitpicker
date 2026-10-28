@@ -471,7 +471,7 @@ describe('report', () => {
 		});
 
 		it('does not create a Spreadsheet when the sheet prompt is cancelled', async () => {
-			vi.spyOn(enquirer, 'prompt').mockResolvedValue(undefined as never);
+			vi.spyOn(enquirer, 'prompt').mockResolvedValue();
 
 			await report({ ...folderParams, all: false });
 
