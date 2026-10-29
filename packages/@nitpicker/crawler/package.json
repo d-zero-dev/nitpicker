@@ -38,7 +38,7 @@
 		"debug": "4.4.3",
 		"follow-redirects": "1.16.1",
 		"knex": "3.3.0",
-		"puppeteer": "25.15.0",
+		"puppeteer": "25.16.0",
 		"robots-parser": "3.0.1"
 	},
 	"devDependencies": {
