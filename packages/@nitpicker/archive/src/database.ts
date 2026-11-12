@@ -137,7 +137,6 @@ export class Database extends EventEmitter<DatabaseEvent> {
 	#instance: Knex;
 	/** Connection-scoped write-side id caches for entity/ref upserts. */
 	#writeRefCaches = createWriteRefCaches();
-	// eslint-disable-next-line no-restricted-syntax
 	private constructor(options: DatabaseOption) {
 		super();
 		// **Known caveat (libsql 0.5.x)**: passing `readonly: true` via

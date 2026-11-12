@@ -124,9 +124,9 @@ describe('populateTextRefs (text-refs-dedup)', () => {
 		]);
 		await populateTextRefs(db);
 		const rows = await db('text_refs').select('text').orderBy('text');
-		expect(rows.map((r) => r.text).toSorted()).toEqual(
-			['d1', 'k1', 'od1', 'ot1', 'r1', 't1', 'td1', 'tt1'].toSorted(),
-		);
+		expect(
+			rows.map((r) => r.text).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual(['d1', 'k1', 'od1', 'ot1', 'r1', 't1', 'td1', 'tt1'].toSorted());
 	});
 
 	it('matches acceptance: count == distinct text across all covered columns', async () => {

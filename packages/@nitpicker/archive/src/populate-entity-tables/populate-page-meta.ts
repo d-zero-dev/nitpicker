@@ -265,7 +265,7 @@ function resolveOptionalUrlId(
 		return null;
 	}
 	if (isLargeDataUri(value)) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.warn(
 			`populatePageMeta: dropping large data URI in page id=${pageId} column=${column} (page_meta has no *_blob_id companion for URL columns)`,
 		);

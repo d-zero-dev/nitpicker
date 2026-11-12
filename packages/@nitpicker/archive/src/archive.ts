@@ -100,7 +100,6 @@ export default class Archive extends ArchiveAccessor {
 		);
 	}
 
-	// eslint-disable-next-line no-restricted-syntax
 	private constructor(
 		filePath: string,
 		tmpDir: string,

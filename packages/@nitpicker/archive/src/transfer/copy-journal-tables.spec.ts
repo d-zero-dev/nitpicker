@@ -48,7 +48,9 @@ describe('copyJournalTables', () => {
 		try {
 			await copyJournalTables(dest, 'concat');
 			const errors = await dest('crawl_errors').select('message');
-			expect(errors.map((e) => e.message).toSorted()).toEqual(['DNS', 'process error']);
+			expect(
+				errors.map((e) => e.message).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+			).toEqual(['DNS', 'process error']);
 			const outages = await dest('network_outages').select('trigger_error_count');
 			expect(outages).toHaveLength(1);
 		} finally {

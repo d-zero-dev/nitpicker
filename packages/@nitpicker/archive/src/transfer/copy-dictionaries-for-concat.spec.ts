@@ -52,10 +52,9 @@ describe('copyDictionariesForConcat', () => {
 			expect(sharedMap.dest_id).toBe(existingUrlRef.id);
 
 			const allUrlRows = await dest('url_refs').select('url');
-			expect(allUrlRows.map((r) => r.url).toSorted()).toEqual([
-				'https://example.com/only-in-source',
-				'https://example.com/shared',
-			]);
+			expect(
+				allUrlRows.map((r) => r.url).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+			).toEqual(['https://example.com/only-in-source', 'https://example.com/shared']);
 
 			const newMap = await dest('xfer_map_url_refs')
 				.where('src_id', newUrlRef.id)

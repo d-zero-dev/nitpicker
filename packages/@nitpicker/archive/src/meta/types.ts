@@ -473,7 +473,7 @@ export interface JsonLdRow {
 	/** Original script text content (uncompressed; SQLite overflow pages handle large rows). */
 	raw: string;
 	/** Parsed JSON object (`null` when `parseError` is set). */
-	parsed: unknown | null;
+	parsed: unknown;
 	/** Parse error message preserved from beholder; `null` when the entry parsed cleanly. */
 	parseError: string | null;
 }

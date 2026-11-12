@@ -129,7 +129,7 @@ export async function populateBlobRefs(
 					}
 					const decoded = decodeDataUri(value);
 					if (decoded === null) {
-						// eslint-disable-next-line no-console
+						// oxlint-disable-next-line no-console
 						console.warn(
 							`populateBlobRefs: skipping malformed data URI (length=${value.length}) — raw string still exists in ${source.table} row`,
 						);

@@ -36,6 +36,6 @@ export async function migrateRefTables(instance: Knex): Promise<void> {
 		return;
 	}
 	await createRefTables(instance);
-	// eslint-disable-next-line no-console
+	// oxlint-disable-next-line no-console
 	console.error('[migrate] 0.13 ref/header tables created');
 }

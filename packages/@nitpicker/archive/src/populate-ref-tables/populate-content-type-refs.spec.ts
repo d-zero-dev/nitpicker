@@ -71,10 +71,9 @@ describe('populateContentTypeRefs', () => {
 		]);
 		await populateContentTypeRefs(db);
 		const rows = await db('content_type_refs').select('raw');
-		expect(rows.map((r) => r.raw).toSorted()).toEqual([
-			'application/javascript',
-			'text/html',
-		]);
+		expect(
+			rows.map((r) => r.raw).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual(['application/javascript', 'text/html']);
 	});
 
 	it('is idempotent (re-run does not duplicate rows)', async () => {

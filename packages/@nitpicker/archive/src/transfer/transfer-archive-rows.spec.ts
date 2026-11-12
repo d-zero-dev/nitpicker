@@ -82,7 +82,9 @@ describe('transferArchiveRows', () => {
 		expect(resultB.skipped).toBe(1); // shared
 
 		const urls = await destKnex('url_refs').select('url');
-		expect(urls.map((u) => u.url).toSorted()).toEqual([
+		expect(
+			urls.map((u) => u.url).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual([
 			'https://a.example.com/',
 			'https://a.example.com/page1',
 			'https://b.example.com/',
@@ -156,7 +158,9 @@ describe('transferArchiveRows', () => {
 		expect(result.dropped).toBe(1); // orphan
 
 		const urls = await dest('url_refs').select('url');
-		expect(urls.map((u) => u.url).toSorted()).toEqual([
+		expect(
+			urls.map((u) => u.url).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual([
 			'https://example.com/about',
 			'https://example.com/blog/',
 			'https://example.com/blog/post',

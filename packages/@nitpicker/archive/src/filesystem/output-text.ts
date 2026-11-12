@@ -19,13 +19,13 @@ export async function outputText(filePath: string, data: string) {
 	mkdir(filePath);
 	await fs.writeFile(filePath, data, { encoding: 'utf8' }).catch(async (error) => {
 		if (error instanceof Error && 'code' in error && error.code === 'ENAMETOOLONG') {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(`File path too long: ${filePath}`);
 			const dir = path.dirname(filePath);
 			const altFileName = `__file_path_too_long_${(filePathTooLongCount++).toString().padStart(4, '0')}`;
 			const ext = path.extname(filePath);
 			const altFilePath = path.resolve(dir, `${altFileName}${ext}`);
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(`Try to save to: ${altFilePath}`);
 			const altMetaFilePath = path.resolve(dir, `${altFileName}.meta.txt`);
 			await outputText(altFilePath, data);

@@ -5,14 +5,14 @@ import type { Knex } from 'knex';
  * function, in declaration order, minus any names in `exclude`.
  *
  * A transfer copy must NEVER build its column list from a hand-written
- * literal or from `SELECT *` — migrated archives add columns via `ALTER
- * TABLE ADD COLUMN`, which always appends at the end, so a fresh archive's
+ * literal or from `SELECT *` — migrated archives add columns via
+ * `ALTER TABLE ADD COLUMN`, which always appends at the end, so a fresh archive's
  * `content_items` (say) can have `alias_of_id` earlier in declaration order
- * than a migrated archive's copy of the same table. A positional `INSERT
- * ... SELECT * FROM other_table` across two archives with different column
+ * than a migrated archive's copy of the same table. A positional
+ * `INSERT ... SELECT * FROM other_table` across two archives with different column
  * orders would silently shift values into the wrong columns. Reading each
- * side's own column list and building an explicit, named `SELECT
- * <col1>, <col2>, ...` (this function's contract) sidesteps the problem
+ * side's own column list and building an explicit, named
+ * `SELECT <col1>, <col2>, ...` (this function's contract) sidesteps the problem
  * entirely — column order never matters when every column is named.
  *
  * The pragma table-valued function must be schema-qualified as

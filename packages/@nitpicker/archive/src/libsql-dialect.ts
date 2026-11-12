@@ -23,7 +23,6 @@ interface DialectQuery {
  * Declared as a class (not a constructor type) so the static side of
  * `Knex.Client` is kept and `knex({ client: LibsqlDialect })` still type-checks.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- ambient class, only ever used as a type
 declare class BetterSqlite3Client extends Knex.Client {
 	/**
 	 * `true` only on the per-transaction client Knex derives from the main one

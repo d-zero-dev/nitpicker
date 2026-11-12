@@ -313,7 +313,6 @@ function legacyDocument(context: Context): string {
 	return `<HTML><HEAD><TITLE>Legacy ${id}</TITLE></HEAD><BODY BGCOLOR=white><!-- legacy layout --><CENTER><TABLE class=layout WIDTH=600>${rows}</TABLE></CENTER><P class=lead>Intro<DIV class=box>Box ${id}<br/>line</DIV></div><ul class=menu>${items}</ul><body class=nested><FONT SIZE=2>Footer</FONT></BODY></HTML>`;
 }
 
-// cspell:ignore liste élément Élément
 /**
  * Class names that only match once entities are decoded, plus non-ASCII
  * and mixed-case ones.

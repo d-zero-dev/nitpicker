@@ -68,10 +68,9 @@ describe('copyDictionariesForSplit', () => {
 			// Both kept and stub pages' own url_id is a content-item-level
 			// need (a stub still carries its own identity URL).
 			const urls = await dest('url_refs').select('url');
-			expect(urls.map((u) => u.url).toSorted()).toEqual([
-				'https://example.com/blog/',
-				'https://example.com/referenced/',
-			]);
+			expect(
+				urls.map((u) => u.url).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+			).toEqual(['https://example.com/blog/', 'https://example.com/referenced/']);
 		} finally {
 			await dropTransferTempTables(dest);
 			await detach();

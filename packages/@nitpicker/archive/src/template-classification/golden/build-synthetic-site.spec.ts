@@ -28,7 +28,10 @@ describe('buildSyntheticSite', () => {
 			...pages.flatMap((page) => page.stylesheetHrefs.map((href) => new URL(href).host)),
 		]);
 
-		expect([...hosts].toSorted()).toEqual(['cdn.example.net', 'golden.example']);
+		expect([...hosts].toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0))).toEqual([
+			'cdn.example.net',
+			'golden.example',
+		]);
 	});
 
 	it('contentRoot のヒントは blog の 4 ページに 3 ページだけ付く', () => {

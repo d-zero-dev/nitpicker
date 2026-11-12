@@ -19,7 +19,7 @@ import type { Meta } from './types.js';
  * @returns Plain object suitable for `JSON.stringify`.
  */
 export function deriveMetaExtras(meta: Meta): Record<string, unknown> {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars -- we destructure to omit these from the spread
+	// oxlint-disable-next-line typescript/no-unused-vars -- we destructure to omit these from the spread
 	const { jsonLd, speculationRules, tags, _raw, ...rest } = meta;
 	return rest;
 }

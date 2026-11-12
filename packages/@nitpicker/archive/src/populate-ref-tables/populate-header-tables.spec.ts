@@ -74,12 +74,13 @@ describe('populateHeaderTables', () => {
 		]);
 		await populateHeaderTables(db);
 		const nameRows = await db('header_name_refs').select('name');
-		expect(nameRows.map((r) => r.name).toSorted()).toEqual([
-			'cache-control',
-			'content-type',
-		]);
+		expect(
+			nameRows.map((r) => r.name).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual(['cache-control', 'content-type']);
 		const valueRows = await db('header_value_refs').select('value');
-		expect(valueRows.map((r) => r.value).toSorted()).toEqual(['no-store', 'text/html']);
+		expect(
+			valueRows.map((r) => r.value).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual(['no-store', 'text/html']);
 		const entries = await db('header_set_entries').select();
 		expect(entries).toHaveLength(2);
 	});

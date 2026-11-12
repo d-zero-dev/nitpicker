@@ -248,6 +248,10 @@ describe('LibsqlDialect の ROLLBACK 取り扱い', () => {
 			const connection = await target.client.acquireConnection();
 			const executed: string[] = [];
 			const originalPrepare = connection.prepare.bind(connection);
+			/**
+			 * 渡された SQL を記録してから、元の `prepare` に委譲する。
+			 * @param sql - 準備される SQL 文
+			 */
 			connection.prepare = (sql: string) => {
 				executed.push(sql);
 				return originalPrepare(sql);

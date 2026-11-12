@@ -64,6 +64,6 @@ export async function migrateEntityTables(instance: Knex): Promise<void> {
 		return;
 	}
 	await createEntityTables(instance);
-	// eslint-disable-next-line no-console
+	// oxlint-disable-next-line no-console
 	console.error('[migrate] 0.13 entity/edge tables created');
 }

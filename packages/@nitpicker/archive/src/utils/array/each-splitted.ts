@@ -15,5 +15,5 @@ export async function eachSplitted<T>(
 	callback: (items: T[]) => void | Promise<void>,
 ) {
 	const splitted = splitArray(a as T[], count);
-	await Promise.all(splitted.map((items) => callback(items)));
+	await Promise.all(splitted.map((items) => Promise.resolve(callback(items))));
 }

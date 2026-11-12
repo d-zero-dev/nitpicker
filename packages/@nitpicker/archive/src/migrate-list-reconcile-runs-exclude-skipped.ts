@@ -45,7 +45,7 @@ export async function migrateListReconcileRunsExcludeSkipped(
 	if (onLog) {
 		onLog(message);
 	} else {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(message);
 	}
 }
