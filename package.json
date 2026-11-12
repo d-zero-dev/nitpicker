@@ -1,17 +1,12 @@
 {
 	"name": "nitpicker-monorepo",
-	"private": true,
 	"description": "Web site data acquisition and analysis toolkit",
 	"license": "Apache-2.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/d-zero-dev/nitpicker.git"
 	},
-	"workspaces": [
-		"packages/@nitpicker/cli",
-		"packages/@nitpicker/*",
-		"packages/test-server"
-	],
+	"private": true,
 	"type": "module",
 	"scripts": {
 		"cli": "./packages/@nitpicker/cli/bin/nitpicker.js",
@@ -23,14 +18,14 @@
 		"lint": "run-s lint:oxlint lint:stylelint lint:markuplint lint:oxfmt lint:textlint lint:rustfmt lint:clippy",
 		"lint:check": "run-s lint:oxlint:check lint:stylelint:check lint:markuplint:check lint:oxfmt:check lint:textlint:check lint:rustfmt:check lint:clippy",
 		"lint:clippy": "cargo clippy --manifest-path packages/@nitpicker/core/Cargo.toml --all-targets --locked -- -D warnings",
-		"lint:oxfmt": "oxfmt --write \"{*,**/*}.{md,mdc,json,js,cjs,mjs,jsx,ts,cts,mts,tsx,css,html,yml,yaml}\" \"!**/dist/**\" \"!**/lib/**\" \"!**/target/**\"",
-		"lint:oxfmt:check": "oxfmt --check \"{*,**/*}.{md,mdc,json,js,cjs,mjs,jsx,ts,cts,mts,tsx,css,html,yml,yaml}\" \"!**/dist/**\" \"!**/lib/**\" \"!**/target/**\"",
+		"lint:oxfmt": "oxfmt --write \"{*,**/*}.{md,mdc,json,js,cjs,mjs,jsx,ts,cts,mts,tsx,css,html,yml,yaml}\"",
+		"lint:oxfmt:check": "oxfmt --check \"{*,**/*}.{md,mdc,json,js,cjs,mjs,jsx,ts,cts,mts,tsx,css,html,yml,yaml}\"",
 		"lint:rustfmt": "cargo fmt --manifest-path packages/@nitpicker/core/Cargo.toml --all",
 		"lint:rustfmt:check": "cargo fmt --manifest-path packages/@nitpicker/core/Cargo.toml --all --check",
 		"lint:oxlint": "oxlint --type-aware --fix .",
 		"lint:oxlint:check": "oxlint --type-aware .",
-		"lint:markuplint": "npx markuplint --fix --no-allow-warnings \"packages/**/web/**/*.{tsx,jsx,html}\"",
-		"lint:markuplint:check": "npx markuplint --no-allow-warnings \"packages/**/web/**/*.{tsx,jsx,html}\"",
+		"lint:markuplint": "npx markuplint --fix --no-allow-warnings \"packages/**/web/**/*.{tsx,jsx,html}\" \"packages/**/.storybook/**/*.{tsx,jsx}\"",
+		"lint:markuplint:check": "npx markuplint --no-allow-warnings \"packages/**/web/**/*.{tsx,jsx,html}\" \"packages/**/.storybook/**/*.{tsx,jsx}\"",
 		"lint:stylelint": "npx stylelint --fix \"packages/**/*.css\"",
 		"lint:stylelint:check": "npx stylelint \"packages/**/*.css\"",
 		"lint:textlint": "npx textlint --fix \"{*,./**/*}.{md,mdc}\" && npx textlint \"{*,./**/*}.{md,mdc}\"",
@@ -44,6 +39,11 @@
 		"co": "npx cz",
 		"update": "yarn upgrade-interactive"
 	},
+	"workspaces": [
+		"packages/@nitpicker/cli",
+		"packages/@nitpicker/*",
+		"packages/test-server"
+	],
 	"devDependencies": {
 		"@d-zero/lint-staged-config": "6.0.0-alpha.3",
 		"@d-zero/markuplint-config": "6.0.0-alpha.3",
@@ -70,9 +70,9 @@
 		"google-auth-library": "11.3.3",
 		"nx/undici": "7.30.1"
 	},
+	"packageManager": "yarn@4.18.1",
 	"volta": {
 		"node": "26.8.1",
 		"yarn": "4.18.1"
-	},
-	"packageManager": "yarn@4.18.1"
+	}
 }

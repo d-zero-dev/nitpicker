@@ -108,7 +108,7 @@
 		},
 		{
 			"groupName": "markuplint",
-			"matchPackageNames": ["markuplint", "/^@markuplint\\//"]
+			"matchPackageNames": ["@d-zero/markuplint-config", "/^@markuplint\\//"]
 		},
 		{
 			"groupName": "jsdom",
@@ -138,7 +138,6 @@
 			"groupName": "@d-zero configs",
 			"matchPackageNames": [
 				"@d-zero/lint-staged-config",
-				"@d-zero/markuplint-config",
 				"@d-zero/oxlint-config",
 				"@d-zero/oxlint-plugin",
 				"@d-zero/stylelint-config",

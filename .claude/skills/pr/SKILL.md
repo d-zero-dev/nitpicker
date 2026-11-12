@@ -6,7 +6,7 @@ description: プルリクエストの作成とプッシュ（プリフライト�
 1. `dev` や `main` ではないトピックブランチにいることを確認する。
 2. **base 追従（コンフリクト予防）**: `git fetch origin <base>` を実行し、`git log HEAD..origin/<base> --oneline` で base が進んでいないか確認する（base は通常 `dev`。エピックのサブブランチならそのエピックの base）。進んでいれば push 前に `git merge origin/<base>` で取り込む。**rebase はしない** — worktree では rebase 中の `git commit --amend` で husky のフック解決が壊れることがあり、merge ならレビュー済みの履歴がそのまま残る。ドキュメント系のコンフリクトは機械的に解決せず、base 側で追加された内容を方針（索引・JSDoc 配置）に沿って取り込むこと。
 3. **プリフライトチェック（必須 — 省略不可）:**
-   - `yarn lint`、`yarn build`、`yarn test` がこのセッション内でまだ実行・成功していない場合、続行する前に**今すぐ実行**する。base を取り込んだ場合は取り込み後に再実行する。`yarn lint` は rustfmt / clippy も含む。
+   - `yarn build`、`yarn lint`、`yarn test`（この順。型情報の lint が`lib/*.d.ts`を読む）がこのセッション内でまだ実行・成功していない場合、続行する前に**今すぐ実行**する。base を取り込んだ場合は取り込み後に再実行する。`yarn lint` は rustfmt / clippy も含む。
    - `packages/@nitpicker/core/` に変更がある場合は `yarn test:rust` も実行する（`yarn test` は Rust の crate に届かない）。
    - crawler / test-server / archive の変更で E2E に影響しうる場合は `yarn vitest run --config vitest.e2e.config.ts` も実行する。
    - 全てがパスしなければならない。失敗があれば続行前に修正する。

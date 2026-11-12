@@ -19,6 +19,7 @@
 		}
 	],
 	"ignorePatterns": [
+		".claude/settings.local.json",
 		"**/test-results/**",
 		"**/playwright-report/**",
 		"**/lib/**",

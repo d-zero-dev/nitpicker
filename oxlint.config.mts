@@ -1,14 +1,18 @@
 import config from '@d-zero/oxlint-config';
 
 /**
- * `eslint-plugin-react` / `react-hooks` / `jsx-a11y` の recommended 相当を、
- * oxlint のルール名で明示列挙する（oxlint は correctness カテゴリ以外を既定で有効にしない）。
- * oxlint に無い `react/no-deprecated` と、TypeScript では不要な `react/prop-types` は含めない。
+ * Lint is oxlint-native only; the ESLint-only rules below are intentionally absent:
+ * `no-restricted-syntax` (the `#private` over `private` convention is review-only),
+ * `import-x/*` (order, no-extraneous-dependencies), `sort-class-members`,
+ * `eslint-plugin-regexp` and `eslint-plugin-storybook`. oxlint has no equivalent of
+ * `react/no-deprecated`, `react/prop-types` (unneeded with TypeScript) or the React
+ * Compiler rules of `eslint-plugin-react-hooks`, so the viewer's react, react-hooks
+ * and jsx-a11y rules are enumerated explicitly (oxlint enables only the correctness
+ * category by default).
  */
 const viewerReactRules = Object.fromEntries(
 	[
 		'react/display-name',
-		'react/exhaustive-deps',
 		'react/jsx-key',
 		'react/jsx-no-comment-textnodes',
 		'react/jsx-no-duplicate-props',
@@ -61,18 +65,20 @@ const viewerReactRules = Object.fromEntries(
 	].map((rule) => [rule, 'error']),
 );
 
+// `exhaustive-deps` is advisory in the react-hooks recommended preset.
+viewerReactRules['react/exhaustive-deps'] = 'warn';
+
 export default {
 	...config,
 	jsPlugins: ['@d-zero/oxlint-plugin'],
 	rules: {
 		...config.rules,
-		// 型は TypeScript が持つので JSDoc に重ねて書かせない（v5 の eslint-config も同じ 5 ルールを無効にしていた）
+		// The types live in TypeScript; do not make JSDoc restate them.
 		'jsdoc/require-param-type': 'off',
 		'jsdoc/require-param-description': 'off',
 		'jsdoc/require-returns': 'off',
 		'jsdoc/require-returns-type': 'off',
 		'jsdoc/require-returns-description': 'off',
-		'typescript/ban-ts-comment': 'off',
 		'unicorn/prefer-event-target': 'off',
 		'typescript/no-floating-promises': 'error',
 	},

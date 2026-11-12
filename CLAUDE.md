@@ -48,7 +48,7 @@ yarn bench:smoke                                   # Rust 化の基準値ベン�
 yarn vitest run --config vitest.e2e.config.ts      # E2E（maxWorkers: 1、test-server はOS割り当ての動的ポート）
 yarn workspace @nitpicker/viewer test:e2e          # viewer の Playwright E2E
 yarn build                                         # 全パッケージビルド（@nitpicker/core のネイティブアドオンを cargo でビルドする）
-yarn lint                                          # oxlint（型情報あり）+ oxfmt + stylelint + markuplint + textlint + rustfmt + clippy
+yarn lint                                          # oxlint（型情報あり。各パッケージの lib/*.d.ts を読むため yarn build 済みであること）+ oxfmt + stylelint + markuplint + textlint + rustfmt + clippy。スペルチェックは無い
 ```
 
 - **Rust ツールチェーン必須**: `@nitpicker/core`は Rust（napi-rs）のネイティブアドオンで、`yarn build`が`cargo build`を呼ぶ。バージョンはルートの`rust-toolchain.toml`で固定（rustup が自動取得）。セットアップは CONTRIBUTING.md。ローカルでは cargo も`yarn test:rust`/`yarn lint`経由で実行し、直接叩かない（CI の`rust-test`ジョブだけは`yarn install`を省くため`test:rust`と同じコマンドを直接実行しており、`test:rust`を変えたら`.github/workflows/ci.yml`も合わせる）

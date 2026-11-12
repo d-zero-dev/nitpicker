@@ -3,7 +3,9 @@ import lintStagedConfigGenerator from '@d-zero/lint-staged-config';
 /**
  * `@d-zero/lint-staged-config` の既定マッピング（oxlint / oxfmt ベース）から、
  * このリポジトリで使う拡張子だけを写したもの。`defaultMapping` はパッケージの
- * エントリから export されていないため再利用できない。cspell は使わない。
+ * エントリから export されていないため再利用できない（元は同パッケージの
+ * `src/default-mapping.ts`）。パッケージが`defaultMapping`を export したらそれに置き換える。
+ * cspell は使わない。
  * pug / astro / vue / svelte のファイルは無い。
  */
 const mapping = {

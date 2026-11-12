@@ -100,8 +100,8 @@ git diff yarn.lock
 ## 6. 事前チェック
 
 ```bash
-yarn lint
 yarn build
+yarn lint
 yarn test
 ```
 
