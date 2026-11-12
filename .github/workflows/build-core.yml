@@ -60,7 +60,11 @@ jobs:
       - run: node packages/@nitpicker/core/scripts/verify-prebuilt.mjs core.linux-x64-gnu.node
 
   darwin-arm64:
-    runs-on: macos-14
+    # Pinned instead of `macos-latest`: this job produces the shipped binary,
+    # and the OS behind `latest` changes without notice. GitHub retires each
+    # macOS image after a fixed window; a retired label is not scheduled, so
+    # the job is cancelled with no runner and the release has no darwin binary.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
