@@ -95,11 +95,38 @@ export default {
 			},
 		},
 		{
+			// Maintenance and benchmark scripts are CLI tools: stdout is their interface.
+			files: [
+				'scripts/**',
+				'packages/@nitpicker/core/scripts/**',
+				'.claude/skills/*/scripts/**',
+			],
+			rules: {
+				'no-console': 'off',
+			},
+		},
+		{
 			files: ['packages/@nitpicker/viewer/web/**/*.{ts,tsx,js,jsx}'],
 			plugins: [...config.plugins, 'react', 'jsx-a11y'],
 			rules: {
 				...viewerReactRules,
 				'@d-zero/no-click-event': 'warn',
+			},
+		},
+		{
+			// Must come after the viewer override above: later overrides win.
+			// These tables are laid out with flexbox, which strips the native table
+			// semantics from the accessibility tree; the explicit `table`/`row`/
+			// `columnheader` roles restore them (see the comment above each `<table>`).
+			// Oxlint's jsx-a11y flags them as redundant and treats `tr` as interactive.
+			files: [
+				'packages/@nitpicker/viewer/web/components/paged-table.tsx',
+				'packages/@nitpicker/viewer/web/components/virtual-table.tsx',
+			],
+			plugins: [...config.plugins, 'react', 'jsx-a11y'],
+			rules: {
+				'jsx-a11y/no-redundant-roles': 'off',
+				'jsx-a11y/no-interactive-element-to-noninteractive-role': 'off',
 			},
 		},
 	],
