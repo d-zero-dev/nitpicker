@@ -90,6 +90,8 @@ export default {
 		'packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/**',
 		'packages/@nitpicker/archive/src/template-classification/golden/__golden__/**',
 		'.agents/**',
+		// Nested git worktrees of other sessions hold full copies of the repository.
+		'.claude/worktrees/**',
 	],
 	overrides: [
 		{
