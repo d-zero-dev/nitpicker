@@ -34,7 +34,7 @@ const READ_CHUNK_SIZE = 2000;
  *   — it assumes `viewer_pages` exists and trusts its content.
  * @param options - Read size and directory-prefix filters. Defaults to the
  *   whole site read in {@link READ_CHUNK_SIZE}-row chunks.
- * @yields One chunk's rows, in `natural_url_rank` order.
+ * @yields {PageListStreamRow[]} One chunk's rows, in `natural_url_rank` order.
  * @throws {RangeError} If `options.chunkSize` is not positive.
  * @throws {TypeError} If an `options.directories` entry is not a usable
  *   prefix (see `parsePageDirectoryPrefix`).

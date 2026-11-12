@@ -10,7 +10,7 @@ describe('createBenchResult', () => {
 				caseName: 'rust',
 				pageCount: 2,
 				archiveBytes: 3_312_640,
-				timeMs: 12.345_678,
+				timeMs: 12.345678,
 				peakRssBytes: 116_000_000,
 				metrics: { snapshots: 2 },
 				env: { node: 'v24.20.0', platform: 'linux', arch: 'x64' },

@@ -7,8 +7,9 @@ import type { Knex } from 'knex';
  * spread them into a column list — the same shape as
  * {@link import('./page-templates-join.js').templateKeySelectColumn}.
  *
- * The join itself is the caller's: `LEFT JOIN page_template_labels as ptl
- * ON ptl.template_key = pt.template_key`, only when both
+ * The join itself is the caller's:
+ * `LEFT JOIN page_template_labels as ptl ON ptl.template_key = pt.template_key`,
+ * only when both
  * {@link import('./page-templates-join.js').hasPageTemplatesTable} and
  * {@link import('./has-page-template-labels-table.js').hasPageTemplateLabelsTable}
  * hold (the label join hangs off the `pt` alias).

@@ -189,7 +189,7 @@ export function attachCrawlDisplay({
 	});
 
 	orchestrator.on('recoveringArchiveWrite', () => {
-		// eslint-disable-next-line no-console -- this fires well after the task list has settled; see this function's JSDoc above
+		// oxlint-disable-next-line no-console -- this fires well after the task list has settled; see this function's JSDoc above
 		console.error('[nitpicker] Recovering: retrying archive write');
 	});
 
@@ -229,13 +229,13 @@ export function attachCrawlDisplay({
 			new Promise<undefined>((resolve, reject) => {
 				if (bridge.skipRemaining) {
 					ctx.progress('skipped');
-					// eslint-disable-next-line unicorn/no-useless-undefined -- `Promise<undefined>`'s resolve requires the argument in this TS config
+					// oxlint-disable-next-line unicorn/no-useless-undefined -- `Promise<undefined>`'s resolve requires the argument in this TS config
 					resolve(undefined);
 					return;
 				}
 				bridge.active = {
 					ctx,
-					// eslint-disable-next-line unicorn/no-useless-undefined -- see above
+					// oxlint-disable-next-line unicorn/no-useless-undefined -- see above
 					resolve: () => resolve(undefined),
 					reject,
 				};

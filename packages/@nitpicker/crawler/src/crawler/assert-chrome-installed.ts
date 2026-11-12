@@ -1,3 +1,4 @@
+// oxlint-disable-next-line typescript/no-unused-vars -- referenced from JSDoc {@link} only
 import type { CrawlerOptions } from './types.js';
 
 import { existsSync } from 'node:fs';

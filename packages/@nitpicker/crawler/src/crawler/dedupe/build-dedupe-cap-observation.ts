@@ -19,8 +19,8 @@ import { resolveOgUrlMismatch } from './resolve-og-url-mismatch.js';
  * its threshold when the previous session ended would restart at count 0.
  *
  * Mirrors the exact exclusions the live crawl-time observation site applies
- * (`Crawler`'s `'page'` handler, gated on `!isExternal && !isMetadataOnly &&
- * html.length > 0`): `listDedupeCapObservations` already narrows to that
+ * (`Crawler`'s `'page'` handler, gated on
+ * `!isExternal && !isMetadataOnly && html.length > 0`): `listDedupeCapObservations` already narrows to that
  * same population at the SQL layer, so this function only needs to redo
  * the two per-row signal computations that can independently yield "no
  * signal" — `computeShapeKey` (a URL that fails to decompose) and

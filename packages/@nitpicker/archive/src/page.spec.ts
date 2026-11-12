@@ -46,7 +46,7 @@ function createRawPage(overrides: Partial<DB_Page> = {}): DB_Page {
 		responseHeaders: '{"content-type":"text/html"}',
 		lang: 'ja',
 		dir: null,
-		// eslint-disable-next-line unicorn/text-encoding-identifier-case -- HTML5 attribute value is canonically 'utf-8'.
+		// oxlint-disable-next-line unicorn/text-encoding-identifier-case -- HTML5 attribute value is canonically 'utf-8'.
 		charset: 'utf-8',
 		baseHref: null,
 		viewport_raw: null,

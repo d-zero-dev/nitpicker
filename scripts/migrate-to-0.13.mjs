@@ -168,8 +168,6 @@
  * `git clone` + `yarn build`.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import {
 	existsSync,
 	mkdirSync,

@@ -18,8 +18,6 @@
  * See `scripts/README.md`.
  */
 
-/* eslint-disable no-console */
-
 import process from 'node:process';
 
 import { BENCH_CASES } from './bench-lib/bench-cases.mjs';

@@ -334,10 +334,10 @@ export async function report(params: ReportParams) {
 
 	if (!silent) {
 		if (createsSpreadsheet) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.log(`\nCreated Spreadsheet: ${targetUrl}`);
 		}
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.log(`\nGenerating ${createSheetList.length} sheet(s)...\n`);
 	}
 
@@ -356,11 +356,11 @@ export async function report(params: ReportParams) {
 		await warnUnmatchedPageListUrls(accessor, normalizedUrls, collectWarning);
 	}
 	for (const warning of warnings) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(warning);
 	}
 	if (!silent) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.log('\nReport complete.');
 	}
 	return targetUrl;

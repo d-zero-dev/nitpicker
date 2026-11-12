@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { createRefTables } from '../create-ref-tables.js';
 import { LibsqlDialect } from '../libsql-dialect.js';
+import { compareStrings } from '../test-utils/compare-strings.js';
 
 import { populateContentTypeRefs } from './populate-content-type-refs.js';
 import { countRows } from './test-utils/count-rows.js';
@@ -71,7 +72,7 @@ describe('populateContentTypeRefs', () => {
 		]);
 		await populateContentTypeRefs(db);
 		const rows = await db('content_type_refs').select('raw');
-		expect(rows.map((r) => r.raw).toSorted()).toEqual([
+		expect(rows.map((r) => r.raw).toSorted(compareStrings)).toEqual([
 			'application/javascript',
 			'text/html',
 		]);

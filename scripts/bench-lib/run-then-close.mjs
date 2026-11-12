@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 /**
  * Runs `work`, then `close` — whichever way `work` ends. When both fail,
  * `work`'s error is the one rethrown (it is the cause; a failed cleanup

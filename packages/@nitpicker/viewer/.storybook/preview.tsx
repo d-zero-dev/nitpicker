@@ -25,6 +25,7 @@ const queryClient = new QueryClient({
  * Reflects the toolbar's `locale` global into the real `I18nProvider` via its
  * `setLocale`, the same setter `LanguageToggle` calls — no component-side
  * change needed to make the toolbar control authoritative.
+ * @param props - The toolbar's `locale` value and the stories to render under it.
  */
 function LocaleSync(props: { locale: Locale; children: ReactNode }) {
 	const { locale, setLocale } = useI18n();
@@ -46,6 +47,7 @@ function LocaleSync(props: { locale: Locale; children: ReactNode }) {
  * initial state from localStorage/`matchMedia` independently of this global,
  * so toggling the toolbar changes the page's CSS variables but not that
  * component's own rendered icon.
+ * @param props - The toolbar's `theme` value and the stories to render under it.
  */
 function ThemeSync(props: { theme: 'dark' | 'light'; children: ReactNode }) {
 	useEffect(() => {

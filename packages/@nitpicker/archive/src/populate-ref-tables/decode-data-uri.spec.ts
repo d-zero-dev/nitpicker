@@ -1,4 +1,3 @@
-// cSpell:ignore Csvg Fsvg
 import { describe, it, expect } from 'vitest';
 
 import { decodeDataUri } from './decode-data-uri.js';
@@ -40,10 +39,7 @@ describe('decodeDataUri', () => {
 		const uri = 'data:application/octet-stream,%FF%00%C3%A9';
 		const out = decodeDataUri(uri);
 		expect(out).not.toBeNull();
-		// Decimals rather than hex to sidestep the local prettier vs
-		// unicorn/number-literal-case conflict — prettier lowercases hex
-		// letters, unicorn demands uppercase. 255=0xFF, 0=0x00, 195=0xC3,
-		// 169=0xA9.
+		// Byte values: 255=0xFF, 0=0x00, 195=0xC3, 169=0xA9.
 		expect([...out!.bytes]).toEqual([255, 0, 195, 169]);
 	});
 });

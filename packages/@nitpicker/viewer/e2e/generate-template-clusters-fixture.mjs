@@ -258,5 +258,5 @@ await buildViewerReadModel(archive);
 
 await archive.write();
 await archive.close();
-// eslint-disable-next-line no-console
+// oxlint-disable-next-line no-console
 console.log(`E2E template-clusters fixture created: ${FIXTURE_PATH}`);

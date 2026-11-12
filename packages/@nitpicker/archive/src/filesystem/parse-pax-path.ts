@@ -31,9 +31,7 @@ export function parsePaxPath(data: Buffer): string | null {
 		if (recordEnd > data.length) {
 			return null;
 		}
-		// Decimal (not `0x3D`) to sidestep the Prettier/eslint hex-case
-		// conflict — see `parse-tar-size-field.ts` for the full explanation.
-		const equalsIndex = data.indexOf(61 /* '=' */, spaceIndex);
+		const equalsIndex = data.indexOf(0x3d /* '=' */, spaceIndex);
 		if (equalsIndex !== -1 && equalsIndex < recordEnd) {
 			const key = data.subarray(spaceIndex + 1, equalsIndex).toString('utf8');
 			if (key === 'path') {

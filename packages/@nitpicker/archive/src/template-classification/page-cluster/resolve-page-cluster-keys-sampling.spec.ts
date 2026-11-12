@@ -91,7 +91,7 @@ describe('resolvePageClusterKeys (async factory)', () => {
 		async function* asyncPages(): AsyncGenerator<PageClusterPage> {
 			for (const page of pages) {
 				// An `await` on any expression suffices to make this a valid
-				// async generator per @typescript-eslint/require-await; passing
+				// async generator per oxlint typescript/require-await; passing
 				// a resolved Promise keeps behavior identical to a plain yield.
 				yield await Promise.resolve(page);
 			}

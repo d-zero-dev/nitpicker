@@ -53,7 +53,7 @@ export async function startViewer(options: ViewerOptions): Promise<void> {
 	if (context.mode !== 'stub') {
 		const accessor = context.manager.get(context.archiveId);
 		if (!(await isViewerReadModelCurrent(accessor))) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.warn(
 				"\n  ⚠ This archive's viewer read model is missing or stale.\n" +
 					'    Pages/resources/links/images and similar list views will\n' +
@@ -66,7 +66,7 @@ export async function startViewer(options: ViewerOptions): Promise<void> {
 	// Assigned exactly once, right after this declaration — `let` is required
 	// because `shutdown` below must close over it before it exists, so it can
 	// still close the server if a signal arrives after `serve()` runs.
-	// eslint-disable-next-line prefer-const
+	// oxlint-disable-next-line prefer-const
 	let server: ReturnType<typeof serve> | undefined;
 	const shutdownPromise = new Promise<void>((resolve) => {
 		const shutdown = () => {
@@ -90,7 +90,7 @@ export async function startViewer(options: ViewerOptions): Promise<void> {
 
 	server = serve({ fetch: app.fetch, port, hostname: host });
 	const url = `http://${host}:${port}`;
-	// eslint-disable-next-line no-console
+	// oxlint-disable-next-line no-console
 	console.log(`\n  Nitpicker Viewer\n  ➜  ${url}\n  (Ctrl-C to stop)\n`);
 	if (open) {
 		openBrowser(url);

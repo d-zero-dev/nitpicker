@@ -16,8 +16,6 @@
  *     node scripts/bench-partial-listfilter.mjs <archive.nitpicker>
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -53,6 +51,7 @@ const db = knex({
 
 const accessor = { getKnex: () => db };
 
+/** @type {Array<[string, () => Promise<unknown>]>} */
 const CASES = [
 	['listPages offset0', () => listPages(accessor, { limit: 100, offset: 0 })],
 	[

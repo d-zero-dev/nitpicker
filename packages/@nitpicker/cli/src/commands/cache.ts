@@ -46,13 +46,13 @@ type CacheSubCommand = (typeof VALID_SUB_COMMANDS)[number];
 export async function cache(args: string[], flags: CacheFlags): Promise<void> {
 	const subCommandArg = args[0];
 	if (!subCommandArg || !VALID_SUB_COMMANDS.includes(subCommandArg as CacheSubCommand)) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			subCommandArg
 				? `Error: Unknown sub-command: ${subCommandArg}`
 				: 'Error: No sub-command specified.',
 		);
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			`Usage: npx @nitpicker/cli cache <${VALID_SUB_COMMANDS.join('|')}> [archive] [--json]`,
 		);
@@ -76,10 +76,10 @@ async function runList(cacheRoot: string, flags: CacheFlags): Promise<void> {
 	try {
 		const entries = await listArchiveCacheEntries(cacheRoot);
 		if (flags.json) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.log(JSON.stringify(entries));
 		} else {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.log(formatCacheList(entries, cacheRoot));
 		}
 	} catch (error) {
@@ -104,7 +104,7 @@ async function runClear(
 	if (!archiveArg) {
 		try {
 			const removed = await clearArchiveCacheRoot(cacheRoot);
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.log(
 				removed
 					? `Removed cache root: ${cacheRoot}`
@@ -122,13 +122,13 @@ async function runClear(
 		: path.resolve(process.cwd(), archiveArg);
 
 	if (!existsSync(absArchivePath)) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.log(`Archive not found (nothing to clear): ${absArchivePath}`);
 		return;
 	}
 
 	if (!statSync(absArchivePath).isFile()) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			`Error: Not a .nitpicker file (stub crawl directories are not supported): ${absArchivePath}`,
 		);
@@ -139,7 +139,7 @@ async function runClear(
 		const cacheKey = await computeArchiveCacheKey(absArchivePath);
 		const cacheDir = resolveArchiveCacheDir(cacheRoot, cacheKey, absArchivePath);
 		const removed = await clearArchiveCacheEntry(cacheDir);
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.log(
 			removed
 				? `Removed cache entry for ${absArchivePath}: ${cacheDir}`

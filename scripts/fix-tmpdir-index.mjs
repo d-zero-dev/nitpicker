@@ -7,8 +7,6 @@
  * archive is re-migrated via `scripts/add-perf-indexes.mjs`.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import knex from 'knex';
 
 import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';

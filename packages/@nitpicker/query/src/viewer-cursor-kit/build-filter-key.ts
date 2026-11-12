@@ -1,4 +1,18 @@
 /**
+ * Orders values by the UTF-16 code units of their string form — the order
+ * `Array.prototype.sort` uses without a comparator. The filter arrays are
+ * `unknown`-typed, so that default order is spelled out explicitly.
+ * @param a - Left value.
+ * @param b - Right value.
+ * @returns Negative, zero or positive, as `sort` expects.
+ */
+function compareAsStrings(a: unknown, b: unknown): number {
+	const left = String(a);
+	const right = String(b);
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/**
  * Builds the normalized `filterKey` embedded in a cursor: every present key
  * is coalesced `undefined → null` and the object is `JSON.stringify`d in the
  * caller's own key order — two calls with the same effective filters
@@ -29,7 +43,7 @@ export function buildFilterKey(filters: Record<string, unknown>): string {
 		normalized[key] = Array.isArray(value)
 			? value.length === 0
 				? null
-				: [...new Set(value)].toSorted()
+				: [...new Set(value as unknown[])].toSorted(compareAsStrings)
 			: (value ?? null);
 	}
 	return JSON.stringify(normalized);

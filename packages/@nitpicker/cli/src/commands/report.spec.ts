@@ -1,3 +1,5 @@
+import type * as ReportGoogleSheets from '@nitpicker/report-google-sheets';
+
 import { Lanes } from '@d-zero/dealer';
 import { report as runReport } from '@nitpicker/report-google-sheets';
 import { report as runHtmlReport } from '@nitpicker/report-html';
@@ -14,17 +16,18 @@ const mockLanesUpdate = vi.fn();
 const mockLanesClose = vi.fn();
 
 vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: {
-		update: typeof mockLanesUpdate;
-		close: typeof mockLanesClose;
-	}) {
-		this.update = mockLanesUpdate;
-		this.close = mockLanesClose;
-	}),
+	Lanes: vi
+		.fn()
+		.mockImplementation(
+			function (this: { update: typeof mockLanesUpdate; close: typeof mockLanesClose }) {
+				this.update = mockLanesUpdate;
+				this.close = mockLanesClose;
+			},
+		),
 }));
 
 vi.mock('@nitpicker/report-google-sheets', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('@nitpicker/report-google-sheets')>();
+	const actual = await importOriginal<typeof ReportGoogleSheets>();
 	return {
 		...actual,
 		report: vi.fn(),

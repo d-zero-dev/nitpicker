@@ -49,8 +49,6 @@
  *   this script. Not shipped in the npm package; obtain via `git clone`.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { createHash } from 'node:crypto';
 import {
 	existsSync,

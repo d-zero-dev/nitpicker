@@ -20,8 +20,6 @@
  *     node scripts/bench-alias-backfill.mjs <archive.nitpicker> [--json]
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import { backfillAliasOfId, backfillBodyHashFromHtmlBlobs } from '@nitpicker/query';
 
 import { countInternalPages } from './bench-lib/count-internal-pages.mjs';

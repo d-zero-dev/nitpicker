@@ -53,7 +53,7 @@ export async function migratePageTagsToPageTechnologies(
 	if (onLog) {
 		onLog(startMessage);
 	} else {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(startMessage);
 	}
 
@@ -88,7 +88,7 @@ export async function migratePageTagsToPageTechnologies(
 	if (onLog) {
 		onLog(endMessage);
 	} else {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(endMessage);
 	}
 }

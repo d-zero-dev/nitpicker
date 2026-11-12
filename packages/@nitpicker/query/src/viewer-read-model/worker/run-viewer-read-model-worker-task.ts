@@ -107,7 +107,7 @@ export async function runViewerReadModelWorkerTask(
 				// (the `settled` guard exists to make late 'exit' events, which
 				// fire on every normal run, harmless; a late worker-level error
 				// is not that — it is unexpected).
-				// eslint-disable-next-line no-console -- last-resort surface for an event no promise can relay anymore
+				// oxlint-disable-next-line no-console -- last-resort surface for an event no promise can relay anymore
 				console.warn(
 					`viewer read model worker '${task}' emitted an error after already settling: ${error instanceof Error ? error.message : String(error)}`,
 				);

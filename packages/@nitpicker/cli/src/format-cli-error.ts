@@ -17,22 +17,22 @@
  */
 export function formatCliError(error: unknown, verbose: boolean): void {
 	if (error instanceof Error) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(`Error: ${error.message}`);
 		if (verbose && error.stack) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(error.stack);
 		}
 		if (error instanceof SuppressedError) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error('Error during resource cleanup:');
 			formatCliError(error.error, verbose);
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error('Suppressed original error:');
 			formatCliError(error.suppressed, verbose);
 		}
 	} else {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(`Error: ${String(error)}`);
 	}
 }

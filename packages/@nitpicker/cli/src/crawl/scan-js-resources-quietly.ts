@@ -56,7 +56,7 @@ export async function scanJsResourcesQuietly(
 			if (onProgress) {
 				onProgress(message);
 			} else {
-				// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+				// oxlint-disable-next-line no-console -- --silent has no TaskList row to report through
 				console.error(`[nitpicker] JS resource technology scan: ${message}`);
 			}
 		}
@@ -67,7 +67,7 @@ export async function scanJsResourcesQuietly(
 		if (onProgress) {
 			onProgress(message);
 		} else {
-			// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+			// oxlint-disable-next-line no-console -- --silent has no TaskList row to report through
 			console.error(`[nitpicker] ${message}`);
 		}
 	}

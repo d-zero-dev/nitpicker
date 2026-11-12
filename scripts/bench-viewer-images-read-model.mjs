@@ -25,8 +25,6 @@
  * measuring realistic cold-cache I/O, which an in-memory DB can't produce.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -168,7 +166,7 @@ async function makeDb(n) {
  * @returns {object} An `ArchiveAccessor`-shaped stub.
  */
 function makeAccessorStub(db) {
-	return { readOnly: false, getKnex: () => db, getConfig: async () => CONFIG };
+	return { readOnly: false, getKnex: () => db, getConfig: () => Promise.resolve(CONFIG) };
 }
 
 /**

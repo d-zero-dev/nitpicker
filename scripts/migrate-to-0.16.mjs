@@ -53,8 +53,6 @@
  * `git clone` + `yarn build`.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { existsSync } from 'node:fs';
 import { copyFile, unlink } from 'node:fs/promises';
 import path from 'node:path';

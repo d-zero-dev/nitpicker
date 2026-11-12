@@ -2,6 +2,7 @@ import type { attachCrawlDisplay as AttachCrawlDisplayFn } from '../crawl/attach
 import type * as DealerModule from '@d-zero/dealer';
 import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
 import type { CrawlerOrchestrator as OrchestratorType } from '@nitpicker/crawler';
+import type * as NitpickerCrawler from '@nitpicker/crawler';
 
 import path from 'node:path';
 
@@ -26,8 +27,7 @@ vi.mock('@nitpicker/crawler', async () => {
 	// crawler-internal dependencies, so pulling the REAL class through
 	// `importActual` (rather than re-declaring a look-alike here) keeps
 	// that check meaningful without dragging in anything heavy.
-	const actual =
-		await vi.importActual<typeof import('@nitpicker/crawler')>('@nitpicker/crawler');
+	const actual = await vi.importActual<typeof NitpickerCrawler>('@nitpicker/crawler');
 	return {
 		CrawlerOrchestrator: {
 			crawling: mockCrawling,
@@ -225,7 +225,7 @@ vi.mock('node:fs/promises', () => ({
 	},
 }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+// oxlint-disable-next-line typescript/consistent-type-imports
 type CrawlFlags = Parameters<typeof import('./crawl.js').crawl>[1];
 
 /**

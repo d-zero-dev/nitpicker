@@ -5,6 +5,7 @@ import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listUnusedResources } from './list-unused-resources.js';
+import { compareStrings } from './test-utils/compare-strings.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -175,7 +176,7 @@ describe('listUnusedResources', () => {
 		const urls = result.items.map((row) => row.url);
 		// Expected: orphan.pdf + inventory-seed.pdf + inventory-discovered.png.
 		// Excluded: used.css (has a referrer), external.js (isExternal=1).
-		expect(urls.toSorted()).toEqual([
+		expect(urls.toSorted(compareStrings)).toEqual([
 			'https://example.com/inventory-discovered.png',
 			'https://example.com/inventory-seed.pdf',
 			'https://example.com/orphan.pdf',

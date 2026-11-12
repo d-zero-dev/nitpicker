@@ -23,8 +23,6 @@
  * NEVER runs `ANALYZE` — the listfilter invariant.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';

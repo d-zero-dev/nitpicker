@@ -67,7 +67,8 @@ export async function loadPageClusterCandidates(
 	// Only for progress: counted once up front. The archive is not written
 	// while it is classified, so `done` ends at `total`.
 	const countRow = (await internalHtml().count({ count: '*' }).first()) as
-		{ count: number | string } | undefined;
+		| { count: number | string }
+		| undefined;
 	const total = Number(countRow?.count ?? 0);
 
 	const candidates: PageClusterCandidate[] = [];

@@ -10,6 +10,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { Database } from './database.js';
 import { remove } from './filesystem/remove.js';
 import { LibsqlDialect } from './libsql-dialect.js';
+import { compareStrings } from './test-utils/compare-strings.js';
 
 vi.mock('./db-ops/resources/get-resource-url-list.js', () => ({
 	getResourceUrlList: vi.fn(),
@@ -946,7 +947,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 					anchorRows.map((r) => r.hrefId),
 				)
 				.select('url_refs.url as url');
-			const hrefs = targetPages.map((p) => p.url).toSorted();
+			const hrefs = targetPages.map((p) => p.url).toSorted(compareStrings);
 
 			// 古い target-b は消え、最新の {target-a, target-c} だけが残る。
 			expect(hrefs).toEqual(['http://localhost/target-a', 'http://localhost/target-c']);
@@ -1377,7 +1378,7 @@ describe('re-scrape: 同一ページの再 updatePage', () => {
 
 			// 両リンクが宛先の被リンクに合算される（http/https で分裂しない）。
 			const refs = await db.getReferrersOfPage(dest.id);
-			const urls = refs.map((r) => r.url).toSorted();
+			const urls = refs.map((r) => r.url).toSorted(compareStrings);
 			expect(urls).toEqual([
 				'http://localhost/linker-http',
 				'http://localhost/linker-https',
@@ -4911,7 +4912,7 @@ describe('insertInventoryResources', () => {
 				'http://localhost/asset-b.zip',
 			]);
 			const resources = await db.getResources();
-			expect(resources.map((r) => r.url).toSorted()).toEqual([
+			expect(resources.map((r) => r.url).toSorted(compareStrings)).toEqual([
 				'http://localhost/asset-a.pdf',
 				'http://localhost/asset-b.zip',
 			]);

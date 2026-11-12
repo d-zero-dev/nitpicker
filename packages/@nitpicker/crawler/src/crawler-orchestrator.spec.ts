@@ -198,7 +198,8 @@ const fakeCrawlerResumeCalls: {
  * `afterEach` to avoid leaking state.
  */
 let fakeCrawlerDriver:
-	((handlers: { handlers: Map<string, (payload: never) => void> }) => void) | null = null;
+	| ((handlers: { handlers: Map<string, (payload: never) => void> }) => void)
+	| null = null;
 
 afterEach(() => {
 	vi.restoreAllMocks();

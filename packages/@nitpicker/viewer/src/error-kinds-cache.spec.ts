@@ -5,14 +5,14 @@ import type {
 	ErrorKindEntry,
 	ErrorKindsResult,
 } from '@nitpicker/query';
+import type * as NitpickerQuery from '@nitpicker/query';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getCachedErrorKinds } from './error-kinds-cache.js';
 
 vi.mock('@nitpicker/query', async () => {
-	const actual =
-		await vi.importActual<typeof import('@nitpicker/query')>('@nitpicker/query');
+	const actual = await vi.importActual<typeof NitpickerQuery>('@nitpicker/query');
 	return {
 		...actual,
 		getErrorKinds: vi.fn(),
@@ -350,7 +350,7 @@ describe('getCachedErrorKinds', () => {
 			const context = makeContext('archive_opts_sort_bogus');
 
 			const result = await getCachedErrorKinds(context, {
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller (e.g. a raw query string).
+				// oxlint-disable-next-line typescript/no-explicit-any -- simulating an out-of-range value from an untyped caller (e.g. a raw query string).
 				sortBy: 'bogus' as any,
 			});
 			expect(result.items.map((i) => i.count)).toEqual([5, 3, 1]);

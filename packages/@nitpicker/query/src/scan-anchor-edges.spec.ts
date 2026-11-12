@@ -1,5 +1,6 @@
 import type { AnchorEdgeRow } from './types.js';
 import type { Knex } from 'knex';
+import type * as ReleaseFinishedStatements from '@nitpicker/archive/release-finished-statements';
 
 import path from 'node:path';
 
@@ -8,10 +9,7 @@ import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
-	const actual =
-		await importOriginal<
-			typeof import('@nitpicker/archive/release-finished-statements')
-		>();
+	const actual = await importOriginal<typeof ReleaseFinishedStatements>();
 	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
 });
 
@@ -276,7 +274,7 @@ describe('scanAnchorEdges', () => {
 			whereRaw: () => builder,
 			orderBy: () => builder,
 			limit: () => builder,
-			// eslint-disable-next-line unicorn/no-thenable
+			// oxlint-disable-next-line unicorn/no-thenable
 			then: (resolve: (value: unknown) => void) => {
 				resolve({ rows: [] });
 			},

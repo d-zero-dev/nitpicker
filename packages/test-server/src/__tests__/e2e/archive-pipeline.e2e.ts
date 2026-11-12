@@ -31,7 +31,7 @@ describe('Archive pipeline (.nitpicker write → reopen)', () => {
 			},
 			(q) => {
 				q.on('error', (e) => {
-					console.error('[nitpicker:e2e:archive] error:', e); // eslint-disable-line no-console
+					console.error('[nitpicker:e2e:archive] error:', e); // oxlint-disable-line no-console
 				});
 			},
 		);

@@ -188,7 +188,7 @@ export interface MainContentsMainTag {
 	role: string | null;
 	/**
 	 * A simple diagnostic CSS selector built from tag + id + classes
-	 * (not `@medv/finder`). // cspell:disable-line
+	 * (not `@medv/finder`).
 	 */
 	selector: string;
 }

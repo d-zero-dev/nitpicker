@@ -1,3 +1,5 @@
+import type * as UrlSortTempTable from './url-sort-temp-table.js';
+
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -8,7 +10,7 @@ import { findMismatches } from './find-mismatches.js';
 import { makeBeholderMeta } from './test-helpers/make-beholder-meta.js';
 
 vi.mock('./url-sort-temp-table.js', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('./url-sort-temp-table.js')>();
+	const actual = await importOriginal<typeof UrlSortTempTable>();
 	return { ...actual, ensureUrlSortTempTable: vi.fn(actual.ensureUrlSortTempTable) };
 });
 const { ensureUrlSortTempTable } = await import('./url-sort-temp-table.js');

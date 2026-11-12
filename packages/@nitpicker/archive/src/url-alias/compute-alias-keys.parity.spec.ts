@@ -103,7 +103,6 @@ const EXAMPLES = [
 	'https://日本語.example/a',
 	'https://xn--wgv71a119e.example/a',
 	'https://EXAMPLE.com./a',
-	// cspell:disable-next-line
 	'https://exa mple.com/a',
 	'https://exa%6Dple.com/a',
 	'https://example.com\t/a\n/b',

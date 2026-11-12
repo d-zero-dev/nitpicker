@@ -34,7 +34,7 @@ describe('Output path (filePath option)', () => {
 			},
 			(q) => {
 				q.on('error', (e) => {
-					console.error('[nitpicker:e2e:output-path] error:', e); // eslint-disable-line no-console
+					console.error('[nitpicker:e2e:output-path] error:', e); // oxlint-disable-line no-console
 				});
 			},
 		);
@@ -100,7 +100,7 @@ describe('Output path without extension', () => {
 			},
 			(q) => {
 				q.on('error', (e) => {
-					console.error('[nitpicker:e2e:output-bare] error:', e); // eslint-disable-line no-console
+					console.error('[nitpicker:e2e:output-bare] error:', e); // oxlint-disable-line no-console
 				});
 			},
 		);

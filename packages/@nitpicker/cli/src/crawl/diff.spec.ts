@@ -31,13 +31,17 @@ vi.mock('node:fs/promises', () => ({
 const mockLanesUpdate = vi.fn();
 
 vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: {
-		update: typeof mockLanesUpdate;
-		[Symbol.dispose]: ReturnType<typeof vi.fn>;
-	}) {
-		this.update = mockLanesUpdate;
-		this[Symbol.dispose] = vi.fn();
-	}),
+	Lanes: vi
+		.fn()
+		.mockImplementation(
+			function (this: {
+				update: typeof mockLanesUpdate;
+				[Symbol.dispose]: ReturnType<typeof vi.fn>;
+			}) {
+				this.update = mockLanesUpdate;
+				this[Symbol.dispose] = vi.fn();
+			},
+		),
 }));
 
 import { diff } from './diff.js';

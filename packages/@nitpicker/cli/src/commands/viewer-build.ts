@@ -54,9 +54,9 @@ async function ignoreEnoent(promise: Promise<unknown>): Promise<void> {
 /**
  * Unwraps a `TaskListStepError` (thrown by `TaskList.run()` when one of its
  * steps fails) down to the original cause, so the operator sees the real
- * error (`Error: disk full`) instead of dealer's step-wrapper text (`Error:
- * Step "Write archive" (index: 3) failed: disk full`). Passes any other
- * error through unchanged (issue #294). Mirrors `crawl.ts`'s helper of the
+ * error (`Error: disk full`) instead of dealer's step-wrapper text
+ * (`Error: Step "Write archive" (index: 3) failed: disk full`). Passes any
+ * other error through unchanged (issue #294). Mirrors `crawl.ts`'s helper of the
  * same name — an `instanceof` check, deliberately not a duck-typed
  * `'cause' in error` test, which would also match any unrelated error that
  * happens to carry a `cause`.
@@ -131,9 +131,9 @@ export async function viewerBuild(
 ): Promise<void> {
 	const filePath = args[0];
 	if (!filePath) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Error: No .nitpicker file specified.');
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			'Usage: npx @nitpicker/cli viewer-build <archive> [--force] [--skip-templates] [--verbose]',
 		);
@@ -149,13 +149,13 @@ export async function viewerBuild(
 		: path.resolve(process.cwd(), filePath);
 
 	if (!existsSync(absFilePath)) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(`Error: Archive not found: ${absFilePath}`);
 		process.exit(ExitCode.Fatal);
 	}
 
 	if (!statSync(absFilePath).isFile()) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			`Error: Not a .nitpicker file (stub crawl directories are not supported): ${absFilePath}`,
 		);
@@ -164,7 +164,7 @@ export async function viewerBuild(
 
 	const backupPath = `${absFilePath}.bak`;
 	if (existsSync(backupPath)) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(`Error: Stale backup present: ${backupPath} — remove it first`);
 		process.exit(ExitCode.Fatal);
 	}
@@ -345,7 +345,7 @@ export async function viewerBuild(
 	}
 	await lifecycle.archive?.close().catch(() => {});
 	if (lifecycle.templateClassificationError !== null) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			`Warning: page template classification failed (${lifecycle.templateClassificationError}). Retry with: npx @nitpicker/cli viewer-build ${filePath}`,
 		);

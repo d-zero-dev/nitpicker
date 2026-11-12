@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { buildFullSchemaTestDb } from '../test-utils/build-full-schema-test-db.js';
+import { compareStrings } from '../test-utils/compare-strings.js';
 
 import { attachSourceDatabase } from './attach-source-database.js';
 import { copyDictionariesForConcat } from './copy-dictionaries-for-concat.js';
@@ -52,7 +53,7 @@ describe('copyDictionariesForConcat', () => {
 			expect(sharedMap.dest_id).toBe(existingUrlRef.id);
 
 			const allUrlRows = await dest('url_refs').select('url');
-			expect(allUrlRows.map((r) => r.url).toSorted()).toEqual([
+			expect(allUrlRows.map((r) => r.url).toSorted(compareStrings)).toEqual([
 				'https://example.com/only-in-source',
 				'https://example.com/shared',
 			]);

@@ -7,7 +7,7 @@ describe('createSeededRandom', () => {
 		const random = createSeededRandom(1);
 
 		expect([random(), random(), random()]).toEqual([
-			0.627_073_940_588_161_3, 0.002_735_721_180_215_478, 0.527_447_039_959_952_2,
+			0.6270739405881613, 0.002735721180215478, 0.5274470399599522,
 		]);
 	});
 

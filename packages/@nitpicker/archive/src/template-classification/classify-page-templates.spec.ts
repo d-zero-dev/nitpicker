@@ -1,3 +1,5 @@
+import type * as ResolvePageClusterKeys from './page-cluster/resolve-page-cluster-keys.js';
+
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -11,8 +13,7 @@ import { collectPageIdsWithHtml } from './collect-page-ids-with-html.js';
 import { loadPageClusterCandidates } from './load-page-cluster-candidates.js';
 
 vi.mock('./page-cluster/resolve-page-cluster-keys.js', async (importOriginal) => {
-	const actual =
-		await importOriginal<typeof import('./page-cluster/resolve-page-cluster-keys.js')>();
+	const actual = await importOriginal<typeof ResolvePageClusterKeys>();
 	return {
 		...actual,
 		resolvePageClusterKeys: vi.fn(actual.resolvePageClusterKeys),

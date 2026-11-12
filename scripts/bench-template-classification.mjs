@@ -28,8 +28,6 @@
  *     node scripts/bench-template-classification.mjs <archive.nitpicker> [--case full] [--json]
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import { classifyArchivePageTemplates } from '@nitpicker/archive/template-classification/classify-archive-page-templates';
 
 import { countInternalPages } from './bench-lib/count-internal-pages.mjs';

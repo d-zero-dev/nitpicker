@@ -1,3 +1,5 @@
+import type * as FsPromises from 'node:fs/promises';
+
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -17,7 +19,7 @@ import { tar } from './tar.js';
 let totalBytesRead = 0;
 
 vi.mock('node:fs/promises', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('node:fs/promises')>();
+	const actual = await importOriginal<typeof FsPromises>();
 	return {
 		...actual,
 		open: async (...args: Parameters<typeof actual.open>) => {

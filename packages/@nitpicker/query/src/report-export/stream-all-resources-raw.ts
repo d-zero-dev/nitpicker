@@ -21,7 +21,7 @@ const READ_CHUNK_SIZE = 20_000;
  * `listViewerPages` + `getOutboundLinkFactsByPageIds` uses for Page List.
  * @param accessor - The archive accessor to query.
  * @param chunkSize - `resource_items` rows read per chunk. Must be positive.
- * @yields One chunk's rows, in `resource_items.id` order.
+ * @yields {ResourceStreamRow[]} One chunk's rows, in `resource_items.id` order.
  * @throws {RangeError} If `chunkSize` is not positive.
  * @example
  * for await (const chunk of streamAllResourcesRaw(accessor)) {

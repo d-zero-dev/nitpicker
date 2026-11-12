@@ -10,28 +10,36 @@ import { query } from './query.js';
 
 vi.mock('@nitpicker/query', () => ({
 	compileSelector: vi.fn(),
-	ArchiveManager: vi.fn().mockImplementation(function (this: {
-		open: ReturnType<typeof vi.fn>;
-		close: ReturnType<typeof vi.fn>;
-	}) {
-		this.open = vi.fn().mockResolvedValue({
-			archiveId: 'archive_1',
-			accessor: {},
-		});
-		this.close = vi.fn().mockResolvedValue();
-	}),
+	ArchiveManager: vi
+		.fn()
+		.mockImplementation(
+			function (this: {
+				open: ReturnType<typeof vi.fn>;
+				close: ReturnType<typeof vi.fn>;
+			}) {
+				this.open = vi.fn().mockResolvedValue({
+					archiveId: 'archive_1',
+					accessor: {},
+				});
+				this.close = vi.fn().mockResolvedValue();
+			},
+		),
 }));
 
 const mockLanesUpdate = vi.fn();
 
 vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: {
-		update: typeof mockLanesUpdate;
-		[Symbol.dispose]: ReturnType<typeof vi.fn>;
-	}) {
-		this.update = mockLanesUpdate;
-		this[Symbol.dispose] = vi.fn();
-	}),
+	Lanes: vi
+		.fn()
+		.mockImplementation(
+			function (this: {
+				update: typeof mockLanesUpdate;
+				[Symbol.dispose]: ReturnType<typeof vi.fn>;
+			}) {
+				this.update = mockLanesUpdate;
+				this[Symbol.dispose] = vi.fn();
+			},
+		),
 }));
 
 vi.mock('../query/dispatch-query.js', () => ({

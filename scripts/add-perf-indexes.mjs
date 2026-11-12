@@ -36,8 +36,6 @@
  * the per-index rationale.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';

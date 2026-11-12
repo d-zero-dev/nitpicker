@@ -1,9 +1,36 @@
 {
-	"extends": ["@d-zero/markuplint-config"],
+	"extends": ["@d-zero/markuplint-config/base", "@d-zero/markuplint-config/jsx"],
+	"pretenders": {
+		"auto": true
+	},
 	"overrides": {
 		"packages/@nitpicker/viewer/web/index.html": {
 			"rules": {
-				"required-h1": false
+				"require-h1": false
+			}
+		},
+		"packages/**/web/**/*.{tsx,jsx}": {
+			"rules": {
+				"security/no-event-handler-attr": false,
+				"d-zero/button-require-command": false,
+				"react/no-hard-code-id": false,
+				"performance/iframe-lazy-loading": false,
+				"a11y/no-merge-cells": false,
+				"a11y/require-accessible-name": false,
+				"a11y/redundant-accessible-name": false,
+				"a11y/wai-aria/disallowed-props": false,
+				"a11y/wai-aria/permitted-roles": false,
+				"a11y/wai-aria/presentational-children": false
+			}
+		},
+		"packages/@nitpicker/viewer/web/components/{paged-table,virtual-table,technology-star-chart}.tsx": {
+			"rules": {
+				"html-standard/permitted-contents": false,
+				"a11y/no-empty-table-track": false,
+				"a11y/table-row-column-alignment": false,
+				"a11y/wai-aria/implicit-role": false,
+				"a11y/wai-aria/no-global-prop": false,
+				"a11y/wai-aria/required-owned-elements": false
 			}
 		}
 	}

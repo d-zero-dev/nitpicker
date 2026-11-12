@@ -232,11 +232,11 @@ describe('getViewerErrorKinds', () => {
 			// instead of matching getErrorKinds()'s count-descending fallback.
 			const [viewerResult, liveResult] = await Promise.all([
 				getViewerErrorKinds(archive, {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller.
+					// oxlint-disable-next-line typescript/no-explicit-any -- simulating an out-of-range value from an untyped caller.
 					sortBy: 'bogus' as any,
 				}),
 				getErrorKinds(archive, {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller.
+					// oxlint-disable-next-line typescript/no-explicit-any -- simulating an out-of-range value from an untyped caller.
 					sortBy: 'bogus' as any,
 				}),
 			]);

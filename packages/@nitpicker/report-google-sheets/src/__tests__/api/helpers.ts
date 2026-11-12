@@ -131,7 +131,7 @@ export async function crawlTestServer(
 		},
 		(q) => {
 			q.on('error', (e) => {
-				console.error('[nitpicker:api-test] error:', e); // eslint-disable-line no-console
+				console.error('[nitpicker:api-test] error:', e); // oxlint-disable-line no-console
 			});
 		},
 	);

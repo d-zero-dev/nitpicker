@@ -68,8 +68,8 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('pagelist');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestPageList: CreateSheet = (accessor) => {
-			const setting = createPageList()(accessor);
+		const createTestPageList: CreateSheet = async (accessor) => {
+			const setting = await createPageList()(accessor);
 			return { ...setting, name: sheetName };
 		};
 
@@ -122,8 +122,8 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('links');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestLinks: CreateSheet = (accessor) => {
-			const setting = createLinks()(accessor);
+		const createTestLinks: CreateSheet = async (accessor) => {
+			const setting = await createLinks()(accessor);
 			return { ...setting, name: sheetName };
 		};
 
@@ -167,8 +167,8 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('resources');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestResources: CreateSheet = (accessor) => {
-			const setting = createResources()(accessor);
+		const createTestResources: CreateSheet = async (accessor) => {
+			const setting = await createResources()(accessor);
 			return { ...setting, name: sheetName };
 		};
 
@@ -201,8 +201,8 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('images');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestImageList: CreateSheet = (accessor) => {
-			const setting = createImageList()(accessor);
+		const createTestImageList: CreateSheet = async (accessor) => {
+			const setting = await createImageList()(accessor);
 			return { ...setting, name: sheetName };
 		};
 
@@ -249,8 +249,8 @@ describe('createSheets pipeline', () => {
 		const sheetName = testSheetName('resources-dedupe');
 		const sheets = new Sheets(SPREADSHEET_URL, auth);
 
-		const createTestResources: CreateSheet = (accessor) => {
-			const setting = createResources({ dedupe: true })(accessor);
+		const createTestResources: CreateSheet = async (accessor) => {
+			const setting = await createResources({ dedupe: true })(accessor);
 			return { ...setting, name: sheetName };
 		};
 

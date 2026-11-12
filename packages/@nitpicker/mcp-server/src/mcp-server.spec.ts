@@ -656,9 +656,10 @@ describe('createServer', () => {
 		expect(searchHtml?.description).toContain('no backreferences or look-around');
 		expect(searchHtml?.description).toContain('Unicode scalar value');
 		expect(searchHtml?.description).toContain('`d` `v` `y` are rejected');
-		const pattern = (
-			searchHtml?.inputSchema.properties as Record<string, { description: string }>
-		).pattern;
+		const properties = searchHtml?.inputSchema.properties as
+			| Record<string, { description: string }>
+			| undefined;
+		const pattern = properties?.pattern;
 		expect(pattern?.description).toContain('Rust regex syntax');
 	});
 

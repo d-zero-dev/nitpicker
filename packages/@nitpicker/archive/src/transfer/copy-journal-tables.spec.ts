@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { buildFullSchemaTestDb } from '../test-utils/build-full-schema-test-db.js';
+import { compareStrings } from '../test-utils/compare-strings.js';
 
 import { attachSourceDatabase } from './attach-source-database.js';
 import { copyJournalTables } from './copy-journal-tables.js';
@@ -48,7 +49,10 @@ describe('copyJournalTables', () => {
 		try {
 			await copyJournalTables(dest, 'concat');
 			const errors = await dest('crawl_errors').select('message');
-			expect(errors.map((e) => e.message).toSorted()).toEqual(['DNS', 'process error']);
+			expect(errors.map((e) => e.message).toSorted(compareStrings)).toEqual([
+				'DNS',
+				'process error',
+			]);
 			const outages = await dest('network_outages').select('trigger_error_count');
 			expect(outages).toHaveLength(1);
 		} finally {

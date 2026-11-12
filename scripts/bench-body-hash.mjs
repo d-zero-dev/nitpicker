@@ -33,8 +33,6 @@
  *     node scripts/bench-body-hash.mjs <archive.nitpicker> [--case rust|js] [--json]
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { computeBodyHash } from '@nitpicker/archive/body-hash/compute-body-hash';
 import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
 import { decodeStoredBlobBytes } from '@nitpicker/archive/decode-stored-blob-bytes';
@@ -68,7 +66,7 @@ async function loadJavaScriptBodyHash() {
 
 /** The implementation and its input decoder, per case in `BENCH_CASES['body-hash']`. */
 const ENGINES = {
-	rust: async () => ({ hash: computeBodyHash, decode: decodeStoredBlobBytes }),
+	rust: () => Promise.resolve({ hash: computeBodyHash, decode: decodeStoredBlobBytes }),
 	js: async () => ({ hash: await loadJavaScriptBodyHash(), decode: decodeStoredBlob }),
 };
 const loadEngine = ENGINES[caseName];

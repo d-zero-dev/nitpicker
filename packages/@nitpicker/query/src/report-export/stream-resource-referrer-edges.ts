@@ -25,7 +25,7 @@ const READ_CHUNK_SIZE = 20_000;
  * expose here: this table is already at its finest grain.
  * @param accessor - The archive accessor to query.
  * @param chunkSize - Rows read per chunk. Must be positive.
- * @yields One chunk's rows, in `(resource_id, page_id)` order.
+ * @yields {ResourceReferrerEdgeStreamRow[]} One chunk's rows, in `(resource_id, page_id)` order.
  * @throws {RangeError} If `chunkSize` is not positive.
  * @example
  * for await (const chunk of streamResourceReferrerEdges(accessor)) {

@@ -9,9 +9,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // (which runs the built CLI as a child process). The thin public faces
 // (build-viewer-read-model-in-worker / run-viewer-read-model-backfills-in-
 // worker) have their own delegation specs.
-const { MockWorker, mockWorkers } = vi.hoisted(() => {
-	// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-	const { EventEmitter } = require('node:events');
+const { MockWorker, mockWorkers } = await vi.hoisted(async () => {
+	const { EventEmitter } = await import('node:events');
 
 	const workers: MockWorker[] = [];
 

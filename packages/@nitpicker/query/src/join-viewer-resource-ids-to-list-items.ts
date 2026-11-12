@@ -10,8 +10,10 @@ interface ResourceJoinRow {
 	contentType: string | null;
 	contentLength: number | null;
 	isExternal: 0 | 1;
-	compress: string | 0 | '0.0';
-	cdn: string | 0 | '0.0';
+	/** Absent is written as `0` or the string `'0.0'`; both are normalised to `null`. */
+	compress: string | 0;
+	/** Absent is written as `0` or the string `'0.0'`; both are normalised to `null`. */
+	cdn: string | 0;
 	referrerCount: number;
 }
 

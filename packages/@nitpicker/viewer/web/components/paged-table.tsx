@@ -429,7 +429,6 @@ export function PagedTable<T>(props: PagedTableProps<T>) {
 											{header.column.getCanResize() && (
 												// The resizer is intentionally a focusable, keyboard-operable
 												// `<div role="separator">` — same trade-off as virtual-table.tsx.
-												/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- focusable resizer needs pointer/touch/keyboard handlers; see block comment above. */
 												<div
 													className={`pt-resizer${
 														header.column.getIsResizing() ? ' is-resizing' : ''
@@ -440,7 +439,6 @@ export function PagedTable<T>(props: PagedTableProps<T>) {
 													aria-valuemin={header.column.columnDef.minSize ?? 60}
 													aria-valuemax={MAX_COLUMN_WIDTH}
 													aria-valuenow={Math.round(header.getSize())}
-													// eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- see block comment above: focusable resizer is intentional.
 													tabIndex={0}
 													onMouseDown={header.getResizeHandler()}
 													onTouchStart={header.getResizeHandler()}

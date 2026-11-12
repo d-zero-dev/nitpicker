@@ -17,10 +17,10 @@ export async function readline(
 ) {
 	const stream = createReadStream(filePath);
 	const rLine = Readline.createInterface(stream);
-	const promiseBuffer: (Promise<void> | void)[] = [];
+	const promiseBuffer: Promise<void>[] = [];
 	await new Promise<void>((resolve) => {
 		rLine.on('line', (line) => {
-			promiseBuffer.push(callback(line));
+			promiseBuffer.push(Promise.resolve(callback(line)));
 		});
 		rLine.on('close', () => {
 			resolve();

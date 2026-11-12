@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { createRefTables } from '../create-ref-tables.js';
 import { LibsqlDialect } from '../libsql-dialect.js';
+import { compareStrings } from '../test-utils/compare-strings.js';
 
 import { populateHeaderTables } from './populate-header-tables.js';
 import { countRows } from './test-utils/count-rows.js';
@@ -74,12 +75,15 @@ describe('populateHeaderTables', () => {
 		]);
 		await populateHeaderTables(db);
 		const nameRows = await db('header_name_refs').select('name');
-		expect(nameRows.map((r) => r.name).toSorted()).toEqual([
+		expect(nameRows.map((r) => r.name).toSorted(compareStrings)).toEqual([
 			'cache-control',
 			'content-type',
 		]);
 		const valueRows = await db('header_value_refs').select('value');
-		expect(valueRows.map((r) => r.value).toSorted()).toEqual(['no-store', 'text/html']);
+		expect(valueRows.map((r) => r.value).toSorted(compareStrings)).toEqual([
+			'no-store',
+			'text/html',
+		]);
 		const entries = await db('header_set_entries').select();
 		expect(entries).toHaveLength(2);
 	});

@@ -16,7 +16,6 @@ import { assertU32Id } from './assert-u32-id.js';
 export function toU32Ids(values: ArrayLike<number>, what: string): Uint32Array {
 	const ids = new Uint32Array(values.length);
 	// `ArrayLike` has no iterator, so an index loop is the way to read it.
-	// eslint-disable-next-line unicorn/no-for-loop
 	for (let index = 0; index < values.length; index++) {
 		ids[index] = assertU32Id(values[index]!, what);
 	}

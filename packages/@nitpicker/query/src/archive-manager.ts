@@ -189,7 +189,7 @@ export class ArchiveManager {
 		this.#onWarn =
 			options.onWarn ??
 			((message) => {
-				// eslint-disable-next-line no-console
+				// oxlint-disable-next-line no-console
 				console.warn(message);
 			});
 		this.#onExtractProgress = options.onExtractProgress;

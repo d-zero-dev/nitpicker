@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { compareStrings } from '../../test-utils/compare-strings.js';
+
 import { buildSyntheticSite } from './build-synthetic-site.js';
 
 describe('buildSyntheticSite', () => {
@@ -28,7 +30,10 @@ describe('buildSyntheticSite', () => {
 			...pages.flatMap((page) => page.stylesheetHrefs.map((href) => new URL(href).host)),
 		]);
 
-		expect([...hosts].toSorted()).toEqual(['cdn.example.net', 'golden.example']);
+		expect([...hosts].toSorted(compareStrings)).toEqual([
+			'cdn.example.net',
+			'golden.example',
+		]);
 	});
 
 	it('contentRoot のヒントは blog の 4 ページに 3 ページだけ付く', () => {

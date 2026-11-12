@@ -27,8 +27,6 @@
  * cold-cache I/O, which an in-memory DB can't produce.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -60,10 +58,10 @@ const CONFIG = {
  * Simulates a missing archive sidecar file for benchmark-only accessor stubs.
  * @returns Never resolves successfully.
  */
-async function getMissingData() {
+function getMissingData() {
 	const error = new Error('not found');
 	error.code = 'ENOENT';
-	throw error;
+	return Promise.reject(error);
 }
 
 /**
@@ -207,7 +205,7 @@ async function buildReadModel(db, dbFilePath) {
 	const accessorStub = {
 		readOnly: false,
 		getKnex: () => db,
-		getConfig: async () => CONFIG,
+		getConfig: () => Promise.resolve(CONFIG),
 		getData: getMissingData,
 	};
 	const start = process.hrtime.bigint();
@@ -279,7 +277,7 @@ const EXPLAIN_ORDER_BY = {
 async function runMatrix(db, n) {
 	const accessorStub = {
 		getKnex: () => db,
-		getConfig: async () => CONFIG,
+		getConfig: () => Promise.resolve(CONFIG),
 		getData: getMissingData,
 	};
 	const app = createApp({

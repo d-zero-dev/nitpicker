@@ -69,7 +69,7 @@ describe('deriveFlatFromMeta', () => {
 			makeMeta({
 				lang: 'ja',
 				dir: 'ltr',
-				// eslint-disable-next-line unicorn/text-encoding-identifier-case -- HTML5 attribute value is canonically 'utf-8'.
+				// oxlint-disable-next-line unicorn/text-encoding-identifier-case -- HTML5 attribute value is canonically 'utf-8'.
 				charset: 'utf-8',
 				description: '  spaced  ',
 				keywords: 'foo, bar',

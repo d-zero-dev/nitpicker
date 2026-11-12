@@ -71,7 +71,7 @@ describe('generatePredictedUrls', () => {
 		const pattern = {
 			tokenIndex: 2,
 			step: 1e100,
-			currentNumber: 1.771_585_412_605_219_7e100,
+			currentNumber: 1.7715854126052197e100,
 		};
 		const urls = generatePredictedUrls(pattern, '//example.com/news/date/2024/', 10);
 		for (const url of urls) {

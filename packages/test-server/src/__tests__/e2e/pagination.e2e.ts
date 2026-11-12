@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { compareStrings } from './compare-strings.js';
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
 import { TEST_SERVER_PORT } from './test-server-port.js';
 
@@ -24,7 +25,7 @@ describe('Speculative pagination (path-based)', () => {
 
 	it('page/1〜page/10 が全てDBに保存されている', async () => {
 		const pages = await result.accessor.getPages('internal-page');
-		const pathnames = pages.map((p) => p.url.pathname).toSorted();
+		const pathnames = pages.map((p) => p.url.pathname).toSorted(compareStrings);
 		for (let i = 1; i <= 10; i++) {
 			expect(pathnames).toContain(`/pagination/page/${i}`);
 		}

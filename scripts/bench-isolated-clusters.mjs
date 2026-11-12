@@ -26,8 +26,6 @@
  *     node scripts/bench-isolated-clusters.mjs <archive.nitpicker> [--json]
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import { computeIsolatedClusters } from '@nitpicker/query';
 
 import { SQLITE_IN_CHUNK } from '../packages/@nitpicker/query/lib/sqlite-in-chunk.js';

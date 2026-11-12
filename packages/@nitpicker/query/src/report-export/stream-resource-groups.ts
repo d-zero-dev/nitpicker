@@ -18,7 +18,7 @@ const READ_CHUNK_SIZE = 5000;
  *   for confirming the read model is built and current before calling this
  *   — it assumes `viewer_resource_groups` exists and trusts its content.
  * @param chunkSize - `viewer_resource_groups` rows read per chunk. Must be positive.
- * @yields One chunk's rows, in `group_id` order.
+ * @yields {ResourceGroupStreamRow[]} One chunk's rows, in `group_id` order.
  * @throws {RangeError} If `chunkSize` is not positive.
  * @example
  * for await (const chunk of streamResourceGroups(accessor)) {

@@ -510,9 +510,15 @@ export function createServer() {
 							await listConsoleLogs(accessor, {
 								type: optionalString(args, 'type'),
 								sortBy: optionalString(args, 'sortBy') as
-									'totalCount' | 'pageCount' | 'text' | 'type' | undefined,
+									| 'totalCount'
+									| 'pageCount'
+									| 'text'
+									| 'type'
+									| undefined,
 								sortOrder: optionalString(args, 'sortOrder') as
-									'asc' | 'desc' | undefined,
+									| 'asc'
+									| 'desc'
+									| undefined,
 								limit: optionalNumber(args, 'limit'),
 								offset: optionalNumber(args, 'offset'),
 							}),
@@ -527,7 +533,12 @@ export function createServer() {
 					case 'find_duplicates': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						const field = args.field
-							? validateEnum(String(args.field), VALID_DUPLICATE_FIELDS, 'field')
+							? // `validateEnum` rejects anything that is not an allowed field name.
+								validateEnum(
+									String(args.field as string),
+									VALID_DUPLICATE_FIELDS,
+									'field',
+								)
 							: undefined;
 						return jsonResult(
 							await getDuplicatesFastPath(accessor, {
@@ -573,9 +584,14 @@ export function createServer() {
 								offset: optionalNumber(args, 'offset'),
 								urlPattern: optionalString(args, 'urlPattern'),
 								sortBy: optionalString(args, 'sortBy') as
-									'url' | 'actual' | 'expected' | undefined,
+									| 'url'
+									| 'actual'
+									| 'expected'
+									| undefined,
 								sortOrder: optionalString(args, 'sortOrder') as
-									'asc' | 'desc' | undefined,
+									| 'asc'
+									| 'desc'
+									| undefined,
 								cursor: optionalString(args, 'cursor'),
 								onSortProgress,
 							}),

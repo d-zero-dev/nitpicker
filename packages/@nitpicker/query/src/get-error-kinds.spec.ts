@@ -222,7 +222,7 @@ describe('getErrorKinds', () => {
 		// An unvalidated `?sortBy=` from a hand-edited URL or stray API call
 		// must not reach `sortArrayItems` with a key its config doesn't define.
 		const result = await getErrorKinds(archive, {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller (e.g. a raw query string).
+			// oxlint-disable-next-line typescript/no-explicit-any -- simulating an out-of-range value from an untyped caller (e.g. a raw query string).
 			sortBy: 'bogus' as any,
 		});
 

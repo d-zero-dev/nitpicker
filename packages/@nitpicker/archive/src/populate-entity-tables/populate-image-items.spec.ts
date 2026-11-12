@@ -15,8 +15,8 @@ import { setupMigrationDb } from './test-utils/setup-entities-db.js';
 
 /**
  * Builds an `unknown/<id>` resolver — every image gets the synthetic
- * fallback path. Kept non-async because the eslint
- * `@typescript-eslint/require-await` rule bans `async` bodies with no
+ * fallback path. Kept non-async because the oxlint
+ * `typescript/require-await` rule bans `async` bodies with no
  * `await`; `Promise.resolve` produces the same `Promise<...>` return
  * type the `PageDomPathResolver` contract in `populate-image-items.ts`
  * requires.
@@ -187,7 +187,7 @@ describe('populateImageItems', () => {
 		};
 		await populateImageItems(db, resolver);
 		// Each pageId visited exactly once.
-		expect(resolverCalls.toSorted()).toEqual([1, 2]);
+		expect(resolverCalls.toSorted((a, b) => a - b)).toEqual([1, 2]);
 		expect(await countRows(db, 'image_items')).toBe(21);
 	});
 

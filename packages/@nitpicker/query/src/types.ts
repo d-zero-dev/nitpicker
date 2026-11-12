@@ -32,6 +32,10 @@ import type { Knex } from 'knex';
 // `PageListItem.templateLabel` don't reach across packages for it.
 export type { TemplateLabel } from '@nitpicker/archive/db-ops/templates/types';
 
+// Re-exported for the viewer's cluster block-kind type, which is derived from
+// `TemplateClusterBlockingEvidence['reason']['kind']`.
+export type { TemplateClusterBlockingEvidence } from '@nitpicker/archive/db-ops/templates/types';
+
 /**
  * One row of {@link import('./list-isolated-pages.js').listIsolatedPages} output — a **完全孤立** (singleton)
  * inventory-* HTML page with no resolved-anchor inbound from any other
@@ -1435,7 +1439,7 @@ export interface ListViewerPagesOptions {
 	 */
 	isRedirectSource?: boolean | boolean[];
 	/** Filter by provenance — see {@link PageSource}. */
-	source?: import('@nitpicker/archive/types').PageSource;
+	source?: PageSource;
 	/**
 	 * Filter by exact DOM-structure template classification group key,
 	 * or any of several (OR). This IS supported by the fast path:

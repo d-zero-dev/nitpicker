@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 /**
  * Runs the selected benches' cases one after another and collects the
  * records, carrying on past a failed case so one broken bench does not hide

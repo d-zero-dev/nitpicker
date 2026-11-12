@@ -14,8 +14,8 @@ import { findScopeEntry } from '../scope/find-scope-entry.js';
  * target" — a write-time fact this transfer never re-derives, per
  * ARCHITECTURE.md's invariant), `resource_items.is_external` is a pure
  * scope check computed the same way at crawl time
- * (`@nitpicker/crawler`'s `Crawler#handleResources`: `findScopeEntry(url, this.#scope)
- * === null`). Concat's merged scope is a union of every source's roots,
+ * (`@nitpicker/crawler`'s `Crawler#handleResources`:
+ * `findScopeEntry(url, this.#scope) === null`). Concat's merged scope is a union of every source's roots,
  * so a resource one source recorded as external can legitimately become
  * internal-by-scope in the output even though nothing about the resource
  * itself changed — recomputing this is the resource-table equivalent of

@@ -27,7 +27,11 @@ import { useI18n } from '../i18n/use-i18n.js';
  */
 function field(row: LinkRow, key: string): string {
 	const value = (row as unknown as Record<string, unknown>)[key];
-	return value == null ? '' : String(value);
+	if (value == null) {
+		return '';
+	}
+	// Link row properties are strings or numbers (the status code).
+	return typeof value === 'string' ? value : `${value as number}`;
 }
 
 /**

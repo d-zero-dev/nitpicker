@@ -103,8 +103,12 @@
 			"matchPackageNames": ["/^@testing-library\\//"]
 		},
 		{
-			"groupName": "eslint-plugins",
-			"matchPackageNames": ["/^eslint-plugin-/", "@types/eslint-plugin-jsx-a11y"]
+			"groupName": "oxlint",
+			"matchPackageNames": ["oxlint", "oxlint-tsgolint"]
+		},
+		{
+			"groupName": "markuplint",
+			"matchPackageNames": ["@d-zero/markuplint-config", "/^@markuplint\\//"]
 		},
 		{
 			"groupName": "jsdom",
@@ -133,11 +137,9 @@
 		{
 			"groupName": "@d-zero configs",
 			"matchPackageNames": [
-				"@d-zero/cspell-config",
-				"@d-zero/eslint-config",
 				"@d-zero/lint-staged-config",
-				"@d-zero/markuplint-config",
-				"@d-zero/prettier-config",
+				"@d-zero/oxlint-config",
+				"@d-zero/oxlint-plugin",
 				"@d-zero/stylelint-config",
 				"@d-zero/textlint-config"
 			]

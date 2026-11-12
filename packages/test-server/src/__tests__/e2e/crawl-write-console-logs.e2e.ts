@@ -3,6 +3,7 @@ import type { Knex } from 'knex';
 import { getPageConsoleLogs, listConsoleLogs } from '@nitpicker/query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { compareStrings } from './compare-strings.js';
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
 import { TEST_SERVER_ORIGIN } from './test-server-port.js';
 
@@ -41,7 +42,7 @@ describe('crawl captures console logs / page errors into console_log_items and p
 	it('captures every console message type on a page that logs, warns, and errors', async () => {
 		const knex = result.accessor.getKnex();
 		const rows = await getConsoleLogRows(knex, '/console-logs/mixed/');
-		const types = rows.map((r) => r.type).toSorted();
+		const types = rows.map((r) => r.type).toSorted(compareStrings);
 		expect(types).toEqual(['error', 'log', 'warn']);
 	});
 

@@ -1,3 +1,4 @@
+// oxlint-disable-next-line typescript/no-unused-vars -- referenced from JSDoc {@link} only
 import type { HeaderPresence, HeaderPresenceKey } from '../types.js';
 import type { Knex } from 'knex';
 

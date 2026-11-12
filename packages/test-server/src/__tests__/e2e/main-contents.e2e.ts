@@ -71,7 +71,7 @@ describe('main-content extraction (real headless-browser DOM heuristic, issue: b
 		expect(buttons).toHaveLength(1);
 		expect(buttons[0]!.nodeName).toBe('BUTTON');
 		// removeSpaces() strips ALL whitespace (not just trim), collapsing "Click me".
-		expect(buttons[0]!.text).toBe('Clickme'); // cspell:disable-line
+		expect(buttons[0]!.text).toBe('Clickme');
 
 		const iframes = await page.getIframes();
 		expect(iframes).toHaveLength(1);

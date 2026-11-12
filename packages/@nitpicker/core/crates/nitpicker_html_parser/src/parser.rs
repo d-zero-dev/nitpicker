@@ -4,8 +4,6 @@
 //! `onclosetag` events a handler would receive, each with the `startIndex` /
 //! `endIndex` the handler would read from the parser at that moment.
 
-// cspell:ignore fedropshadow
-
 use std::ops::Range;
 
 use crate::js_lower_case::to_lower_case_js;

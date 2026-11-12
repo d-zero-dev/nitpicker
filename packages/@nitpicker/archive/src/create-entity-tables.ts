@@ -107,8 +107,8 @@ import type { Knex } from 'knex';
  * for the pair); duplicate observations are counted via `count` without
  * retaining their bodies. The UNIQUE constraint's auto-index on
  * `(page_id, href_page_id)` also serves any `WHERE page_id = ?` seek via
- * SQLite's leading-prefix rule, so no separate `CREATE INDEX ... ON
- * anchor_edges(page_id)` is needed; only the reverse-direction
+ * SQLite's leading-prefix rule, so no separate
+ * `CREATE INDEX ... ON anchor_edges(page_id)` is needed; only the reverse-direction
  * `idx_anchor_edges_href` on `href_page_id` alone is added.
  *
  * **`image_items.dom_path_text_id NOT NULL`.** Every image row must
@@ -128,8 +128,8 @@ import type { Knex } from 'knex';
  * and the viewer would arbitrarily pick one to render.
  *
  * **`resource_items` url / blob mutual-exclusion CHECK.** Same rationale
- * as the image CHECK above, but stricter: `(url_id IS NULL) !=
- * (url_blob_id IS NULL)` requires EXACTLY one slot to be non-null (not
+ * as the image CHECK above, but stricter:
+ * `(url_id IS NULL) != (url_blob_id IS NULL)` requires EXACTLY one slot to be non-null (not
  * "at most one") because a resource — unlike an `<img>` that can
  * legitimately have neither `src` nor `currentSrc` — is always
  * identified by some URL. `resolveUrlOrBlob` (writer) /
@@ -179,8 +179,8 @@ import type { Knex } from 'knex';
  *
  * ### Idempotency
  *
- * All statements use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT
- * EXISTS` so the primitive is safe to call multiple times against the
+ * All statements use `CREATE TABLE IF NOT EXISTS` /
+ * `CREATE INDEX IF NOT EXISTS` so the primitive is safe to call multiple times against the
  * same DB. Both call sites (`initSchema` and
  * `migrateEntityTables`) still guard on their own sentinels,
  * but the function itself no longer depends on the sentinel being

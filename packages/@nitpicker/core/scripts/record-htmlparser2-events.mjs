@@ -23,6 +23,8 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { compareStrings } from '../../../../scripts/compare-strings.mjs';
+
 const PINNED_VERSION = '12.0.0';
 const FIXTURES = 'archive/src/template-classification/page-cluster/__fixtures__';
 
@@ -80,7 +82,7 @@ function record(html) {
 	for (let index = 0; index < html.length; index++) {
 		byteOffset[index] = bytes;
 		// One UTF-16 unit at a time, as htmlparser2's indices count them.
-		// eslint-disable-next-line unicorn/prefer-code-point
+		// oxlint-disable-next-line unicorn/prefer-code-point
 		const code = html.charCodeAt(index);
 		if (code < 0x80) bytes += 1;
 		else if (code < 0x8_00) bytes += 2;
@@ -134,14 +136,16 @@ function htmlFiles(directory) {
 	return readdirSync(directory, { recursive: true })
 		.filter((file) => file.endsWith('.html'))
 		.map((file) => file.split(path.sep).join('/'))
-		.toSorted();
+		.toSorted(compareStrings);
 }
 
 const fixturesDir = path.resolve(packageDir, '..', FIXTURES);
 const rows = [];
 for (const file of htmlFiles(fixturesDir)) {
 	const html = readFileSync(path.join(fixturesDir, file), 'utf8');
-	const codePoints = [...html];
+	// Split by code point (what `[...html]` does); `typescript/no-misused-spread`
+	// rejects spreading a string and `unicorn/prefer-spread` rejects `Array.from`.
+	const codePoints = html.match(/[\s\S]/gu) ?? [];
 	rows.push(`${file}\tall\t${record(html)}`);
 	for (const fraction of [1, 2]) {
 		const count = Math.floor((codePoints.length * fraction) / 3);
