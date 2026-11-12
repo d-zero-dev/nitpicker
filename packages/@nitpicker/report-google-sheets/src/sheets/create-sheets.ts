@@ -133,7 +133,7 @@ export async function createSheets(params: CreateSheetsParams) {
 
 	sheetLog('Initializing %d sheet setting(s)', createSheetList.length);
 	const settings = await Promise.all(
-		createSheetList.map((createSheet) => createSheet(accessor)),
+		createSheetList.map((createSheet) => Promise.resolve(createSheet(accessor))),
 	);
 	sheetLog(
 		'Sheet settings initialized: %O',

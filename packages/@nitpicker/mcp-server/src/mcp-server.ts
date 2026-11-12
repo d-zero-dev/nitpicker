@@ -533,7 +533,13 @@ export function createServer() {
 					case 'find_duplicates': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						const field = args.field
-							? validateEnum(String(args.field), VALID_DUPLICATE_FIELDS, 'field')
+							? validateEnum(
+									typeof args.field === 'string'
+										? args.field
+										: JSON.stringify(args.field),
+									VALID_DUPLICATE_FIELDS,
+									'field',
+								)
 							: undefined;
 						return jsonResult(
 							await getDuplicatesFastPath(accessor, {

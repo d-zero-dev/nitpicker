@@ -18,7 +18,7 @@ import { report } from './report.js';
  */
 async function sheetNamesOf(createSheetList: readonly CreateSheet[]): Promise<string[]> {
 	const settings = await Promise.all(
-		createSheetList.map((createSheet) => createSheet({} as never)),
+		createSheetList.map((createSheet) => Promise.resolve(createSheet({} as never))),
 	);
 	return settings.map((setting) => setting.name);
 }

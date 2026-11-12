@@ -20,7 +20,7 @@ import { expect } from 'vitest';
 export function assertNoLazyCells(rows: readonly CellType[][]): void {
 	for (const row of rows) {
 		for (const cell of row) {
-			expect(cell.provide).toBe(Cell.prototype.provide);
+			expect(Reflect.get(cell, 'provide')).toBe(Reflect.get(Cell.prototype, 'provide'));
 		}
 	}
 }
