@@ -1,3 +1,5 @@
+import type * as GoogleSheets from '@d-zero/google-sheets';
+
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { resolveSpreadsheetUrl } from './resolve-spreadsheet-url.js';
@@ -7,7 +9,7 @@ const { mockCreateSpreadsheet } = vi.hoisted(() => ({
 }));
 
 vi.mock('@d-zero/google-sheets', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('@d-zero/google-sheets')>();
+	const actual = await importOriginal<typeof GoogleSheets>();
 	return {
 		parseGoogleUrl: actual.parseGoogleUrl,
 		createSpreadsheet: mockCreateSpreadsheet,

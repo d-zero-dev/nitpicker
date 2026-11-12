@@ -1,4 +1,6 @@
 import type { CreateSheet } from './sheets/types.js';
+import type * as GoogleSheets from '@d-zero/google-sheets';
+import type * as NitpickerQuery from '@nitpicker/query';
 
 import enquirer from 'enquirer';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
@@ -31,7 +33,7 @@ const resolveAndValidatePageListUrlFilter = vi.fn();
 const warnUnmatchedPageListUrls = vi.fn();
 
 vi.mock('@nitpicker/query', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('@nitpicker/query')>();
+	const actual = await importOriginal<typeof NitpickerQuery>();
 	return {
 		...actual,
 		resolveAndValidatePageListUrlFilter: (...args: unknown[]) =>
@@ -49,7 +51,7 @@ const { mockCreateSpreadsheet } = vi.hoisted(() => ({
 // `parseGoogleUrl` stays real so the folder-vs-Spreadsheet branching under test
 // is the library's own; only the Drive API call (`createSpreadsheet`) is stubbed.
 vi.mock('@d-zero/google-sheets', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('@d-zero/google-sheets')>();
+	const actual = await importOriginal<typeof GoogleSheets>();
 	return {
 		parseGoogleUrl: actual.parseGoogleUrl,
 		createSpreadsheet: mockCreateSpreadsheet,

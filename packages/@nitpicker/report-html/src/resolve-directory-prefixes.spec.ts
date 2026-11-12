@@ -1,4 +1,5 @@
 import type { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
+import type * as NitpickerQuery from '@nitpicker/query';
 
 import enquirer from 'enquirer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +11,7 @@ const countPageListRows = vi.fn();
 const countPageListHostnames = vi.fn();
 
 vi.mock('@nitpicker/query', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('@nitpicker/query')>();
+	const actual = await importOriginal<typeof NitpickerQuery>();
 	return {
 		...actual,
 		countPageListRows: (...args: unknown[]) => countPageListRows(...args),

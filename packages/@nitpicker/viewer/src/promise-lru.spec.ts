@@ -1,5 +1,3 @@
-/* oxlint-disable typescript/require-await -- spec uses async arrow fixtures whose body is intentionally synchronous to model 'instant load'. */
-
 import { describe, expect, it } from 'vitest';
 
 import { createPromiseLru } from './promise-lru.js';

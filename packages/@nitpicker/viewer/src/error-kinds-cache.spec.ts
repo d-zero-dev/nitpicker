@@ -5,14 +5,14 @@ import type {
 	ErrorKindEntry,
 	ErrorKindsResult,
 } from '@nitpicker/query';
+import type * as NitpickerQuery from '@nitpicker/query';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getCachedErrorKinds } from './error-kinds-cache.js';
 
 vi.mock('@nitpicker/query', async () => {
-	const actual =
-		await vi.importActual<typeof import('@nitpicker/query')>('@nitpicker/query');
+	const actual = await vi.importActual<typeof NitpickerQuery>('@nitpicker/query');
 	return {
 		...actual,
 		getErrorKinds: vi.fn(),

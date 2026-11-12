@@ -1,5 +1,6 @@
 import type { CreateSheet, CreateSheetSetting, RunSheetContext } from './types.js';
 import type { MockSheet } from '../test-helpers/create-mock-sheet.js';
+import type * as EstimateCellBudget from './estimate-cell-budget.js';
 
 import { requireViewerReadModel } from '@nitpicker/query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -13,7 +14,7 @@ vi.mock('@nitpicker/query', () => ({
 }));
 
 vi.mock('./estimate-cell-budget.js', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('./estimate-cell-budget.js')>();
+	const actual = await importOriginal<typeof EstimateCellBudget>();
 	// `estimateCellBudget`'s own `budget` parameter defaults to a
 	// *module-local* reference to `CELL_BUDGET_LIMIT` inside the real
 	// (unmocked) module, so simply overriding the exported constant here

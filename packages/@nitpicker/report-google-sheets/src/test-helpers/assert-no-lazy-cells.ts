@@ -20,9 +20,7 @@ import { expect } from 'vitest';
 export function assertNoLazyCells(rows: readonly CellType[][]): void {
 	for (const row of rows) {
 		for (const cell of row) {
-			// `Reflect.get` instead of `cell.provide`: referencing the method value
-			// trips `typescript/unbound-method`, and the identity is what is asserted.
-			expect(Reflect.get(cell, 'provide')).toBe(Reflect.get(Cell.prototype, 'provide'));
+			expect(cell.provide).toBe(Cell.prototype.provide);
 		}
 	}
 }
