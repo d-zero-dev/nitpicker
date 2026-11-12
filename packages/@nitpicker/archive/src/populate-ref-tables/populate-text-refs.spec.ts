@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { createRefTables } from '../create-ref-tables.js';
 import { LibsqlDialect } from '../libsql-dialect.js';
+import { compareStrings } from '../test-utils/compare-strings.js';
 
 import { computeContentHash } from './compute-content-hash.js';
 import { populateTextRefs } from './populate-text-refs.js';
@@ -124,9 +125,7 @@ describe('populateTextRefs (text-refs-dedup)', () => {
 		]);
 		await populateTextRefs(db);
 		const rows = await db('text_refs').select('text').orderBy('text');
-		expect(
-			rows.map((r) => r.text).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-		).toEqual(
+		expect(rows.map((r) => r.text).toSorted(compareStrings)).toEqual(
 			['d1', 'k1', 'od1', 'ot1', 'r1', 't1', 'td1', 'tt1'].toSorted((a, b) =>
 				a < b ? -1 : a > b ? 1 : 0,
 			),

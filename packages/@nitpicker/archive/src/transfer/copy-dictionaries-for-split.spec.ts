@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { buildFullSchemaTestDb } from '../test-utils/build-full-schema-test-db.js';
+import { compareStrings } from '../test-utils/compare-strings.js';
 import { seedContentItem } from '../test-utils/seed-content-item.js';
 
 import { attachSourceDatabase } from './attach-source-database.js';
@@ -68,9 +69,10 @@ describe('copyDictionariesForSplit', () => {
 			// Both kept and stub pages' own url_id is a content-item-level
 			// need (a stub still carries its own identity URL).
 			const urls = await dest('url_refs').select('url');
-			expect(
-				urls.map((u) => u.url).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-			).toEqual(['https://example.com/blog/', 'https://example.com/referenced/']);
+			expect(urls.map((u) => u.url).toSorted(compareStrings)).toEqual([
+				'https://example.com/blog/',
+				'https://example.com/referenced/',
+			]);
 		} finally {
 			await dropTransferTempTables(dest);
 			await detach();

@@ -1,4 +1,5 @@
 import type { Config } from './types.js';
+import type * as Debug from './debug.js';
 
 import path from 'node:path';
 
@@ -10,7 +11,7 @@ import { remove } from './filesystem/remove.js';
 const dbLog = vi.hoisted(() => vi.fn());
 
 vi.mock('./debug.js', async (importOriginal) => ({
-	...(await importOriginal<typeof import('./debug.js')>()),
+	...(await importOriginal<typeof Debug>()),
 	dbLog,
 }));
 
