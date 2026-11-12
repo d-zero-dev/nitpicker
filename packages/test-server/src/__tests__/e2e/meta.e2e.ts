@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { compareStrings } from './compare-strings.js';
 import { type CrawlResult, cleanup, crawl } from './helpers.js';
 import { TEST_SERVER_ORIGIN } from './test-server-port.js';
 
@@ -71,9 +72,7 @@ describe('Meta tag extraction (v2 schema)', () => {
 		expect(page).toBeDefined();
 
 		const entries = await page!.getJsonLd();
-		const types = entries
-			.map((e) => e.type)
-			.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+		const types = entries.map((e) => e.type).toSorted(compareStrings);
 		expect(types).toEqual(['BreadcrumbList', 'Product']);
 		expect(page!.jsonldCount).toBe(2);
 	});
