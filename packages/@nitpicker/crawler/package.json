@@ -30,9 +30,9 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/beholder": "5.0.1",
-		"@d-zero/dealer": "1.14.0",
-		"@d-zero/shared": "0.23.0",
+		"@d-zero/beholder": "5.0.2",
+		"@d-zero/dealer": "1.14.1",
+		"@d-zero/shared": "0.23.1",
 		"@nitpicker/archive": "0.25.0",
 		"ansi-colors": "4.1.3",
 		"debug": "4.4.3",

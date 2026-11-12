@@ -30,7 +30,7 @@
 		"clean": "tsc --build --clean"
 	},
 	"dependencies": {
-		"@d-zero/dealer": "1.14.0",
+		"@d-zero/dealer": "1.14.1",
 		"@nitpicker/archive": "0.25.0",
 		"@nitpicker/query": "0.25.0",
 		"@nitpicker/viewer": "0.25.0",
@@ -39,7 +39,7 @@
 		"react-dom": "19.3.1"
 	},
 	"devDependencies": {
-		"@d-zero/shared": "0.23.0",
-		"vitest": "5.0.5"
+		"@d-zero/shared": "0.23.1",
+		"vitest": "5.1.0"
 	}
 }

@@ -8,7 +8,7 @@
 	"type": "module",
 	"dependencies": {
 		"@hono/node-server": "2.1.5",
-		"hono": "4.13.13"
+		"hono": "4.13.16"
 	},
 	"devDependencies": {
 		"@nitpicker/archive": "0.25.0",
@@ -16,6 +16,6 @@
 		"@nitpicker/query": "0.25.0",
 		"await-event-emitter": "2.0.2",
 		"knex": "3.3.0",
-		"vitest": "5.0.5"
+		"vitest": "5.1.0"
 	}
 }

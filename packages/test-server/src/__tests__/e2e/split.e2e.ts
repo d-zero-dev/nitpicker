@@ -183,7 +183,9 @@ describe('split', () => {
 			cwd,
 		);
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain('-o/--output');
+		// Behavior change: the missing-flag error names the flag as `--output` only, without the `-o` alias
+		expect(result.stderr).toContain('Missing required flag: --output');
+		// expect(result.stderr).toContain('-o/--output'); // previous
 	});
 
 	it('cleans up after a mid-pipeline failure (a corrupted source), leaving no output file or stray tmpDir behind', async () => {

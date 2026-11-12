@@ -132,7 +132,9 @@ async function readLeadingBytes(
 					clearTimeout(timeoutHandle);
 					destroyed = true;
 					req.destroy();
-					resolve(Buffer.concat(chunks));
+					// A single chunk can straddle the cap (the socket may deliver far more
+					// than `byteLimit` at once), so trim to the cap or a match beyond it leaks in.
+					resolve(Buffer.concat(chunks).subarray(0, byteLimit));
 				}
 			});
 			res.on('end', () => {
