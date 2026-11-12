@@ -206,7 +206,7 @@ describe('getResourceReferrerPageEdges', () => {
 		expect(pageIds).toHaveLength(2);
 		expect(
 			pageIds
-				.map((pageId) => urlByPageId.get(pageId) ?? '')
+				.map((pageId) => urlByPageId.get(pageId)!)
 				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
 		).toEqual(['https://example.com', 'https://example.com/about']);
 	});

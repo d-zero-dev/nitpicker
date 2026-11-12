@@ -52,4 +52,14 @@ describe('buildFilterKey', () => {
 	it('normalizes an empty array to the same key as undefined — both mean "no filter"', () => {
 		expect(buildFilterKey({ status: [] })).toBe(buildFilterKey({ status: undefined }));
 	});
+
+	it('orders array elements by their string form, so numbers sort like text', () => {
+		expect(buildFilterKey({ status: [20, 100, 3] })).toBe('{"status":[100,20,3]}');
+	});
+
+	it('orders mixed-type array elements by their string form and keeps undefined last', () => {
+		expect(buildFilterKey({ status: ['b', 10, true, undefined, 'a'] })).toBe(
+			'{"status":[10,"a","b",true,null]}',
+		);
+	});
 });
