@@ -2,6 +2,8 @@ import type { DedupeCapObservation } from './crawler/dedupe/types.js';
 import type { NetworkProbe } from './crawler/probe-network.js';
 import type {
 	CrawlerEventTypes,
+	// oxlint-disable-next-line typescript/no-unused-vars -- referenced from JSDoc {@link} only
+	CrawlerOptions,
 	CrawlRuntimeOptions,
 	CrawlRuntimeOptionsPatch,
 	InventoryMode,
@@ -135,7 +137,7 @@ interface CrawlConfig extends Config {
 	userAgent: string;
 
 	/**
-	 * See {@link import('./crawler/types.js').CrawlerOptions.requestHeaders}. Runtime-only: the values are
+	 * See {@link CrawlerOptions.requestHeaders}. Runtime-only: the values are
 	 * never written to the archive (`INFO_COLUMN_ALLOWLIST` has no such
 	 * column); only the names are, as `requestHeaderNames`.
 	 */
@@ -152,38 +154,38 @@ interface CrawlConfig extends Config {
 	inventoryMode: InventoryMode | null;
 
 	/**
-	 * See {@link import('./crawler/types.js').CrawlerOptions.networkOutageWindowMs}. Omitted (`undefined`
+	 * See {@link CrawlerOptions.networkOutageWindowMs}. Omitted (`undefined`
 	 * on the `Partial<CrawlConfig>` callers actually pass) falls through to
 	 * `Crawler`'s own default — this field exists so tests can shrink the
 	 * window for a fast, deterministic outage-detection cycle.
 	 */
 	networkOutageWindowMs: number;
 
-	/** See {@link import('./crawler/types.js').CrawlerOptions.networkOutageErrorThreshold}. */
+	/** See {@link CrawlerOptions.networkOutageErrorThreshold}. */
 	networkOutageErrorThreshold: number;
 
-	/** See {@link import('./crawler/types.js').CrawlerOptions.networkOutageHostThreshold}. */
+	/** See {@link CrawlerOptions.networkOutageHostThreshold}. */
 	networkOutageHostThreshold: number;
 
-	/** See {@link import('./crawler/types.js').CrawlerOptions.networkOutageProbeIntervalMs}. */
+	/** See {@link CrawlerOptions.networkOutageProbeIntervalMs}. */
 	networkOutageProbeIntervalMs: number;
 
 	/**
-	 * See {@link import('./crawler/types.js').CrawlerOptions.networkProbe}. The seam tests use to simulate
+	 * See {@link CrawlerOptions.networkProbe}. The seam tests use to simulate
 	 * confirmed outages and recoveries deterministically without touching
 	 * the real network — plumbed through from `CrawlerOrchestrator.crawling`'s
 	 * `options` so an E2E test can inject it via the public API.
 	 */
 	networkProbe: NetworkProbe | null;
 
-	/** See {@link import('./crawler/types.js').CrawlerOptions.dedupeCap}. `null`/omitted disables the feature. */
+	/** See {@link CrawlerOptions.dedupeCap}. `null`/omitted disables the feature. */
 	dedupeCap: number | null;
 
-	/** See {@link import('./crawler/types.js').CrawlerOptions.dedupeMapCap}. Omitted falls through to `Crawler`'s own default. */
+	/** See {@link CrawlerOptions.dedupeMapCap}. Omitted falls through to `Crawler`'s own default. */
 	dedupeMapCap: number;
 
 	/**
-	 * See {@link import('./crawler/types.js').CrawlerOptions.preloadedStickyShapeKeys}. Set internally by
+	 * See {@link CrawlerOptions.preloadedStickyShapeKeys}. Set internally by
 	 * the five resuming-session static methods
 	 * (`append`/`inventory`/`recrawl`/`retryFailed`/`resume`), each
 	 * independently calling `archive.listDedupeCapShapeKeys()`; not part of
@@ -192,7 +194,7 @@ interface CrawlConfig extends Config {
 	preloadedStickyShapeKeys: readonly string[];
 
 	/**
-	 * See {@link import('./crawler/types.js').CrawlerOptions.preloadedDedupeObservations}. Set internally
+	 * See {@link CrawlerOptions.preloadedDedupeObservations}. Set internally
 	 * by the same five resuming-session static methods as
 	 * {@link preloadedStickyShapeKeys}, each calling
 	 * `archive.listDedupeCapObservations()` and mapping the rows through
@@ -204,7 +206,7 @@ interface CrawlConfig extends Config {
 	/**
 	 * A `Lanes` instance owned by the caller (typically the CLI), forwarded
 	 * to {@link Crawler} so `deal()` reuses it instead of creating its own —
-	 * see {@link import('./crawler/types.js').CrawlerOptions.lanes}. Not part of {@link Config}: it is a
+	 * see {@link CrawlerOptions.lanes}. Not part of {@link Config}: it is a
 	 * live object, never persisted to (or read back from) the archive's
 	 * `info` row.
 	 */

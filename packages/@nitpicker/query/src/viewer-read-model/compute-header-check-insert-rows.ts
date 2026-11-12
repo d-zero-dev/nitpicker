@@ -1,4 +1,5 @@
-import type { HeaderPresenceKey } from '../types.js';
+// oxlint-disable-next-line typescript/no-unused-vars -- referenced from JSDoc {@link} only
+import type { HeaderPresence, HeaderPresenceKey } from '../types.js';
 import type { Knex } from 'knex';
 
 import { buildHeaderPresenceSelects } from '../build-header-presence-selects.js';
@@ -20,13 +21,13 @@ export interface HeaderCheckInsertRow {
 	page_id: number;
 	/** Copied from `url_refs.url` verbatim — see `viewer_header_checks`'s table docs. */
 	url_sort_key: string;
-	/** Normalised `0`/`1` form of {@link import('../types.js').HeaderPresence.hasCSP}. */
+	/** Normalised `0`/`1` form of {@link HeaderPresence.hasCSP}. */
 	has_csp: 0 | 1;
-	/** Normalised `0`/`1` form of {@link import('../types.js').HeaderPresence.hasXFrameOptions}. */
+	/** Normalised `0`/`1` form of {@link HeaderPresence.hasXFrameOptions}. */
 	has_x_frame_options: 0 | 1;
-	/** Normalised `0`/`1` form of {@link import('../types.js').HeaderPresence.hasXContentTypeOptions}. */
+	/** Normalised `0`/`1` form of {@link HeaderPresence.hasXContentTypeOptions}. */
 	has_x_content_type_options: 0 | 1;
-	/** Normalised `0`/`1` form of {@link import('../types.js').HeaderPresence.hasHSTS}. */
+	/** Normalised `0`/`1` form of {@link HeaderPresence.hasHSTS}. */
 	has_hsts: 0 | 1;
 	/** Count of {@link HEADER_PRESENCE_KEYS} that are absent (`0`-`4`). */
 	missing_count: number;
