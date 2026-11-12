@@ -2,7 +2,6 @@ import type { DedupeCapObservation } from './crawler/dedupe/types.js';
 import type { NetworkProbe } from './crawler/probe-network.js';
 import type {
 	CrawlerEventTypes,
-	CrawlerOptions,
 	CrawlRuntimeOptions,
 	CrawlRuntimeOptionsPatch,
 	InventoryMode,
@@ -136,7 +135,7 @@ interface CrawlConfig extends Config {
 	userAgent: string;
 
 	/**
-	 * See {@link CrawlerOptions.requestHeaders}. Runtime-only: the values are
+	 * See {@link import('./crawler/types.js').CrawlerOptions.requestHeaders}. Runtime-only: the values are
 	 * never written to the archive (`INFO_COLUMN_ALLOWLIST` has no such
 	 * column); only the names are, as `requestHeaderNames`.
 	 */
@@ -153,38 +152,38 @@ interface CrawlConfig extends Config {
 	inventoryMode: InventoryMode | null;
 
 	/**
-	 * See {@link CrawlerOptions.networkOutageWindowMs}. Omitted (`undefined`
+	 * See {@link import('./crawler/types.js').CrawlerOptions.networkOutageWindowMs}. Omitted (`undefined`
 	 * on the `Partial<CrawlConfig>` callers actually pass) falls through to
 	 * `Crawler`'s own default — this field exists so tests can shrink the
 	 * window for a fast, deterministic outage-detection cycle.
 	 */
 	networkOutageWindowMs: number;
 
-	/** See {@link CrawlerOptions.networkOutageErrorThreshold}. */
+	/** See {@link import('./crawler/types.js').CrawlerOptions.networkOutageErrorThreshold}. */
 	networkOutageErrorThreshold: number;
 
-	/** See {@link CrawlerOptions.networkOutageHostThreshold}. */
+	/** See {@link import('./crawler/types.js').CrawlerOptions.networkOutageHostThreshold}. */
 	networkOutageHostThreshold: number;
 
-	/** See {@link CrawlerOptions.networkOutageProbeIntervalMs}. */
+	/** See {@link import('./crawler/types.js').CrawlerOptions.networkOutageProbeIntervalMs}. */
 	networkOutageProbeIntervalMs: number;
 
 	/**
-	 * See {@link CrawlerOptions.networkProbe}. The seam tests use to simulate
+	 * See {@link import('./crawler/types.js').CrawlerOptions.networkProbe}. The seam tests use to simulate
 	 * confirmed outages and recoveries deterministically without touching
 	 * the real network — plumbed through from `CrawlerOrchestrator.crawling`'s
 	 * `options` so an E2E test can inject it via the public API.
 	 */
 	networkProbe: NetworkProbe | null;
 
-	/** See {@link CrawlerOptions.dedupeCap}. `null`/omitted disables the feature. */
+	/** See {@link import('./crawler/types.js').CrawlerOptions.dedupeCap}. `null`/omitted disables the feature. */
 	dedupeCap: number | null;
 
-	/** See {@link CrawlerOptions.dedupeMapCap}. Omitted falls through to `Crawler`'s own default. */
+	/** See {@link import('./crawler/types.js').CrawlerOptions.dedupeMapCap}. Omitted falls through to `Crawler`'s own default. */
 	dedupeMapCap: number;
 
 	/**
-	 * See {@link CrawlerOptions.preloadedStickyShapeKeys}. Set internally by
+	 * See {@link import('./crawler/types.js').CrawlerOptions.preloadedStickyShapeKeys}. Set internally by
 	 * the five resuming-session static methods
 	 * (`append`/`inventory`/`recrawl`/`retryFailed`/`resume`), each
 	 * independently calling `archive.listDedupeCapShapeKeys()`; not part of
@@ -193,7 +192,7 @@ interface CrawlConfig extends Config {
 	preloadedStickyShapeKeys: readonly string[];
 
 	/**
-	 * See {@link CrawlerOptions.preloadedDedupeObservations}. Set internally
+	 * See {@link import('./crawler/types.js').CrawlerOptions.preloadedDedupeObservations}. Set internally
 	 * by the same five resuming-session static methods as
 	 * {@link preloadedStickyShapeKeys}, each calling
 	 * `archive.listDedupeCapObservations()` and mapping the rows through
@@ -205,7 +204,7 @@ interface CrawlConfig extends Config {
 	/**
 	 * A `Lanes` instance owned by the caller (typically the CLI), forwarded
 	 * to {@link Crawler} so `deal()` reuses it instead of creating its own —
-	 * see {@link CrawlerOptions.lanes}. Not part of {@link Config}: it is a
+	 * see {@link import('./crawler/types.js').CrawlerOptions.lanes}. Not part of {@link Config}: it is a
 	 * live object, never persisted to (or read back from) the archive's
 	 * `info` row.
 	 */
@@ -361,7 +360,6 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		return this.#archive;
 	}
 
-	// eslint-disable-next-line no-restricted-syntax
 	private constructor(archive: Archive, options?: Partial<CrawlConfig>) {
 		super();
 
@@ -714,7 +712,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 						networkOutageSummaryCounter.confirmedCount++;
 						networkOutageSummaryCounter.totalDurationMs += durationMs;
 						crawlerLog('Network outage recovered: id=%d endedAt=%d', id, endedAt);
-						// eslint-disable-next-line no-console -- see the confirmed handler above
+						// oxlint-disable-next-line no-console -- see the confirmed handler above
 						console.error(`[network] recovered after ${Math.round(durationMs / 1000)}s`);
 						return this.#archive.closeNetworkOutage(id, endedAt);
 					})
@@ -1086,6 +1084,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			const {
 				scraped,
 				pending,
+				// oxlint-disable-next-line typescript/no-useless-default-assignment -- the type is never nullish, the default only serves mocked archives
 				pendingMetadataOnly = [],
 			} = await this.#archive.getCrawlingState();
 			if (pending.length === 0) {
@@ -1134,7 +1133,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 					`[auto-retry] ${pending.length} pending page(s) remain — retry ${attempt}/${this.#maxAutoRetry} in %countdown(${delayMs},autoRetry,s)%s`,
 				);
 			} else {
-				// eslint-disable-next-line no-console -- see comment above
+				// oxlint-disable-next-line no-console -- see comment above
 				console.error(
 					`[auto-retry] ${pending.length} pending page(s) remain — waiting ${Math.round(delayMs / 1000)}s before retry ${attempt}/${this.#maxAutoRetry}`,
 				);
@@ -1454,6 +1453,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				const {
 					scraped,
 					pending,
+					// oxlint-disable-next-line typescript/no-useless-default-assignment -- the type is never nullish, the default only serves mocked archives
 					pendingMetadataOnly = [],
 				} = await archive.getCrawlingState();
 				const mergedRootKeys = new Set(
@@ -1695,7 +1695,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				if (setupProgress?.onLog) {
 					setupProgress.onLog(message);
 				} else {
-					// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+					// oxlint-disable-next-line no-console -- --silent has no TaskList row to report through
 					console.warn(message);
 				}
 			}
@@ -2083,7 +2083,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				if (setupProgress?.onLog) {
 					setupProgress.onLog(message);
 				} else {
-					// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+					// oxlint-disable-next-line no-console -- --silent has no TaskList row to report through
 					console.warn(message);
 				}
 			}
@@ -2106,7 +2106,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				if (setupProgress?.onLog) {
 					setupProgress.onLog(message);
 				} else {
-					// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+					// oxlint-disable-next-line no-console -- --silent has no TaskList row to report through
 					console.warn(message);
 				}
 			}
@@ -2155,7 +2155,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 				if (setupProgress?.onLog) {
 					setupProgress.onLog(summaryMessage);
 				} else {
-					// eslint-disable-next-line no-console -- --silent has no TaskList row to report through
+					// oxlint-disable-next-line no-console -- --silent has no TaskList row to report through
 					console.warn(summaryMessage);
 				}
 
@@ -2816,6 +2816,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 		const {
 			scraped,
 			pending,
+			// oxlint-disable-next-line typescript/no-useless-default-assignment -- the type is never nullish, the default only serves mocked archives
 			pendingMetadataOnly = [],
 		} = await archive.getCrawlingState();
 		// Unlike `append`/`inventory`/`recrawl`/`retryFailed`, this path
@@ -2907,7 +2908,7 @@ export class CrawlerOrchestrator extends EventEmitter<CrawlEvent> {
 			dnsBurnedHostCache.set(host, 'dns');
 		}
 		if (hosts.length > 0) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(
 				`[preload] DNS-burned hosts: ${hosts.length} (will short-circuit subsequent URLs)`,
 			);

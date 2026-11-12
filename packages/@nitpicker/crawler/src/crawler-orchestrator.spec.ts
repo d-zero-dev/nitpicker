@@ -1,5 +1,6 @@
 import type Archive from '@nitpicker/archive/archive';
 import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
+import type { Mock } from 'vitest';
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -208,6 +209,27 @@ afterEach(() => {
 	fakeCrawlerConstructorCalls.length = 0;
 });
 
+/** The mock type of an {@link Archive} method, preserving its parameter and return types. */
+type ArchiveMethodMock<K extends keyof Archive> = Archive[K] extends (
+	...args: infer A
+) => infer R
+	? Mock<(...args: A) => R>
+	: never;
+
+/**
+ * Reads a mocked method off a fake archive as a `Mock` without referencing it
+ * as an unbound class method.
+ * @param archive - Fake archive whose methods are `vi.fn()` mocks
+ * @param name - Method name to read
+ * @returns The mock function installed under `name`
+ */
+function archiveMock<K extends keyof Archive>(
+	archive: Archive,
+	name: K,
+): ArchiveMethodMock<K> {
+	return Reflect.get(archive, name) as ArchiveMethodMock<K>;
+}
+
 describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗', () => {
 	it('archive.addError が reject すると crawling() 全体が reject する（unhandledRejection にならない）', async () => {
 		const fakeArchive = {
@@ -243,7 +265,7 @@ describe('CrawlerOrchestrator.crawling: error イベントの書き込み失敗'
 			),
 		).rejects.toThrow('db-write-failure');
 
-		expect(fakeArchive.addError).toHaveBeenCalledOnce();
+		expect(archiveMock(fakeArchive, 'addError')).toHaveBeenCalledOnce();
 	});
 });
 
@@ -1006,7 +1028,9 @@ describe('CrawlerOrchestrator.append', () => {
 			dedupeCap: 5,
 		});
 
-		expect(fakeArchive.listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(archiveMock(fakeArchive, 'listDedupeCapObservations')).toHaveBeenCalledTimes(
+			1,
+		);
 		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
 		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
 			preloadedDedupeObservations: [
@@ -1242,7 +1266,9 @@ describe('CrawlerOrchestrator.retryFailed: PendingUrlsRemainError (issue #350 QA
 			dedupeCap: 5,
 		});
 
-		expect(fakeArchive.listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(archiveMock(fakeArchive, 'listDedupeCapObservations')).toHaveBeenCalledTimes(
+			1,
+		);
 		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
 		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
 			preloadedDedupeObservations: [
@@ -1621,7 +1647,7 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 			'https://example.com/orphan-d.js',
 		]);
 		// Legacy per-URL path is NOT taken.
-		expect(vi.mocked(fakeArchive.setResources)).not.toHaveBeenCalled();
+		expect(archiveMock(fakeArchive, 'setResources')).not.toHaveBeenCalled();
 
 		// Zero HEAD probes. The whole point of the new design is that
 		// the orchestrator does not pre-flight non-HTML URLs.
@@ -1631,12 +1657,12 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 		// require a probe, and this design does not probe — the
 		// telemetry surface is intentionally silent for non-HTML
 		// inventory URLs.
-		const addErrorMock = vi.mocked(fakeArchive.addError);
+		const addErrorMock = archiveMock(fakeArchive, 'addError');
 		expect(addErrorMock).not.toHaveBeenCalled();
 
 		// Audit log: the non-HTML-only success branch MUST still write
 		// one `list_reconcile_runs` row with the correct aggregate counts.
-		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		const recordListReconcileRunMock = archiveMock(fakeArchive, 'recordListReconcileRun');
 		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
 		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.total_lines).toBe(4);
@@ -1733,7 +1759,7 @@ describe('CrawlerOrchestrator.inventory: non-HTML metadata contract', () => {
 
 		// recordListReconcileRun WAS attempted — confirming the failure
 		// path actually ran (not a false positive on some earlier step).
-		expect(vi.mocked(fakeArchive.recordListReconcileRun)).toHaveBeenCalledTimes(1);
+		expect(archiveMock(fakeArchive, 'recordListReconcileRun')).toHaveBeenCalledTimes(1);
 	});
 });
 
@@ -1823,7 +1849,7 @@ describe('CrawlerOrchestrator.inventory: cumulative pagesScraped offset', () => 
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		expect(fakeArchive.getScrapedHtmlPageCount).toHaveBeenCalledTimes(1);
+		expect(archiveMock(fakeArchive, 'getScrapedHtmlPageCount')).toHaveBeenCalledTimes(1);
 		expect(fakeCrawlerResumeCalls).toHaveLength(1);
 		expect(fakeCrawlerResumeCalls[0]?.pagesScrapedOffset).toBe(140_000);
 		// #369: pendingMetadataOnly must reach Crawler#resume unfiltered here
@@ -1933,12 +1959,12 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 		}
 
 		// Only the non-excluded, in-scope URLs are imported…
-		const resourceCalls = vi.mocked(fakeArchive.insertInventoryResources).mock.calls;
+		const resourceCalls = archiveMock(fakeArchive, 'insertInventoryResources').mock.calls;
 		expect(resourceCalls).toHaveLength(1);
 		expect(resourceCalls[0]![0].map((u: { href: string }) => u.href)).toEqual([
 			'https://example.com/keep.pdf',
 		]);
-		const seedCalls = vi.mocked(fakeArchive.insertInventorySeeds).mock.calls;
+		const seedCalls = archiveMock(fakeArchive, 'insertInventorySeeds').mock.calls;
 		expect(seedCalls).toHaveLength(1);
 		expect(seedCalls[0]![0].map((u: { href: string }) => u.href)).toEqual([
 			'https://example.com/keep.html',
@@ -1946,7 +1972,8 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 		// …and the excluded ones are recorded as skipped pages instead
 		// (HTML and non-HTML alike — the split happens before the
 		// extension classification).
-		const skippedCalls = vi.mocked(fakeArchive.insertInventorySkippedPages).mock.calls;
+		const skippedCalls = archiveMock(fakeArchive, 'insertInventorySkippedPages').mock
+			.calls;
 		expect(skippedCalls).toHaveLength(1);
 		expect(skippedCalls[0]![0].map((u: { href: string }) => u.href).toSorted()).toEqual([
 			'https://example.com/legacy/page.html',
@@ -1954,7 +1981,7 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 		]);
 
 		// The audit row separates the three drop reasons.
-		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		const recordListReconcileRunMock = archiveMock(fakeArchive, 'recordListReconcileRun');
 		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
 		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.total_lines).toBe(5);
@@ -1993,11 +2020,12 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 
 		// The out-of-scope URL is dropped entirely, never recorded as a
 		// skipped page (the skipped-page write receives an empty list).
-		const skippedCalls = vi.mocked(fakeArchive.insertInventorySkippedPages).mock.calls;
+		const skippedCalls = archiveMock(fakeArchive, 'insertInventorySkippedPages').mock
+			.calls;
 		expect(skippedCalls).toHaveLength(1);
 		expect(skippedCalls[0]![0]).toEqual([]);
 
-		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		const recordListReconcileRunMock = archiveMock(fakeArchive, 'recordListReconcileRun');
 		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
 		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.scope_skipped).toBe(1);
@@ -2014,7 +2042,7 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 		const fakeArchive = buildFakeArchive({
 			excludes: ['/private/*'],
 		});
-		vi.mocked(fakeArchive.getExistingPageUrls).mockResolvedValue([
+		archiveMock(fakeArchive, 'getExistingPageUrls').mockResolvedValue([
 			'https://example.com/private/known.html',
 		]);
 
@@ -2036,11 +2064,12 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		const skippedCalls = vi.mocked(fakeArchive.insertInventorySkippedPages).mock.calls;
+		const skippedCalls = archiveMock(fakeArchive, 'insertInventorySkippedPages').mock
+			.calls;
 		expect(skippedCalls).toHaveLength(1);
 		expect(skippedCalls[0]![0]).toEqual([]);
 
-		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		const recordListReconcileRunMock = archiveMock(fakeArchive, 'recordListReconcileRun');
 		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
 		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.exclude_skipped).toBe(0);
@@ -2072,18 +2101,19 @@ describe('CrawlerOrchestrator.inventory: excludes / excludeUrls filtering (issue
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		const resourceCalls = vi.mocked(fakeArchive.insertInventoryResources).mock.calls;
+		const resourceCalls = archiveMock(fakeArchive, 'insertInventoryResources').mock.calls;
 		expect(resourceCalls).toHaveLength(1);
 		expect(resourceCalls[0]![0].map((u: { href: string }) => u.href)).toEqual([
 			'https://example.com/ok.pdf',
 		]);
-		const skippedCalls = vi.mocked(fakeArchive.insertInventorySkippedPages).mock.calls;
+		const skippedCalls = archiveMock(fakeArchive, 'insertInventorySkippedPages').mock
+			.calls;
 		expect(skippedCalls).toHaveLength(1);
 		expect(skippedCalls[0]![0].map((u: { href: string }) => u.href)).toEqual([
 			'https://example.com/blocked/a.pdf',
 		]);
 
-		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		const recordListReconcileRunMock = archiveMock(fakeArchive, 'recordListReconcileRun');
 		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
 		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.new_resources).toBe(1);
@@ -2324,7 +2354,7 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		expect(fakeArchive.listDedupeCapShapeKeys).toHaveBeenCalledTimes(1);
+		expect(archiveMock(fakeArchive, 'listDedupeCapShapeKeys')).toHaveBeenCalledTimes(1);
 		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
 		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
 			preloadedStickyShapeKeys: [
@@ -2336,7 +2366,7 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 		// resolves to `null` → the (comparatively expensive) full-table
 		// observation read must not run at all, unlike the cheap `DISTINCT`
 		// shape-key read above which always runs.
-		expect(fakeArchive.listDedupeCapObservations).not.toHaveBeenCalled();
+		expect(archiveMock(fakeArchive, 'listDedupeCapObservations')).not.toHaveBeenCalled();
 	});
 
 	it('archive.listDedupeCapObservations()の結果がbuildDedupeCapObservationを経てCrawlerのpreloadedDedupeObservationsオプションへ渡される', async () => {
@@ -2414,7 +2444,9 @@ describe('CrawlerOrchestrator.inventory: dedupeCap sticky preload wiring (issue 
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		expect(fakeArchive.listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(archiveMock(fakeArchive, 'listDedupeCapObservations')).toHaveBeenCalledTimes(
+			1,
+		);
 		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
 		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
 			preloadedDedupeObservations: [
@@ -2582,10 +2614,9 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		expect(fakeArchive.saveInventorySourceList).toHaveBeenCalledExactlyOnceWith(
-			'deadbeef',
-			bytes,
-		);
+		expect(
+			archiveMock(fakeArchive, 'saveInventorySourceList'),
+		).toHaveBeenCalledExactlyOnceWith('deadbeef', bytes);
 	});
 
 	it('does not call saveInventorySourceList when no source was given', async () => {
@@ -2608,7 +2639,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		expect(fakeArchive.saveInventorySourceList).not.toHaveBeenCalled();
+		expect(archiveMock(fakeArchive, 'saveInventorySourceList')).not.toHaveBeenCalled();
 	});
 
 	it('takes no backup and calls neither resetPagesByUrls nor the ingestion writers when nothing matched and nothing is novel', async () => {
@@ -2631,10 +2662,10 @@ describe('CrawlerOrchestrator.recrawl', () => {
 		);
 
 		expect(orchestrator).toBeDefined();
-		expect(fakeArchive.resetPagesByUrls).not.toHaveBeenCalled();
-		expect(fakeArchive.insertInventorySeeds).not.toHaveBeenCalled();
-		expect(fakeArchive.insertInventoryResources).not.toHaveBeenCalled();
-		expect(fakeArchive.recordListReconcileRun).not.toHaveBeenCalled();
+		expect(archiveMock(fakeArchive, 'resetPagesByUrls')).not.toHaveBeenCalled();
+		expect(archiveMock(fakeArchive, 'insertInventorySeeds')).not.toHaveBeenCalled();
+		expect(archiveMock(fakeArchive, 'insertInventoryResources')).not.toHaveBeenCalled();
+		expect(archiveMock(fakeArchive, 'recordListReconcileRun')).not.toHaveBeenCalled();
 		expect(fakeCrawlerResumeCalls).toHaveLength(0);
 	});
 
@@ -2675,8 +2706,8 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		expect(fakeArchive.resetPagesByUrls).toHaveBeenCalledOnce();
-		expect(vi.mocked(fakeArchive.resetPagesByUrls).mock.calls[0]![0]).toEqual([
+		expect(archiveMock(fakeArchive, 'resetPagesByUrls')).toHaveBeenCalledOnce();
+		expect(archiveMock(fakeArchive, 'resetPagesByUrls').mock.calls[0]![0]).toEqual([
 			'https://example.com/a',
 			'https://example.com/b',
 		]);
@@ -2809,7 +2840,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 		}
 
 		expect(fakeCrawlerResumeCalls).toHaveLength(1);
-		expect(fakeArchive.insertInventorySeeds).toHaveBeenCalledWith([]);
+		expect(archiveMock(fakeArchive, 'insertInventorySeeds')).toHaveBeenCalledWith([]);
 	});
 
 	it('archive.listDedupeCapObservations()の結果がbuildDedupeCapObservationを経てCrawlerのpreloadedDedupeObservationsオプションへ渡される', async () => {
@@ -2850,7 +2881,9 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		expect(fakeArchive.listDedupeCapObservations).toHaveBeenCalledTimes(1);
+		expect(archiveMock(fakeArchive, 'listDedupeCapObservations')).toHaveBeenCalledTimes(
+			1,
+		);
 		expect(fakeCrawlerConstructorCalls).toHaveLength(1);
 		expect(fakeCrawlerConstructorCalls[0]).toMatchObject({
 			preloadedDedupeObservations: [
@@ -2898,7 +2931,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 		expect(onLog).toHaveBeenCalledWith(
 			expect.stringMatching(/1 URL\(s\) matched existing resources/),
 		);
-		expect(vi.mocked(fakeArchive.resetPagesByUrls).mock.calls[0]![0]).toEqual([]);
+		expect(archiveMock(fakeArchive, 'resetPagesByUrls').mock.calls[0]![0]).toEqual([]);
 	});
 
 	it('reports the reset/excluded breakdown via setupProgress.onLog after resetPagesByUrls resolves', async () => {
@@ -3031,7 +3064,7 @@ describe('CrawlerOrchestrator.recrawl', () => {
 			await fs.rm(testCwd, { recursive: true, force: true });
 		}
 
-		const recordListReconcileRunMock = vi.mocked(fakeArchive.recordListReconcileRun);
+		const recordListReconcileRunMock = archiveMock(fakeArchive, 'recordListReconcileRun');
 		expect(recordListReconcileRunMock).toHaveBeenCalledTimes(1);
 		const [meta] = recordListReconcileRunMock.mock.calls[0]!;
 		expect(meta.list_label).toMatch(/^recrawl-/);

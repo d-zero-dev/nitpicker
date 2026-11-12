@@ -69,9 +69,7 @@ export async function fetchRobotsTxt(
 		const req = protocol.get(
 			robotsUrl,
 			{
-				headers: {
-					...(userAgent ? { 'User-Agent': userAgent } : {}),
-				},
+				headers: userAgent ? { 'User-Agent': userAgent } : {},
 				timeout: 10_000,
 			},
 			(res: IncomingMessage & FollowResponse) => {

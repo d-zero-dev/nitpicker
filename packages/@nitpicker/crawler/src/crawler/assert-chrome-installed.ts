@@ -1,5 +1,3 @@
-import type { CrawlerOptions } from './types.js';
-
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -17,7 +15,7 @@ import pkg from '../../package.json' with { type: 'json' };
  * before any archive I/O begins, turns it into an immediate, actionable
  * failure instead.
  * @param executablePath - Explicit override, matching
- *   {@link CrawlerOptions.executablePath}. Pass `null` (or omit) to check
+ *   {@link import('./types.js').CrawlerOptions.executablePath}. Pass `null` (or omit) to check
  *   Puppeteer's own pinned Chrome resolution instead.
  * @throws {Error} When the resolved executable path does not exist on disk.
  * @example

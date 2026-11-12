@@ -2284,7 +2284,7 @@ export default class Crawler extends EventEmitter<CrawlerEventTypes> {
 	 * @param headCheckResult - Optional HEAD result to pass to the scraper, avoiding a redundant request
 	 * @returns The scrape result from beholder
 	 */
-	// eslint-disable-next-line no-restricted-syntax -- intentional `private` (vs `#`) so tests can spyOn the prototype to drive the puppeteer-fallback cascade-guard branches without a full browser mock; see JSDoc above.
+	// Intentional `private` (vs `#`) so tests can spyOn the prototype to drive the puppeteer-fallback cascade-guard branches without a full browser mock; see JSDoc above.
 	private async _launchBrowserAndScrape(
 		url: ExURL,
 		update: (log: string) => void,

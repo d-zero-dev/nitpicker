@@ -2,7 +2,6 @@ import type * as Beholder from '@d-zero/beholder';
 import type * as ArchiveMeta from '@nitpicker/archive/meta/types';
 // The module exports only types, which `import-x/namespace` cannot see; the
 // `tsc` build is what resolves (and checks) every member used below.
-// eslint-disable-next-line import-x/namespace
 import type * as Archive from '@nitpicker/archive/utils/types/types';
 
 /**
