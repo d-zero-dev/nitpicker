@@ -49,11 +49,8 @@ const { Parser } = await import(
 	pathToFileURL(path.join(htmlparser2Dir, 'dist', 'index.js')).href
 );
 
-// FNV-1a 64-bit constants: 0xcbf29ce484222325 and 0x100000001b3, written in
-// decimal because oxfmt lowercases hex digits while `unicorn/number-literal-case`
-// requires uppercase.
-const FNV_OFFSET = 14_695_981_039_346_656_037n;
-const FNV_PRIME = 1_099_511_628_211n;
+const FNV_OFFSET = 0xcb_f2_9c_e4_84_22_23_25n;
+const FNV_PRIME = 0x1_00_00_00_01_b3n;
 const MASK = (1n << 64n) - 1n;
 
 /**
@@ -90,10 +87,8 @@ function record(html) {
 		if (code < 0x80) bytes += 1;
 		else if (code < 0x8_00) bytes += 2;
 		// A surrogate pair is 4 bytes, counted on its first half.
-		else if (code >= 55_296 && code < 56_320)
-			bytes += 4; // U+D800..U+DBFF
-		else if (code >= 56_320 && code < 57_344)
-			bytes += 0; // U+DC00..U+DFFF
+		else if (code >= 0xd8_00 && code < 0xdc_00) bytes += 4;
+		else if (code >= 0xdc_00 && code < 0xe0_00) bytes += 0;
 		else bytes += 3;
 	}
 	byteOffset[html.length] = bytes;

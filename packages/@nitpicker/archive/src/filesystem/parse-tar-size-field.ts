@@ -21,10 +21,7 @@ export function parseTarSizeField(field: Buffer): number | null {
 		// tars never approach sizes needing this (single-digit-terabyte
 		// range before it would even matter), but a correct read here still
 		// costs nothing.
-		// `0b0111_1111` (not `0x7F`) to sidestep the oxfmt/oxlint hex-case
-		// conflict (oxfmt always lowercases hex digits; this repo's
-		// `unicorn/number-literal-case` requires uppercase) — a binary literal
-		// has no letter digits to disagree about.
+		// Mask off the high bit that marks the base-256 form.
 		let value = BigInt(first & 0b0111_1111);
 		for (let i = 1; i < field.length; i++) {
 			value = (value << 8n) | BigInt(field[i] ?? 0);

@@ -19,9 +19,7 @@ describe('outputBinary', () => {
 
 	it('writes bytes to file verbatim', async () => {
 		const filePath = path.join(testDir, 'file.bin');
-		// Decimals rather than hex to sidestep the local oxfmt vs
-		// unicorn/number-literal-case conflict — oxfmt lowercases hex
-		// letters, unicorn demands uppercase. 0=0x00, 255=0xFF, 16=0x10, 128=0x80.
+		// Byte values: 0=0x00, 255=0xFF, 16=0x10, 128=0x80.
 		const data = Buffer.from([0, 255, 16, 128]);
 		await outputBinary(filePath, data);
 		expect(readFileSync(filePath)).toStrictEqual(data);
@@ -36,9 +34,7 @@ describe('outputBinary', () => {
 
 	it('does not corrupt bytes that are not valid UTF-8', async () => {
 		const filePath = path.join(testDir, 'invalid-utf8.bin');
-		// Decimals rather than hex to sidestep the local oxfmt vs
-		// unicorn/number-literal-case conflict (see the test above). 195
-		// (0xC3) without a valid continuation byte would be lossily
+		// 195 (0xC3) without a valid continuation byte would be lossily
 		// replaced with U+FFFD if this went through a UTF-8 string
 		// round-trip. 65=0x41 ('A'), 40=0x28 ('('), 66=0x42 ('B').
 		const data = Buffer.from([65, 195, 40, 66]);

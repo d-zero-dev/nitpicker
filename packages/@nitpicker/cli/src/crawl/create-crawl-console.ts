@@ -224,11 +224,8 @@ export function createCrawlConsole(
 					let end = i + 2;
 					while (end < chunk.length) {
 						const code = chunk.codePointAt(end) ?? 0;
-						// A CSI sequence ends at a final byte in 0x40 ('@') .. 0x7E ('~').
-						// `126` rather than `0x7E`: oxfmt always lowercases hex digits
-						// while `unicorn/number-literal-case` requires uppercase, so a
-						// hex literal with letters can never satisfy both.
-						if (code >= 0x40 && code <= 126) {
+						// A CSI sequence ends at a final byte in 0x40 ('@') .. 0x7e ('~').
+						if (code >= 0x40 && code <= 0x7e) {
 							break;
 						}
 						end++;
