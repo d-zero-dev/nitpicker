@@ -22,14 +22,21 @@ function listImportSpecifiers(filePath: string): string[] {
 }
 
 /**
- * Lists every `.ts` / `.tsx` file under `dir`, recursively.
+ * Lists every `.ts` / `.tsx` file under `dir`, recursively. `__mock__` is
+ * skipped: other specs create and delete their working files there while this
+ * one runs, so walking it races (`ENOENT` on a directory that vanished
+ * mid-walk) and it never holds sources.
  * @param dir - Directory to walk.
  * @returns Absolute file paths.
  */
 function listSourceFiles(dir: string): string[] {
-	return readdirSync(dir, { recursive: true, encoding: 'utf8' })
-		.filter((relativePath) => /\.tsx?$/.test(relativePath))
-		.map((relativePath) => path.join(dir, relativePath));
+	return readdirSync(dir, { withFileTypes: true, encoding: 'utf8' }).flatMap((entry) => {
+		const entryPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			return entry.name === '__mock__' ? [] : listSourceFiles(entryPath);
+		}
+		return /\.tsx?$/.test(entry.name) ? [entryPath] : [];
+	});
 }
 
 describe('page-cluster ドライバの境界', () => {
