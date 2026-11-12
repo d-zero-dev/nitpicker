@@ -23,7 +23,7 @@ describe('Meta tag extraction (v2 schema)', () => {
 		expect(page!.lang).toBe('ja');
 		expect(page!.description).toBe('Test description');
 		expect(page!.keywords).toBe('test,meta,nitpicker');
-		// eslint-disable-next-line unicorn/text-encoding-identifier-case -- HTML5 attribute value is canonically 'utf-8'.
+		// oxlint-disable-next-line unicorn/text-encoding-identifier-case -- HTML5 attribute value is canonically 'utf-8'.
 		expect(page!.charset).toBe('utf-8');
 		expect(page!.og_type).toBe('article');
 		expect(page!.og_title).toBe('OG Title');
@@ -71,7 +71,9 @@ describe('Meta tag extraction (v2 schema)', () => {
 		expect(page).toBeDefined();
 
 		const entries = await page!.getJsonLd();
-		const types = entries.map((e) => e.type).toSorted();
+		const types = entries
+			.map((e) => e.type)
+			.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 		expect(types).toEqual(['BreadcrumbList', 'Product']);
 		expect(page!.jsonldCount).toBe(2);
 	});

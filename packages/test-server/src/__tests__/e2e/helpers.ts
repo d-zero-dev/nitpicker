@@ -56,7 +56,7 @@ export async function crawl(
 		},
 		(q) => {
 			q.on('error', (e) => {
-				console.error('[nitpicker:e2e] error:', e); // eslint-disable-line no-console
+				console.error('[nitpicker:e2e] error:', e); // oxlint-disable-line no-console
 			});
 			tap?.(q);
 		},

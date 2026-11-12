@@ -17,7 +17,7 @@ export async function setup(project: TestProject) {
 		throw new Error('[global-setup] test server did not report a TCP port');
 	}
 	project.provide('testServerPort', address.port);
-	console.log(`[global-setup] Test server started on port ${address.port}`); // eslint-disable-line no-console
+	console.log(`[global-setup] Test server started on port ${address.port}`); // oxlint-disable-line no-console
 }
 
 /**

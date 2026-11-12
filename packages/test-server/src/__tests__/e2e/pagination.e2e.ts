@@ -24,7 +24,9 @@ describe('Speculative pagination (path-based)', () => {
 
 	it('page/1〜page/10 が全てDBに保存されている', async () => {
 		const pages = await result.accessor.getPages('internal-page');
-		const pathnames = pages.map((p) => p.url.pathname).toSorted();
+		const pathnames = pages
+			.map((p) => p.url.pathname)
+			.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 		for (let i = 1; i <= 10; i++) {
 			expect(pathnames).toContain(`/pagination/page/${i}`);
 		}

@@ -65,7 +65,7 @@ describe('CLI process termination', () => {
 			});
 
 			if (exitCode !== 0) {
-				// eslint-disable-next-line no-console
+				// oxlint-disable-next-line no-console
 				console.error('--- stdout ---\n', stdoutBuf, '\n--- stderr ---\n', stderrBuf);
 			}
 			expect(exitCode).toBe(0);

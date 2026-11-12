@@ -16,7 +16,9 @@ describe('Recursive crawling', () => {
 
 	it('内部リンクを再帰的にクロールする', async () => {
 		const internalPages = await result.accessor.getPages('internal-page');
-		const urls = internalPages.map((p) => p.url.pathname).toSorted();
+		const urls = internalPages
+			.map((p) => p.url.pathname)
+			.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 		expect(urls).toContain('/recursive/');
 		expect(urls).toContain('/recursive/page-a');
 		expect(urls).toContain('/recursive/page-b');
