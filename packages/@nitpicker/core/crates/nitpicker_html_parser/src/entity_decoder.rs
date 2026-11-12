@@ -3,8 +3,6 @@
 //! references and its attribute-value restrictions, which differ from the
 //! WHATWG tables in places a spec-conformant decoder would not reproduce.
 
-// cspell:ignore ampx
-
 use crate::html_decode_tree::HTML_DECODE_TREE;
 
 const VALUE_LENGTH: u16 = 0b1100_0000_0000_0000;

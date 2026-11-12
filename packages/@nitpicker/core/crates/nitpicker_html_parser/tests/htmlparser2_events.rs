@@ -4,8 +4,6 @@
 //! the port shows up as a readable diff on small cases;
 //! `htmlparser2_fixture_events.rs` covers the fixtures by digest.
 
-// cspell:ignore ampx
-
 use nitpicker_html_parser::{Document, EventKind, parse};
 
 /// One event as `(kind, name, startIndex, endIndex)`, kind being `"open"`,
