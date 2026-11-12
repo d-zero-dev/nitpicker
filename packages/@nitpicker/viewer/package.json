@@ -2,12 +2,18 @@
 	"name": "@nitpicker/viewer",
 	"version": "0.25.0",
 	"description": "Local browser viewer for .nitpicker archive files",
-	"license": "Apache-2.0",
 	"author": "D-ZERO",
+	"license": "Apache-2.0",
+	"engines": {
+		"node": ">=24.11.0"
+	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/d-zero-dev/nitpicker.git",
 		"directory": "packages/@nitpicker/viewer"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"files": [
 		"lib"
@@ -26,9 +32,6 @@
 			"import": "./lib/report-ui/render-html-report.js",
 			"types": "./lib/report-ui/render-html-report.d.ts"
 		}
-	},
-	"publishConfig": {
-		"access": "public"
 	},
 	"scripts": {
 		"build": "tsc && tsc -p tsconfig.report-ui.json && vite build && vite build --config vite.report-ui.config.ts",
@@ -74,8 +77,5 @@
 		"storybook": "10.6.5",
 		"vite": "8.3.5",
 		"vitest": "5.1.0"
-	},
-	"engines": {
-		"node": ">=24.11.0"
 	}
 }

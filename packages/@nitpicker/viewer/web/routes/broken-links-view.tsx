@@ -30,17 +30,8 @@ function field(row: LinkRow, key: string): string {
 	if (value == null) {
 		return '';
 	}
-	if (typeof value === 'string') {
-		return value;
-	}
-	if (
-		typeof value === 'number' ||
-		typeof value === 'boolean' ||
-		typeof value === 'bigint'
-	) {
-		return String(value);
-	}
-	return JSON.stringify(value) ?? '';
+	// Link row properties are strings or numbers (the status code).
+	return typeof value === 'string' ? value : `${value as number}`;
 }
 
 /**

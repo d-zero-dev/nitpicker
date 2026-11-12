@@ -533,10 +533,9 @@ export function createServer() {
 					case 'find_duplicates': {
 						const accessor = manager.get(requireString(args, 'archiveId'));
 						const field = args.field
-							? validateEnum(
-									typeof args.field === 'string'
-										? args.field
-										: JSON.stringify(args.field),
+							? // `validateEnum` rejects anything that is not an allowed field name.
+								validateEnum(
+									String(args.field as string),
 									VALID_DUPLICATE_FIELDS,
 									'field',
 								)

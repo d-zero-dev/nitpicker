@@ -163,8 +163,7 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 												// as "noninteractive", but the WAI Authoring Practices
 												// patterns for resizable table headers (and the existing
 												// viewer E2E "矢印キーで列幅を変更" coverage) require it to
-												// take focus and react to pointer + arrow keys. Disable the
-												// jsx-a11y rules that read this as a misuse.
+												// take focus and react to pointer + arrow keys.
 												<div
 													className={`vt-resizer${
 														header.column.getIsResizing() ? ' is-resizing' : ''
