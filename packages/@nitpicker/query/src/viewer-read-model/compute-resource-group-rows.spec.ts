@@ -4,6 +4,8 @@ import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { compareStrings } from '../test-utils/compare-strings.js';
+
 import { computeResourceGroupRows } from './compute-resource-group-rows.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -237,7 +239,7 @@ describe('computeResourceGroupRows', () => {
 		const knex = archive.getKnex();
 		const rows = await knex.transaction((trx) => computeResourceGroupRows(trx));
 		const urls = rows.map((r) => r.canonical_url);
-		expect(urls).toEqual([...urls].toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+		expect(urls).toEqual([...urls].toSorted(compareStrings));
 	});
 
 	it('orders numbers in a canonical URL by value, as the pages and resources lists do', async () => {

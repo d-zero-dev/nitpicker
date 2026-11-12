@@ -1,3 +1,4 @@
+import type { ViewerResourcesSortBy } from './get-viewer-resources-sort-spec.js';
 import type { ViewerResourcesCursorPayload } from './types.js';
 
 import { decodeCursorEnvelope } from '../viewer-cursor-kit/decode-cursor-envelope.js';
@@ -10,7 +11,7 @@ export interface ExpectedViewerResourcesCursor {
 	/** See `buildViewerResourcesFilterKey`. */
 	filterKey: string;
 	/** The current request's sort field. */
-	sortBy: import('./get-viewer-resources-sort-spec.js').ViewerResourcesSortBy;
+	sortBy: ViewerResourcesSortBy;
 	/** The current request's sort direction. */
 	sortOrder: 'asc' | 'desc';
 	/**

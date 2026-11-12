@@ -1,3 +1,5 @@
+import type * as ReleaseFinishedStatements from '@nitpicker/archive/release-finished-statements';
+
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -5,10 +7,7 @@ import Archive from '@nitpicker/archive/archive';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
-	const actual =
-		await importOriginal<
-			typeof import('@nitpicker/archive/release-finished-statements')
-		>();
+	const actual = await importOriginal<typeof ReleaseFinishedStatements>();
 	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
 });
 

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listImages } from './list-images.js';
 import { listViewerImages } from './list-viewer-images.js';
+import { compareStrings } from './test-utils/compare-strings.js';
 import { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -191,12 +192,8 @@ describe('listViewerImages', () => {
 			listViewerImages(archive, { missingAlt: false, limit: 100 }),
 			listImages(archive, { missingAlt: false, limit: 100 }),
 		]);
-		expect(
-			viewerResult.items
-				.map((i) => i.src)
-				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-		).toEqual(
-			liveResult.items.map((i) => i.src).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		expect(viewerResult.items.map((i) => i.src).toSorted(compareStrings)).toEqual(
+			liveResult.items.map((i) => i.src).toSorted(compareStrings),
 		);
 		expect(viewerResult.total).toBe(2);
 	});
@@ -206,12 +203,8 @@ describe('listViewerImages', () => {
 			listViewerImages(archive, { missingDimensions: false, limit: 100 }),
 			listImages(archive, { missingDimensions: false, limit: 100 }),
 		]);
-		expect(
-			viewerResult.items
-				.map((i) => i.src)
-				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-		).toEqual(
-			liveResult.items.map((i) => i.src).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		expect(viewerResult.items.map((i) => i.src).toSorted(compareStrings)).toEqual(
+			liveResult.items.map((i) => i.src).toSorted(compareStrings),
 		);
 	});
 

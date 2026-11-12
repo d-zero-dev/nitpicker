@@ -1439,7 +1439,7 @@ export interface ListViewerPagesOptions {
 	 */
 	isRedirectSource?: boolean | boolean[];
 	/** Filter by provenance — see {@link PageSource}. */
-	source?: import('@nitpicker/archive/types').PageSource;
+	source?: PageSource;
 	/**
 	 * Filter by exact DOM-structure template classification group key,
 	 * or any of several (OR). This IS supported by the fast path:

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { listUnusedResources } from './list-unused-resources.js';
 import { listViewerUnusedResources } from './list-viewer-unused-resources.js';
+import { compareStrings } from './test-utils/compare-strings.js';
 import { buildViewerReadModel } from './viewer-read-model/build-viewer-read-model.js';
 
 const __filename = new URL(import.meta.url).pathname;
@@ -171,12 +172,8 @@ describe('listViewerUnusedResources', () => {
 			listViewerUnusedResources(archive, { limit: 100 }),
 			listUnusedResources(archive, { limit: 100 }),
 		]);
-		expect(
-			viewerResult.items
-				.map((i) => i.url)
-				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-		).toEqual(
-			liveResult.items.map((i) => i.url).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		expect(viewerResult.items.map((i) => i.url).toSorted(compareStrings)).toEqual(
+			liveResult.items.map((i) => i.url).toSorted(compareStrings),
 		);
 		expect(viewerResult.total).toBe(3);
 		const urls = viewerResult.items.map((i) => i.url);

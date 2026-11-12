@@ -1,3 +1,5 @@
+import type * as ReleaseFinishedStatements from '@nitpicker/archive/release-finished-statements';
+
 import path from 'node:path';
 
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
@@ -5,16 +7,14 @@ import Archive from '@nitpicker/archive/archive';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@nitpicker/archive/release-finished-statements', async (importOriginal) => {
-	const actual =
-		await importOriginal<
-			typeof import('@nitpicker/archive/release-finished-statements')
-		>();
+	const actual = await importOriginal<typeof ReleaseFinishedStatements>();
 	return { releaseFinishedStatements: vi.fn(actual.releaseFinishedStatements) };
 });
 
 import { getResourceReferrerEdges } from './get-resource-referrer-edges.js';
 import { getResourceReferrerPageEdges } from './get-resource-referrer-page-edges.js';
 import { resolvePageUrls } from './html-snapshot-scan/resolve-page-urls.js';
+import { compareStrings } from './test-utils/compare-strings.js';
 
 const __filename = new URL(import.meta.url).pathname;
 const __dirname = path.dirname(__filename);
@@ -205,9 +205,7 @@ describe('getResourceReferrerPageEdges', () => {
 		const urlByPageId = await resolvePageUrls(knex, pageIds);
 		expect(pageIds).toHaveLength(2);
 		expect(
-			pageIds
-				.map((pageId) => urlByPageId.get(pageId)!)
-				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+			pageIds.map((pageId) => urlByPageId.get(pageId)!).toSorted(compareStrings),
 		).toEqual(['https://example.com', 'https://example.com/about']);
 	});
 
