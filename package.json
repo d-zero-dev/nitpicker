@@ -1,12 +1,17 @@
 {
 	"name": "nitpicker-monorepo",
+	"private": true,
 	"description": "Web site data acquisition and analysis toolkit",
 	"license": "Apache-2.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/d-zero-dev/nitpicker.git"
 	},
-	"private": true,
+	"workspaces": [
+		"packages/@nitpicker/cli",
+		"packages/@nitpicker/*",
+		"packages/test-server"
+	],
 	"type": "module",
 	"scripts": {
 		"cli": "./packages/@nitpicker/cli/bin/nitpicker.js",
@@ -15,18 +20,17 @@
 		"test": "vitest run --test-timeout 60000",
 		"test:rust": "cargo test --manifest-path packages/@nitpicker/core/Cargo.toml --locked",
 		"bench:smoke": "node scripts/bench-suite.mjs packages/test-server/src/__tests__/e2e/fixtures/report-query-fixture.nitpicker",
-		"lint": "run-s lint:eslint lint:stylelint lint:markuplint lint:prettier lint:textlint lint:cspell lint:rustfmt lint:clippy",
-		"lint:check": "run-s lint:eslint:check lint:stylelint:check lint:markuplint:check lint:prettier:check lint:textlint:check lint:cspell lint:rustfmt:check lint:clippy",
+		"lint": "run-s lint:oxlint lint:stylelint lint:markuplint lint:oxfmt lint:textlint lint:rustfmt lint:clippy",
+		"lint:check": "run-s lint:oxlint:check lint:stylelint:check lint:markuplint:check lint:oxfmt:check lint:textlint:check lint:rustfmt:check lint:clippy",
 		"lint:clippy": "cargo clippy --manifest-path packages/@nitpicker/core/Cargo.toml --all-targets --locked -- -D warnings",
+		"lint:oxfmt": "oxfmt --write \"{*,**/*}.{md,mdc,json,js,cjs,mjs,jsx,ts,cts,mts,tsx,css,html,yml,yaml}\" \"!**/dist/**\" \"!**/lib/**\" \"!**/target/**\"",
+		"lint:oxfmt:check": "oxfmt --check \"{*,**/*}.{md,mdc,json,js,cjs,mjs,jsx,ts,cts,mts,tsx,css,html,yml,yaml}\" \"!**/dist/**\" \"!**/lib/**\" \"!**/target/**\"",
 		"lint:rustfmt": "cargo fmt --manifest-path packages/@nitpicker/core/Cargo.toml --all",
 		"lint:rustfmt:check": "cargo fmt --manifest-path packages/@nitpicker/core/Cargo.toml --all --check",
-		"lint:cspell": "npx cspell --no-progress --show-suggestions \"**\"",
-		"lint:eslint": "npx eslint --fix \"./{*,packages/**/{src,web}/{*,**/*}}.{ts,tsx,js,jsx,cjs,mjs}\"",
-		"lint:eslint:check": "npx eslint \"./{*,packages/**/{src,web}/{*,**/*}}.{ts,tsx,js,jsx,cjs,mjs}\"",
-		"lint:markuplint": "npx markuplint --fix \"packages/**/web/**/*.{tsx,jsx,html}\"",
-		"lint:markuplint:check": "npx markuplint \"packages/**/web/**/*.{tsx,jsx,html}\"",
-		"lint:prettier": "npx prettier --write \"{*,./**/*}{.{md,mdc,mdx,js,jsx,ts,tsx,css,pug,html,json,yaml},*rc}\" \"!**/dist/**/*\"",
-		"lint:prettier:check": "npx prettier --check \"{*,./**/*}{.{md,mdc,mdx,js,jsx,ts,tsx,css,pug,html,json,yaml},*rc}\" \"!**/dist/**/*\"",
+		"lint:oxlint": "oxlint --type-aware --fix .",
+		"lint:oxlint:check": "oxlint --type-aware .",
+		"lint:markuplint": "npx markuplint --fix --no-allow-warnings \"packages/**/web/**/*.{tsx,jsx,html}\"",
+		"lint:markuplint:check": "npx markuplint --no-allow-warnings \"packages/**/web/**/*.{tsx,jsx,html}\"",
 		"lint:stylelint": "npx stylelint --fix \"packages/**/*.css\"",
 		"lint:stylelint:check": "npx stylelint \"packages/**/*.css\"",
 		"lint:textlint": "npx textlint --fix \"{*,./**/*}.{md,mdc}\" && npx textlint \"{*,./**/*}.{md,mdc}\"",
@@ -40,28 +44,23 @@
 		"co": "npx cz",
 		"update": "yarn upgrade-interactive"
 	},
-	"workspaces": [
-		"packages/@nitpicker/cli",
-		"packages/@nitpicker/*",
-		"packages/test-server"
-	],
 	"devDependencies": {
-		"@d-zero/cspell-config": "5.1.1",
-		"@d-zero/eslint-config": "5.1.3",
-		"@d-zero/lint-staged-config": "5.1.1",
-		"@d-zero/markuplint-config": "5.1.3",
-		"@d-zero/prettier-config": "5.1.1",
-		"@d-zero/stylelint-config": "5.1.1",
-		"@d-zero/textlint-config": "5.1.2",
+		"@d-zero/lint-staged-config": "6.0.0-alpha.3",
+		"@d-zero/markuplint-config": "6.0.0-alpha.3",
+		"@d-zero/oxlint-config": "6.0.0-alpha.3",
+		"@d-zero/oxlint-plugin": "6.0.0-alpha.3",
+		"@d-zero/stylelint-config": "6.0.0-alpha.3",
+		"@d-zero/textlint-config": "6.0.0-alpha.3",
 		"@d-zero/tsconfig": "2.0.0",
-		"@types/eslint-plugin-jsx-a11y": "6.10.1",
-		"eslint-plugin-jsx-a11y": "6.10.2",
-		"eslint-plugin-react": "7.37.5",
-		"eslint-plugin-react-hooks": "7.1.1",
+		"@markuplint/jsx-parser": "5.5.0",
+		"@markuplint/react-spec": "5.5.0",
 		"husky": "9.1.7",
 		"jsdom": "30.1.3",
 		"lerna": "10.1.1",
 		"npm-run-all2": "9.0.4",
+		"oxfmt": "0.62.0",
+		"oxlint": "1.77.0",
+		"oxlint-tsgolint": "7.0.2005",
 		"parse5": "8.1.0",
 		"typescript": "6.0.3",
 		"vitest": "5.1.0"
@@ -70,9 +69,9 @@
 		"google-auth-library": "11.3.3",
 		"nx/undici": "7.30.1"
 	},
-	"packageManager": "yarn@4.18.1",
 	"volta": {
 		"node": "26.8.1",
 		"yarn": "4.18.1"
-	}
+	},
+	"packageManager": "yarn@4.18.1"
 }

@@ -1,9 +1,9 @@
 {
-	"extends": ["@d-zero/markuplint-config"],
+	"extends": ["@d-zero/markuplint-config", "@d-zero/markuplint-config/jsx"],
 	"overrides": {
 		"packages/@nitpicker/viewer/web/index.html": {
 			"rules": {
-				"required-h1": false
+				"require-h1": false
 			}
 		}
 	}

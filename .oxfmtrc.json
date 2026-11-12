@@ -1,0 +1,35 @@
+{
+	"arrowParens": "always",
+	"bracketSameLine": true,
+	"bracketSpacing": true,
+	"jsxSingleQuote": false,
+	"printWidth": 90,
+	"quoteProps": "as-needed",
+	"semi": true,
+	"singleQuote": true,
+	"tabWidth": 2,
+	"trailingComma": "all",
+	"useTabs": true,
+	"overrides": [
+		{
+			"files": ["*.html"],
+			"options": {
+				"printWidth": 320
+			}
+		}
+	],
+	"ignorePatterns": [
+		"**/test-results/**",
+		"**/playwright-report/**",
+		"**/lib/**",
+		"**/dist/**",
+		"**/.fixture-stub-cwd/**",
+		"**/.fixture-tmp/**",
+		"**/*.nitpicker",
+		"**/target/**",
+		"yarn.lock",
+		"packages/@nitpicker/archive/src/template-classification/page-cluster/__fixtures__/**",
+		"packages/@nitpicker/archive/src/template-classification/golden/__golden__/**",
+		".agents/**"
+	]
+}
