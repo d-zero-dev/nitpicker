@@ -1,6 +1,6 @@
+import Archive from '@nitpicker/archive/archive';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
-const mockOpenCached = vi.fn();
 const mockGetPagesA = vi.fn();
 const mockCloseA = vi.fn().mockResolvedValue();
 const mockGetPagesB = vi.fn();
@@ -8,7 +8,7 @@ const mockCloseB = vi.fn().mockResolvedValue();
 
 vi.mock('@nitpicker/archive/archive', () => ({
 	default: {
-		openCached: (...args: unknown[]) => mockOpenCached(...args),
+		openCached: vi.fn(),
 	},
 }));
 
@@ -73,7 +73,7 @@ function createMockPage(
 describe('diff', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		mockOpenCached.mockImplementation((filePath) => {
+		vi.mocked(Archive.openCached).mockImplementation((filePath) => {
 			if (typeof filePath === 'string' && filePath.includes('b')) {
 				return Promise.resolve({
 					getPages: mockGetPagesB,
@@ -217,8 +217,11 @@ describe('diff', () => {
 
 		await diff('first.nitpicker', 'second-b.nitpicker');
 
-		expect(mockOpenCached).toHaveBeenCalledWith('first.nitpicker', expect.any(Function));
-		expect(mockOpenCached).toHaveBeenCalledWith(
+		expect(Archive.openCached).toHaveBeenCalledWith(
+			'first.nitpicker',
+			expect.any(Function),
+		);
+		expect(Archive.openCached).toHaveBeenCalledWith(
 			'second-b.nitpicker',
 			expect.any(Function),
 		);

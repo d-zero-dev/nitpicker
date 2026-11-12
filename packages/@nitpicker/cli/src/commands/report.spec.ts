@@ -1,3 +1,5 @@
+import type * as ReportGoogleSheets from '@nitpicker/report-google-sheets';
+
 import { Lanes } from '@d-zero/dealer';
 import { report as runReport } from '@nitpicker/report-google-sheets';
 import { report as runHtmlReport } from '@nitpicker/report-html';
@@ -25,7 +27,7 @@ vi.mock('@d-zero/dealer', () => ({
 }));
 
 vi.mock('@nitpicker/report-google-sheets', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('@nitpicker/report-google-sheets')>();
+	const actual = await importOriginal<typeof ReportGoogleSheets>();
 	return {
 		...actual,
 		report: vi.fn(),

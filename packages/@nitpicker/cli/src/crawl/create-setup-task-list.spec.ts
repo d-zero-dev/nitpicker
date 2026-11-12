@@ -27,26 +27,10 @@ function tick() {
 	return Promise.resolve();
 }
 
-/**
- * Calls `createSetupTaskList` and returns its handle with `finish`/`fail`
- * as standalone functions, so tests can destructure them without detaching
- * the methods from the handle.
- * @param args - Arguments forwarded to `createSetupTaskList`
- */
-function createBoundSetupTaskList(...args: Parameters<typeof createSetupTaskList>) {
-	const handle = createSetupTaskList(...args);
-	return {
-		setupProgress: handle.setupProgress,
-		taskListDone: handle.taskListDone,
-		finish: () => handle.finish(),
-		fail: (error: unknown) => handle.fail(error),
-	};
-}
-
 describe('createSetupTaskList', () => {
 	it('advances one pre-built row per onPhase call and resolves on finish()', async () => {
 		const { stream } = createCapturingStream();
-		const { setupProgress, taskListDone, finish } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
 			['Extracting archive', 'Loading archive config', 'Restoring crawl state'],
 			{ verbose: true, stream },
 		);
@@ -64,7 +48,7 @@ describe('createSetupTaskList', () => {
 
 	it('keeps the elapsed time on a row once it settles (keepElapsed)', async () => {
 		const { stream, lines } = createCapturingStream();
-		const { setupProgress, taskListDone, finish } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
 			['Extracting archive', 'Loading archive config'],
 			{ verbose: true, stream },
 		);
@@ -85,7 +69,7 @@ describe('createSetupTaskList', () => {
 
 	it('marks pre-built rows never announced as skipped when finish() runs early', async () => {
 		const { stream, lines } = createCapturingStream();
-		const { setupProgress, taskListDone, finish } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
 			['Extracting archive', 'Loading archive config', 'Checking for already-known URLs'],
 			{ verbose: true, stream },
 		);
@@ -106,7 +90,7 @@ describe('createSetupTaskList', () => {
 
 	it('rejects the active row via fail() and stops without running later rows', async () => {
 		const { stream } = createCapturingStream();
-		const { setupProgress, taskListDone, fail } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, fail } = createSetupTaskList(
 			['Extracting archive', 'Loading archive config'],
 			{ verbose: true, stream },
 		);
@@ -123,7 +107,7 @@ describe('createSetupTaskList', () => {
 
 	it('inserts an unplanned recovery-phase row instead of advancing to the next pre-built row', async () => {
 		const { stream, lines } = createCapturingStream();
-		const { setupProgress, taskListDone, fail } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, fail } = createSetupTaskList(
 			['Extracting archive', 'Loading archive config', 'Backing up archive'],
 			{ verbose: true, stream },
 		);
@@ -150,7 +134,7 @@ describe('createSetupTaskList', () => {
 
 	it('routes onExtractProgress / onCopyProgress / onChunkProgress to the active row only', async () => {
 		const { stream, lines } = createCapturingStream();
-		const { setupProgress, taskListDone, finish } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
 			['Extracting archive', 'Loading resource list'],
 			{ verbose: true, stream },
 		);
@@ -173,7 +157,7 @@ describe('createSetupTaskList', () => {
 
 	it('routes onLog (self-healing migration notices) to the active row instead of a bare console.error (issue #294)', async () => {
 		const { stream, lines } = createCapturingStream();
-		const { setupProgress, taskListDone, finish } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
 			['Extracting archive'],
 			{ verbose: true, stream },
 		);
@@ -189,7 +173,7 @@ describe('createSetupTaskList', () => {
 
 	it('deduplicates identical byte-progress messages instead of re-rendering on every chunk (issue #294 code review)', async () => {
 		const { stream, lines } = createCapturingStream();
-		const { setupProgress, taskListDone, finish } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
 			['Extracting archive'],
 			{ verbose: true, stream },
 		);
@@ -214,7 +198,7 @@ describe('createSetupTaskList', () => {
 
 	it('does not suppress a new row’s first message just because it matches the previous row’s last one', async () => {
 		const { stream, lines } = createCapturingStream();
-		const { setupProgress, taskListDone, finish } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, finish } = createSetupTaskList(
 			['Extracting archive', 'Backing up archive'],
 			{ verbose: true, stream },
 		);
@@ -241,7 +225,7 @@ describe('createSetupTaskList', () => {
 
 	it('finish() and fail() are no-ops once the task list has already settled', async () => {
 		const { stream } = createCapturingStream();
-		const { setupProgress, taskListDone, finish, fail } = createBoundSetupTaskList(
+		const { setupProgress, taskListDone, finish, fail } = createSetupTaskList(
 			['Extracting archive'],
 			{ verbose: true, stream },
 		);

@@ -1,4 +1,5 @@
 import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
+import type * as NitpickerCrawler from '@nitpicker/crawler';
 
 import {
 	assertChromeIsInstalled,
@@ -24,8 +25,7 @@ vi.mock('@nitpicker/crawler', async () => {
 	// catch block (issue #350) — pull the REAL class through `importActual`
 	// (see `crawl.spec.ts`'s identical mock for the same rationale) rather
 	// than re-declaring a look-alike.
-	const actual =
-		await vi.importActual<typeof import('@nitpicker/crawler')>('@nitpicker/crawler');
+	const actual = await vi.importActual<typeof NitpickerCrawler>('@nitpicker/crawler');
 	return {
 		assertChromeIsInstalled: vi.fn(),
 		assertPuppeteerSharedWithBeholder: vi.fn(),

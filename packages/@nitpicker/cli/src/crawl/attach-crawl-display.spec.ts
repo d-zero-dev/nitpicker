@@ -1,5 +1,4 @@
 import type { CrawlerOrchestrator } from '@nitpicker/crawler';
-import type { Mock } from 'vitest';
 
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
@@ -9,8 +8,6 @@ type EventHandler = (...args: unknown[]) => void;
 
 /** Mock orchestrator with controllable event emission. */
 interface MockOrchestrator extends CrawlerOrchestrator {
-	/** The `vi.fn()` installed as `on`, readable without referencing the class method. */
-	onSpy: Mock;
 	/**
 	 * Emits a registered event synchronously.
 	 * @param event - Event name
@@ -22,13 +19,11 @@ interface MockOrchestrator extends CrawlerOrchestrator {
 /** Creates a mock CrawlerOrchestrator with controllable event emission. */
 function createMockOrchestrator(): MockOrchestrator {
 	const handlers: Record<string, EventHandler[]> = {};
-	const on = vi.fn((event: string, handler: EventHandler) => {
-		handlers[event] ??= [];
-		handlers[event].push(handler);
-	});
 	return {
-		on,
-		onSpy: on,
+		on: vi.fn((event: string, handler: EventHandler) => {
+			handlers[event] ??= [];
+			handlers[event].push(handler);
+		}),
 		emit(event: string, ...args: unknown[]): void {
 			for (const handler of handlers[event] ?? []) {
 				handler(...args);
@@ -60,21 +55,6 @@ function tick() {
 	return Promise.resolve();
 }
 
-/**
- * Calls `attachCrawlDisplay` and returns its handle with `finish`/`fail` as
- * standalone functions, so tests can destructure them without detaching the
- * methods from the handle.
- * @param args - Arguments forwarded to `attachCrawlDisplay`
- */
-function createBoundCrawlDisplay(...args: Parameters<typeof attachCrawlDisplay>) {
-	const handle = attachCrawlDisplay(...args);
-	return {
-		taskListDone: handle.taskListDone,
-		finish: () => handle.finish(),
-		fail: (error: unknown) => handle.fail(error),
-	};
-}
-
 afterEach(() => {
 	vi.restoreAllMocks();
 });
@@ -85,14 +65,14 @@ describe('attachCrawlDisplay', () => {
 		const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 		const errStack: Error[] = [];
 
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'silent',
 			errStack,
 		});
 
-		expect(orchestrator.onSpy).not.toHaveBeenCalled();
+		expect(orchestrator.on).not.toHaveBeenCalled();
 		expect(stderrSpy).not.toHaveBeenCalled();
 		expect(() => finish()).not.toThrow();
 		await expect(taskListDone).resolves.toBeUndefined();
@@ -105,7 +85,7 @@ describe('attachCrawlDisplay', () => {
 			stream.write(chunk as string);
 			return true;
 		});
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['🐳 header', '  key: value'],
 			logType: 'normal',
@@ -129,7 +109,7 @@ describe('attachCrawlDisplay', () => {
 		const orchestrator = createMockOrchestrator();
 		vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 		const errStack: Error[] = [];
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'normal',
@@ -152,7 +132,7 @@ describe('attachCrawlDisplay', () => {
 			stream.write(chunk as string);
 			return true;
 		});
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'verbose',
@@ -179,7 +159,7 @@ describe('attachCrawlDisplay', () => {
 			stream.write(chunk as string);
 			return true;
 		});
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'verbose',
@@ -205,7 +185,7 @@ describe('attachCrawlDisplay', () => {
 			stream.write(chunk as string);
 			return true;
 		});
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'verbose',
@@ -231,7 +211,7 @@ describe('attachCrawlDisplay', () => {
 			stream.write(chunk as string);
 			return true;
 		});
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'verbose',
@@ -249,7 +229,7 @@ describe('attachCrawlDisplay', () => {
 	it('fail() rejects the active row with the given error', async () => {
 		const orchestrator = createMockOrchestrator();
 		vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-		const { fail, taskListDone } = createBoundCrawlDisplay({
+		const { fail, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'normal',
@@ -269,7 +249,7 @@ describe('attachCrawlDisplay', () => {
 			stream.write(chunk as string);
 			return true;
 		});
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'verbose',
@@ -289,7 +269,7 @@ describe('attachCrawlDisplay', () => {
 		const orchestrator = createMockOrchestrator();
 		vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		const { finish, taskListDone } = createBoundCrawlDisplay({
+		const { finish, taskListDone } = attachCrawlDisplay({
 			orchestrator,
 			initialLog: ['header'],
 			logType: 'normal',
