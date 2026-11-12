@@ -1122,12 +1122,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hono/node-server@npm:2.1.5":
-  version: 2.1.5
-  resolution: "@hono/node-server@npm:2.1.5"
+"@hono/node-server@npm:2.1.6":
+  version: 2.1.6
+  resolution: "@hono/node-server@npm:2.1.6"
   peerDependencies:
     hono: ^4 || ^5.0.0-0
-  checksum: 10c0/3c3d5ffcc4a229e532530729b64db623493171bcda7b40ffbac3a46489884f700c881439d8c0d0413cd18793458ca252acedf6a9c13c8c3a024037e47974cacb
+  checksum: 10c0/bb57a4e00f193b37f1e7c8a4b8206914ab3f6073d8e7da7ca4b005f0205d89ef9cd0bdb783a4b59869a4c9211f1567f3e0717f31e92704ed7b1801a33d3252d3
   languageName: node
   linkType: hard
 
@@ -2183,7 +2183,7 @@ __metadata:
   dependencies:
     "@d-zero/dealer": "npm:1.14.1"
     "@d-zero/shared": "npm:0.23.1"
-    "@hono/node-server": "npm:2.1.5"
+    "@hono/node-server": "npm:2.1.6"
     "@nitpicker/archive": "npm:0.25.0"
     "@nitpicker/query": "npm:0.25.0"
     "@playwright/test": "npm:1.64.1"
@@ -12963,7 +12963,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "test-server@workspace:packages/test-server"
   dependencies:
-    "@hono/node-server": "npm:2.1.5"
+    "@hono/node-server": "npm:2.1.6"
     "@nitpicker/archive": "npm:0.25.0"
     "@nitpicker/crawler": "npm:0.25.0"
     "@nitpicker/query": "npm:0.25.0"
