@@ -6,7 +6,7 @@ import { Link } from 'react-router';
  * Props for {@link AppLink} — react-router's own `LinkProps`, forwarded
  * verbatim. A `type` alias, not an empty `interface extends`, because an
  * interface with no added members is flagged by
- * `@typescript-eslint/no-empty-object-type` (it's identical to its
+ * `typescript/no-empty-object-type` (it's identical to its
  * supertype).
  */
 export type AppLinkProps = LinkProps;

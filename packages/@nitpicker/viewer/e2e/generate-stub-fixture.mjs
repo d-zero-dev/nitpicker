@@ -95,5 +95,5 @@ for (let i = 0; i < PAGE_COUNT; i++) {
 // on its own; no `process.exit(0)` race against a late WAL writeback.
 await archive.releaseHandle();
 
-// eslint-disable-next-line no-console
+// oxlint-disable-next-line no-console
 console.log(`E2E stub fixture created: ${STUB_DIR}`);

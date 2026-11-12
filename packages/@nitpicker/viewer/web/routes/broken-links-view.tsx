@@ -27,7 +27,20 @@ import { useI18n } from '../i18n/use-i18n.js';
  */
 function field(row: LinkRow, key: string): string {
 	const value = (row as unknown as Record<string, unknown>)[key];
-	return value == null ? '' : String(value);
+	if (value == null) {
+		return '';
+	}
+	if (typeof value === 'string') {
+		return value;
+	}
+	if (
+		typeof value === 'number' ||
+		typeof value === 'boolean' ||
+		typeof value === 'bigint'
+	) {
+		return String(value);
+	}
+	return JSON.stringify(value) ?? '';
 }
 
 /**

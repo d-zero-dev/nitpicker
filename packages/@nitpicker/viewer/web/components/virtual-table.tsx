@@ -165,7 +165,6 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 												// viewer E2E "矢印キーで列幅を変更" coverage) require it to
 												// take focus and react to pointer + arrow keys. Disable the
 												// jsx-a11y rules that read this as a misuse.
-												/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- focusable resizer needs pointer/touch/keyboard handlers; see block comment above. */
 												<div
 													className={`vt-resizer${
 														header.column.getIsResizing() ? ' is-resizing' : ''
@@ -176,7 +175,6 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 													aria-valuemin={header.column.columnDef.minSize ?? 60}
 													aria-valuemax={MAX_COLUMN_WIDTH}
 													aria-valuenow={Math.round(header.getSize())}
-													// eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- see block comment above: focusable resizer is intentional.
 													tabIndex={0}
 													onMouseDown={header.getResizeHandler()}
 													onTouchStart={header.getResizeHandler()}

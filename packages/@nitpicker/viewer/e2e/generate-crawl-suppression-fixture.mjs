@@ -106,5 +106,5 @@ await knex('content_items')
 await buildViewerReadModel(archive);
 await archive.write();
 await archive.close();
-// eslint-disable-next-line no-console
+// oxlint-disable-next-line no-console
 console.log(`E2E crawl-suppression fixture created: ${FIXTURE_PATH}`);

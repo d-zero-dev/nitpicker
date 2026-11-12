@@ -20,8 +20,8 @@ export interface BlockHeadingLabelProps {
 }
 
 /**
- * A block group's label: its kind in words (`Common stylesheets`, `URL
- * path`) followed by the literals the block was keyed on (stylesheet file
+ * A block group's label: its kind in words (`Common stylesheets`,
+ * `URL path`) followed by the literals the block was keyed on (stylesheet file
  * names or a directory) each in `<code>`. The block section's heading and
  * every cell that points at that section use this one rendering, so a reader
  * can find the section by scanning for the same words.
