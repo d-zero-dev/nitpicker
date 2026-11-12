@@ -47,6 +47,9 @@ const { Parser } = await import(
 	pathToFileURL(path.join(htmlparser2Dir, 'dist', 'index.js')).href
 );
 
+// FNV-1a 64-bit constants: 0xcbf29ce484222325 and 0x100000001b3, written in
+// decimal because oxfmt lowercases hex digits while `unicorn/number-literal-case`
+// requires uppercase.
 const FNV_OFFSET = 14_695_981_039_346_656_037n;
 const FNV_PRIME = 1_099_511_628_211n;
 const MASK = (1n << 64n) - 1n;
@@ -143,6 +146,8 @@ const fixturesDir = path.resolve(packageDir, '..', FIXTURES);
 const rows = [];
 for (const file of htmlFiles(fixturesDir)) {
 	const html = readFileSync(path.join(fixturesDir, file), 'utf8');
+	// Split by code point (what `[...html]` does); `typescript/no-misused-spread`
+	// rejects spreading a string and `unicorn/prefer-spread` rejects `Array.from`.
 	const codePoints = html.match(/[\s\S]/gu) ?? [];
 	rows.push(`${file}\tall\t${record(html)}`);
 	for (const fraction of [1, 2]) {
