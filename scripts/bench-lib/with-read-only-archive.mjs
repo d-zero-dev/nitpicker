@@ -1,5 +1,3 @@
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import path from 'node:path';
 
 import { ArchiveManager } from '@nitpicker/query';

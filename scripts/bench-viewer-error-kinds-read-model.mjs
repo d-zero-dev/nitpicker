@@ -33,8 +33,6 @@
  * measuring realistic cold-cache I/O, which an in-memory DB can't produce.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -151,7 +149,7 @@ function makeAccessorStub(db, cleanupDir) {
 	return {
 		readOnly: false,
 		getKnex: () => db,
-		getConfig: async () => CONFIG,
+		getConfig: () => Promise.resolve(CONFIG),
 		tmpDir: cleanupDir,
 	};
 }

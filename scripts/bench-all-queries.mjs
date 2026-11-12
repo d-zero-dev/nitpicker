@@ -12,8 +12,6 @@
  * Output is anonymous (timings only); rows / URLs are not dumped.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import path from 'node:path';
 import process from 'node:process';
 
@@ -57,6 +55,7 @@ const pageStats = await knex('pages').count('id as total');
 const pageCount = Number(pageStats[0]?.total ?? 0);
 console.log(`pages: ${pageCount.toLocaleString()} rows\n`);
 
+/** @type {Array<[string, () => Promise<unknown>]>} */
 const cases = [
 	['getSummary', () => getSummary(accessor)],
 	['getErrorKinds', () => getErrorKinds(accessor)],

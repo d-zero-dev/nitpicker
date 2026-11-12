@@ -28,8 +28,6 @@
  * NEVER runs ANALYZE / PRAGMA optimize.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import process from 'node:process';
 
 import { ArchiveManager } from '@nitpicker/query';

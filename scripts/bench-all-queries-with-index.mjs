@@ -10,14 +10,11 @@
  *     node scripts/bench-all-queries-with-index.mjs <archive.nitpicker>
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-import { ArchiveAccessor } from '@nitpicker/archive/archive-accessor';
 import {
 	checkHeaders,
 	findDuplicates,
@@ -65,11 +62,14 @@ const db = knex({
 	useNullAsDefault: true,
 });
 
+/** @typedef {import('@nitpicker/archive/archive-accessor').ArchiveAccessor} ArchiveAccessor */
+
 // Spin up an ArchiveAccessor-shaped stub that returns this knex instance.
 // `listPages` etc. only touch `accessor.getKnex()`, so a minimal stub
 // works for benchmarking purposes.
 const accessor = /** @type {ArchiveAccessor} */ ({ getKnex: () => db });
 
+/** @type {Array<[string, () => Promise<unknown>]>} */
 const cases = [
 	['getSummary', () => getSummary(accessor)],
 	['getErrorKinds', () => getErrorKinds(accessor)],

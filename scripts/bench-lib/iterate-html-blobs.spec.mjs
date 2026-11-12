@@ -13,7 +13,7 @@ import { iterateHtmlBlobs } from './iterate-html-blobs.mjs';
  */
 async function insertBlobs(db, hashBytes, options = {}) {
 	for (const byte of hashBytes) {
-		const hash = Buffer.from([byte, 0xff]);
+		const hash = Buffer.from([byte, 255]);
 		const body = Buffer.from(`<p>${byte}</p>`);
 		await db('page_html_blobs').insert({
 			hash,

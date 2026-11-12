@@ -69,8 +69,6 @@
  *       [--regions] [--pragma name=value ...] [--gc]
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import process from 'node:process';
 
 import { buildViewerReadModel } from '@nitpicker/query';

@@ -27,8 +27,6 @@
  * The source archive is never modified. Needs `yarn build` first.
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import { once } from 'node:events';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { rename, rm } from 'node:fs/promises';

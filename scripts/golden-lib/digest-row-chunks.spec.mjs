@@ -36,14 +36,21 @@ describe('digestRowChunks', () => {
 	});
 
 	it('accepts an async iterable', async () => {
-		/**
-		 * @yields {{ a: number }} Two rows.
-		 */
-		async function* generate() {
-			yield { a: 1 };
-			yield { a: 2 };
-		}
-		const entries = await digestRowChunks(generate(), 10);
+		const source = [{ a: 1 }, { a: 2 }];
+		const asyncRows = {
+			[Symbol.asyncIterator]() {
+				let index = 0;
+				return {
+					next: () =>
+						Promise.resolve(
+							index < source.length
+								? { value: source[index++], done: false }
+								: { value: undefined, done: true },
+						),
+				};
+			},
+		};
+		const entries = await digestRowChunks(asyncRows, 10);
 		expect(entries.get('rows')).toBe('2');
 		expect(entries.get('chunk:0')).toBe(sha([{ a: 1 }, { a: 2 }]));
 	});

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
 
 /**
  * Benchmarks `Archive.setPage()` write throughput for N synthetic pages.
@@ -21,7 +20,6 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-// eslint-disable-next-line import-x/no-extraneous-dependencies -- workspace dep, same import other scripts/*.mjs already use
 import { tryParseUrl as parseUrl } from '@d-zero/shared/parse-url';
 
 import Archive from '../packages/@nitpicker/archive/lib/archive.js';

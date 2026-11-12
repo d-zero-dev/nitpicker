@@ -18,8 +18,6 @@
  * (comma-separated). Each archive is built in-memory (`:memory:`).
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';

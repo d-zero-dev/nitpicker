@@ -47,8 +47,6 @@
  * HTML are printed.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import process from 'node:process';
 
 import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';

@@ -18,8 +18,6 @@
  *     node scripts/bench-search-html.mjs <archive.nitpicker> [--case <case>] [--json]
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import { searchHtml } from '@nitpicker/query';
 
 import { countInternalPages } from './bench-lib/count-internal-pages.mjs';

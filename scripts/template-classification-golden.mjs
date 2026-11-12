@@ -28,8 +28,6 @@
  * The source archive is never modified. Needs `yarn build` first.
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import { readFile, writeFile } from 'node:fs/promises';
 
 import { classifyArchivePageTemplates } from '@nitpicker/archive/template-classification/classify-archive-page-templates';

@@ -30,8 +30,6 @@
  *     node scripts/bench-tech-signals.mjs <archive.nitpicker> [--case rust|js] [--json]
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { decodeStoredBlob } from '@nitpicker/archive/decode-html-blob';
 
 import { matchStructuralTechnologySignals } from '../packages/@nitpicker/archive/lib/meta/technologies/match-structural-technology-signals.js';
@@ -63,7 +61,7 @@ async function loadJavaScriptMatcher() {
 
 /** The implementation, per case in `BENCH_CASES['tech-signals']`. */
 const ENGINES = {
-	rust: async () => (html) => matchStructuralTechnologySignals(html, null),
+	rust: () => Promise.resolve((html) => matchStructuralTechnologySignals(html, null)),
 	js: loadJavaScriptMatcher,
 };
 const loadEngine = ENGINES[caseName];

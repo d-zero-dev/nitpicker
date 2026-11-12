@@ -28,9 +28,9 @@ describe('withReadOnlyArchive', () => {
 		const accessor = { readOnly: true };
 		managerOpen.mockResolvedValue({ archiveId: 'archive-1', accessor });
 		managerClose.mockResolvedValue();
-		const result = await withReadOnlyArchive('site.nitpicker', async (opened) => {
+		const result = await withReadOnlyArchive('site.nitpicker', (opened) => {
 			expect(opened).toBe(accessor);
-			return 'measured';
+			return Promise.resolve('measured');
 		});
 		expect(result).toBe('measured');
 		expect(managerOpen).toHaveBeenCalledWith(path.resolve('site.nitpicker'));
@@ -41,9 +41,9 @@ describe('withReadOnlyArchive', () => {
 		managerOpen.mockResolvedValue({ archiveId: 'archive-1', accessor: {} });
 		managerClose.mockResolvedValue();
 		await expect(
-			withReadOnlyArchive('site.nitpicker', async () => {
-				throw new Error('bench failed');
-			}),
+			withReadOnlyArchive('site.nitpicker', () =>
+				Promise.reject(new Error('bench failed')),
+			),
 		).rejects.toThrow('bench failed');
 		expect(managerClose).toHaveBeenCalledWith('archive-1');
 	});

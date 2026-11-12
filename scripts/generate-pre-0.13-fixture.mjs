@@ -24,8 +24,6 @@
  * `lib/` directly).
  */
 
-/* eslint-disable no-console */
-
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';

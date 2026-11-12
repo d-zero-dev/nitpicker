@@ -58,8 +58,9 @@ const RUNNERS = {
 	'all-urls': async (accessor) => {
 		let distinctUrls = 0;
 		const sorted = await measureMs(() =>
-			sortArchiveUrls(accessor, async () => {
+			sortArchiveUrls(accessor, () => {
 				distinctUrls++;
+				return Promise.resolve();
 			}),
 		);
 		return { timeMs: sorted.ms, metrics: { distinctUrls } };

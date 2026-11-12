@@ -46,7 +46,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import path from 'node:path';
 
 const SECTION_HEADING = /^## (?:Not covered here|対象外)\s*$/;
 const SECTION_END = /^(## |🤖)/;
@@ -236,9 +236,9 @@ function mark(prArg, indexArg, markerArg, dryRun) {
 	if (dryRun) {
 		return `dry-run: body not written\n${body}`;
 	}
-	const dir = mkdtempSync(join(tmpdir(), 'leftovers-'));
+	const dir = mkdtempSync(path.join(tmpdir(), 'leftovers-'));
 	try {
-		const file = join(dir, 'body.md');
+		const file = path.join(dir, 'body.md');
 		writeFileSync(file, body);
 		gh(['pr', 'edit', data.prNumber, '--body-file', file]);
 	} finally {

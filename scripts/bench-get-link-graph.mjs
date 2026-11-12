@@ -19,8 +19,6 @@
  *     node scripts/bench-get-link-graph.mjs <archive.nitpicker> [--case <case>] [--json]
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import { getLinkGraph } from '@nitpicker/query';
 
 import { countInternalPages } from './bench-lib/count-internal-pages.mjs';

@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 import { parse, serializeOuter } from 'parse5';
 
 import { deriveDomPath } from '../packages/@nitpicker/archive/lib/populate-entity-tables/derive-dom-path.js';
@@ -29,21 +27,25 @@ import { Parse5ElementAdapter } from './parse5-element-adapter.mjs';
  * fallback rather than a path expected to trigger in practice.
  */
 export function createDomPathResolver() {
-	return async (pageId, htmlString, images) => {
+	return (pageId, htmlString, images) => {
 		if (htmlString === null) {
 			// Every image on this page falls back — emit a per-image
 			// warning so operators can audit reconstruction fidelity,
 			// not just a single "no HTML for page X" line.
-			return fallbackAllUnknown(images, pageId, 'no HTML snapshot stored');
+			return Promise.resolve(
+				fallbackAllUnknown(images, pageId, 'no HTML snapshot stored'),
+			);
 		}
 		let document;
 		try {
 			document = parse(htmlString);
 		} catch (error) {
-			return fallbackAllUnknown(
-				images,
-				pageId,
-				`parse5 parse failed: ${error?.message ?? error}`,
+			return Promise.resolve(
+				fallbackAllUnknown(
+					images,
+					pageId,
+					`parse5 parse failed: ${error?.message ?? error}`,
+				),
 			);
 		}
 		const candidates = findElementsByTagName(document, 'img').map((node) => ({
@@ -58,7 +60,7 @@ export function createDomPathResolver() {
 				);
 			}
 		}
-		return result;
+		return Promise.resolve(result);
 	};
 }
 

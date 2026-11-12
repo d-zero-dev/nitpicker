@@ -34,8 +34,6 @@
  * The source archive is never modified. Needs `yarn build` first.
  */
 
-/* eslint-disable import-x/no-extraneous-dependencies */
-
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createReadStream, createWriteStream } from 'node:fs';

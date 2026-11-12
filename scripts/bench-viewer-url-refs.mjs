@@ -14,8 +14,6 @@
  * site name is hard-coded.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -58,7 +56,7 @@ function makeUrl(index) {
  * @param edgeCount - Number of synthetic edges being benchmarked.
  * @returns The database handle and cleanup paths.
  */
-async function makeDb(label, edgeCount) {
+function makeDb(label, edgeCount) {
 	const dir = path.join(
 		tmpdir(),
 		`nitpicker-bench-viewer-url-refs-${label}-${edgeCount}-${process.pid}`,
@@ -71,7 +69,7 @@ async function makeDb(label, edgeCount) {
 		connection: { filename: dbFilePath },
 		useNullAsDefault: true,
 	});
-	return { db, dbFilePath, dir };
+	return Promise.resolve({ db, dbFilePath, dir });
 }
 
 /**
@@ -182,7 +180,7 @@ async function seedRef(edgeCount) {
 		urlSet.add(makeUrl(edgeId));
 		urlSet.add(makeUrl(edgeId * 13));
 	}
-	const urls = [...urlSet].toSorted();
+	const urls = [...urlSet].toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 	const idByUrl = new Map(urls.map((url, index) => [url, index + 1]));
 	for (let start = 0; start < urls.length; start += 500) {
 		await db('viewer_url_refs').insert(

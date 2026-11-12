@@ -29,8 +29,6 @@
  * profiled here.
  */
 
-/* eslint-disable no-console, import-x/no-extraneous-dependencies */
-
 import path from 'node:path';
 import process from 'node:process';
 

@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 import { stat } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -56,8 +54,29 @@ export async function reportBenchResult(params) {
 	console.log(`  input: ${result.input.pages} pages, ${result.input.archiveBytes} bytes`);
 	console.log(`  peak RSS: ${result.peakRssBytes} bytes`);
 	for (const [name, value] of Object.entries(result.metrics)) {
-		console.log(
-			`  ${name}: ${typeof value === 'object' ? JSON.stringify(value) : value}`,
-		);
+		console.log(`  ${name}: ${formatMetric(value)}`);
 	}
+}
+
+/**
+ * Renders one metric value for the human summary: objects as JSON, anything
+ * else in its plain string form.
+ * @param {unknown} value - The metric value.
+ * @returns {string} The text to print after the metric name.
+ */
+function formatMetric(value) {
+	if (typeof value === 'object') {
+		return JSON.stringify(value);
+	}
+	if (typeof value === 'string') {
+		return value;
+	}
+	if (
+		typeof value === 'number' ||
+		typeof value === 'boolean' ||
+		typeof value === 'bigint'
+	) {
+		return String(value);
+	}
+	return 'undefined';
 }

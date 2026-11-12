@@ -18,14 +18,14 @@ describe('withWritableArchiveCopy', () => {
 	});
 
 	it('opens the archive into a fresh temp directory and deletes it after the work', async () => {
-		const archive = { releaseHandle: vi.fn(async () => {}) };
+		const archive = { releaseHandle: vi.fn(() => Promise.resolve()) };
 		archiveOpen.mockResolvedValue(archive);
 		let workDir;
-		const result = await withWritableArchiveCopy('site.nitpicker', async (opened) => {
+		const result = await withWritableArchiveCopy('site.nitpicker', (opened) => {
 			workDir = archiveOpen.mock.calls[0][0].cwd;
 			expect(opened).toBe(archive);
 			expect(existsSync(workDir)).toBe(true);
-			return 'measured';
+			return Promise.resolve('measured');
 		});
 		expect(result).toBe('measured');
 		expect(archiveOpen.mock.calls[0][0].filePath).toBe(path.resolve('site.nitpicker'));
@@ -37,12 +37,10 @@ describe('withWritableArchiveCopy', () => {
 
 	it('deletes the temp directory even when releasing the handle fails', async () => {
 		archiveOpen.mockResolvedValue({
-			releaseHandle: async () => {
-				throw new Error('release failed');
-			},
+			releaseHandle: () => Promise.reject(new Error('release failed')),
 		});
 		await expect(
-			withWritableArchiveCopy('site.nitpicker', async () => 'x'),
+			withWritableArchiveCopy('site.nitpicker', () => Promise.resolve('x')),
 		).rejects.toThrow('release failed');
 		expect(existsSync(archiveOpen.mock.calls[0][0].cwd)).toBe(false);
 	});
@@ -50,18 +48,18 @@ describe('withWritableArchiveCopy', () => {
 	it('deletes the temp directory when the archive cannot be opened', async () => {
 		archiveOpen.mockRejectedValue(new Error('not a tar'));
 		await expect(
-			withWritableArchiveCopy('site.nitpicker', async () => 'x'),
+			withWritableArchiveCopy('site.nitpicker', () => Promise.resolve('x')),
 		).rejects.toThrow('not a tar');
 		expect(existsSync(archiveOpen.mock.calls[0][0].cwd)).toBe(false);
 	});
 
 	it('rethrows the work error after cleaning up', async () => {
-		const archive = { releaseHandle: vi.fn(async () => {}) };
+		const archive = { releaseHandle: vi.fn(() => Promise.resolve()) };
 		archiveOpen.mockResolvedValue(archive);
 		await expect(
-			withWritableArchiveCopy('site.nitpicker', async () => {
-				throw new Error('bench failed');
-			}),
+			withWritableArchiveCopy('site.nitpicker', () =>
+				Promise.reject(new Error('bench failed')),
+			),
 		).rejects.toThrow('bench failed');
 		expect(archive.releaseHandle).toHaveBeenCalledOnce();
 		expect(existsSync(archiveOpen.mock.calls[0][0].cwd)).toBe(false);
