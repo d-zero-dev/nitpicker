@@ -36,21 +36,15 @@ describe('digestRowChunks', () => {
 	});
 
 	it('accepts an async iterable', async () => {
-		const source = [{ a: 1 }, { a: 2 }];
-		const asyncRows = {
-			[Symbol.asyncIterator]() {
-				let index = 0;
-				return {
-					next: () =>
-						Promise.resolve(
-							index < source.length
-								? { value: source[index++], done: false }
-								: { value: undefined, done: true },
-						),
-				};
-			},
-		};
-		const entries = await digestRowChunks(asyncRows, 10);
+		/**
+		 * @yields {{ a: number }} Two rows.
+		 */
+		async function* generate() {
+			// An `await` keeps this a real async generator for typescript/require-await.
+			yield await Promise.resolve({ a: 1 });
+			yield await Promise.resolve({ a: 2 });
+		}
+		const entries = await digestRowChunks(generate(), 10);
 		expect(entries.get('rows')).toBe('2');
 		expect(entries.get('chunk:0')).toBe(sha([{ a: 1 }, { a: 2 }]));
 	});
