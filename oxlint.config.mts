@@ -103,6 +103,21 @@ export default {
 			},
 		},
 		{
+			// Tests reference mocked methods as values (`expect(fake.close)`) and stub
+			// async signatures with synchronous bodies, which these two rules forbid.
+			files: [
+				'**/*.spec.{ts,tsx,js,mjs}',
+				'**/*.e2e.ts',
+				'**/*.api.ts',
+				'**/test-helpers/**',
+				'**/__tests__/**',
+			],
+			rules: {
+				'typescript/unbound-method': 'off',
+				'typescript/require-await': 'off',
+			},
+		},
+		{
 			// Maintenance and benchmark scripts are CLI tools: stdout is their interface.
 			files: [
 				'scripts/**',
