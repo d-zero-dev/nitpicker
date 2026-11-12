@@ -32,22 +32,22 @@ type QueryFlags = InferFlags<typeof commandDef.flags>;
 export async function query(args: string[], flags: QueryFlags) {
 	const filePath = args[0];
 	if (!filePath) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Error: No .nitpicker file specified.');
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Usage: npx @nitpicker/cli query <file> <sub-command> [options]');
 		process.exit(1);
 	}
 
 	const subCommandArg = args[1];
 	if (!subCommandArg || !VALID_SUB_COMMANDS.includes(subCommandArg as QuerySubCommand)) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			subCommandArg
 				? `Error: Unknown sub-command: ${subCommandArg}`
 				: 'Error: No sub-command specified.',
 		);
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(`Valid sub-commands: ${VALID_SUB_COMMANDS.join(', ')}`);
 		process.exit(1);
 	}
@@ -120,7 +120,7 @@ export async function query(args: string[], flags: QueryFlags) {
 				});
 			}
 			const output = JSON.stringify(result, null, flags.pretty ? 2 : undefined);
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.log(output);
 		} finally {
 			try {

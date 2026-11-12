@@ -2,6 +2,7 @@ import type { attachCrawlDisplay as AttachCrawlDisplayFn } from '../crawl/attach
 import type * as DealerModule from '@d-zero/dealer';
 import type { CrawlerError } from '@nitpicker/archive/utils/types/types';
 import type { CrawlerOrchestrator as OrchestratorType } from '@nitpicker/crawler';
+import type { Mock } from 'vitest';
 
 import path from 'node:path';
 
@@ -225,7 +226,7 @@ vi.mock('node:fs/promises', () => ({
 	},
 }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+// oxlint-disable-next-line typescript/consistent-type-imports
 type CrawlFlags = Parameters<typeof import('./crawl.js').crawl>[1];
 
 /**
@@ -268,48 +269,62 @@ function createFlags(overrides: Partial<CrawlFlags> = {}): CrawlFlags {
 	} as CrawlFlags;
 }
 
+/**
+ * The mock functions backing the fake orchestrator. Held as `Mock` members
+ * (not as the real class's methods) so assertions read them directly.
+ * `abort` and `updateRuntimeOptions` exist only on tests that attach them.
+ */
+interface FakeOrchestrator {
+	write: Mock;
+	garbageCollect: Mock;
+	abort?: Mock;
+	updateRuntimeOptions?: Mock;
+	archive: { filePath: string; close: Mock };
+}
+
 /** Sets up the fake orchestrator that mockCrawling returns. */
 function setupFakeOrchestrator() {
-	const fakeOrchestrator = {
+	const fakeOrchestrator: FakeOrchestrator = {
 		write: vi.fn().mockResolvedValue(),
 		garbageCollect: vi.fn(),
 		archive: { filePath: '/tmp/test.nitpicker', close: vi.fn().mockResolvedValue() },
-	} as unknown as OrchestratorType;
+	};
 	Object.assign(fakeOrchestrator, {
 		async [Symbol.asyncDispose]() {
 			await fakeOrchestrator.archive.close();
 			fakeOrchestrator.garbageCollect();
 		},
 	});
+	const orchestrator = fakeOrchestrator as unknown as OrchestratorType;
 
 	mockCrawling.mockImplementation((_urls, _opts, cb) => {
-		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
-		return Promise.resolve(fakeOrchestrator);
+		cb?.(orchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(orchestrator);
 	});
 
 	mockResume.mockImplementation((_path, _opts, cb) => {
-		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
-		return Promise.resolve(fakeOrchestrator);
+		cb?.(orchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(orchestrator);
 	});
 
 	mockAppend.mockImplementation((_path, _urls, _opts, cb) => {
-		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
-		return Promise.resolve(fakeOrchestrator);
+		cb?.(orchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(orchestrator);
 	});
 
 	mockRetryFailed.mockImplementation((_path, _opts, cb) => {
-		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
-		return Promise.resolve(fakeOrchestrator);
+		cb?.(orchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(orchestrator);
 	});
 
 	mockInventory.mockImplementation((_path, _urls, _opts, cb) => {
-		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
-		return Promise.resolve(fakeOrchestrator);
+		cb?.(orchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(orchestrator);
 	});
 
 	mockRecrawl.mockImplementation((_path, _urls, _opts, cb) => {
-		cb?.(fakeOrchestrator, { baseUrl: 'https://example.com' });
-		return Promise.resolve(fakeOrchestrator);
+		cb?.(orchestrator, { baseUrl: 'https://example.com' });
+		return Promise.resolve(orchestrator);
 	});
 
 	return fakeOrchestrator;
@@ -480,9 +495,9 @@ describe('startCrawl', () => {
 		const { startCrawl } = await import('./crawl.js');
 		await startCrawl(['https://example.com'], createFlags());
 
-		const writeMock = fake.write as unknown as ReturnType<typeof vi.fn>;
-		const closeMock = fake.archive.close as unknown as ReturnType<typeof vi.fn>;
-		const gcMock = fake.garbageCollect as unknown as ReturnType<typeof vi.fn>;
+		const writeMock = fake.write;
+		const closeMock = fake.archive.close;
+		const gcMock = fake.garbageCollect;
 
 		const writeOrder = writeMock.mock.invocationCallOrder[0];
 		const closeOrder = closeMock.mock.invocationCallOrder[0];
@@ -588,9 +603,7 @@ describe('startCrawl', () => {
 
 	it('write() が失敗しても archive.close() と garbageCollect() が呼ばれ、CrawlAggregateError として原因を保持する（issue #294 code review: post-crawl 失敗も errStack と同じ経路で報告する）', async () => {
 		const fake = setupFakeOrchestrator();
-		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-			new Error('write failed'),
-		);
+		fake.write.mockRejectedValueOnce(new Error('write failed'));
 		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const { startCrawl } = await import('./crawl.js');
 
@@ -614,9 +627,7 @@ describe('startCrawl', () => {
 	it('クロール中のページエラーと post-crawl 失敗が両方あっても、両方とも CrawlAggregateError に含める（issue #294 code review: 片方が他方を握り潰さない）', async () => {
 		const fake = setupFakeOrchestrator();
 		simulateCrawlTimeError(new Error('scrape failed'));
-		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-			new Error('write failed'),
-		);
+		fake.write.mockRejectedValueOnce(new Error('write failed'));
 		const { CrawlAggregateError } = await import('./crawl-aggregate-error.js');
 		const { startCrawl } = await import('./crawl.js');
 
@@ -1108,9 +1119,7 @@ describe('crawl', () => {
 
 	it('--resume 経由で write() が失敗しても archive.close() が呼ばれ、CrawlAggregateError として Fatal 終了する（issue #294 code review: post-crawl 失敗も errStack と同じ経路で報告する）', async () => {
 		const fake = setupFakeOrchestrator();
-		(fake.write as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-			new Error('write failed'),
-		);
+		fake.write.mockRejectedValueOnce(new Error('write failed'));
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
 			throw new ExitError(code as number);

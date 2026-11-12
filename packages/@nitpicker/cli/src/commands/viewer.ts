@@ -29,11 +29,11 @@ type ViewerFlags = InferFlags<typeof commandDef.flags>;
 export async function viewer(args: string[], flags: ViewerFlags) {
 	const filePath = args[0];
 	if (!filePath) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			'Error: No source specified. Pass a .nitpicker file or a crawl stub directory.',
 		);
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Usage: npx @nitpicker/cli viewer <file-or-stub-dir> [options]');
 		process.exit(ExitCode.Fatal);
 	}

@@ -68,16 +68,16 @@ export async function report(args: string[], flags: ReportFlags) {
 	const filePath = args[0];
 
 	if (!filePath) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Error: No .nitpicker file specified.');
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Usage: npx @nitpicker/cli report <file> [options]');
 		process.exit(1);
 	}
 
 	const sheetUrl = flags.sheet;
 	if (!!sheetUrl === !!flags.html) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Error: Choose exactly one output: --sheet <url> or --html.');
 		process.exit(1);
 	}
@@ -93,22 +93,22 @@ export async function report(args: string[], flags: ReportFlags) {
 		const resolvedListFile = path.resolve(process.cwd(), urlsFlag);
 		const { urls: validUrls, invalid } = await readUrlListFile(resolvedListFile);
 		if (validUrls.length === 0 && invalid.length === 0) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(`Error: No URLs found in --urls file: ${urlsFlag}`);
 			process.exit(1);
 		}
 		if (invalid.length > 0) {
 			for (const item of invalid) {
-				// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of --silent
+				// oxlint-disable-next-line no-console -- operator-facing warning, must be visible regardless of --silent
 				console.warn(formatInvalidReportUrlWarning(urlsFlag, item));
 			}
-			// eslint-disable-next-line no-console -- see above
+			// oxlint-disable-next-line no-console -- see above
 			console.warn(
 				formatReportUrlSkipSummary(invalid.length, validUrls.length + invalid.length),
 			);
 		}
 		if (validUrls.length === 0) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(
 				`Error: All ${invalid.length} line(s) in --urls file failed URL validation: ${urlsFlag}`,
 			);
@@ -126,7 +126,7 @@ export async function report(args: string[], flags: ReportFlags) {
 		try {
 			sheets = parseSheetNames(flags.sheets);
 		} catch (error) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
 			process.exit(1);
 		}

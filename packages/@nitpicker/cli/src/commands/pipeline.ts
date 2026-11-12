@@ -36,9 +36,9 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 	const siteUrl = args[0];
 
 	if (!siteUrl) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Error: No URL specified.');
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Usage: npx @nitpicker/cli pipeline <URL> [options]');
 		process.exit(ExitCode.Fatal);
 	}
@@ -48,7 +48,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 
 	// Step 1: Crawl
 	if (!silent) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.log('\n📡 [pipeline] Step 1/2: Crawling...');
 	}
 
@@ -130,7 +130,7 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 	// Step 2: Report (only if --sheet is provided)
 	if (flags.sheet) {
 		if (!silent) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.log('\n📊 [pipeline] Step 2/2: Reporting...');
 		}
 		await report([archivePath], {
@@ -151,12 +151,12 @@ export async function pipeline(args: string[], flags: PipelineFlags) {
 			silent: flags.silent,
 		});
 	} else if (!silent) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.log('\n📊 [pipeline] Step 2/2: Skipped (no --sheet specified)');
 	}
 
 	if (!silent) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.log('\n✅ [pipeline] All steps completed.');
 	}
 }

@@ -68,9 +68,9 @@ const SPLIT_ROW_LABELS: string[] = [
  */
 export async function split(args: string[], flags: SplitFlags): Promise<void> {
 	if (!flags.output) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Error: -o/--output is required.');
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			'Usage: npx @nitpicker/cli split <archive> <URL> [<URL>...] -o <output> [--skip-templates] [--verbose]',
 		);
@@ -226,7 +226,7 @@ export async function split(args: string[], flags: SplitFlags): Promise<void> {
 			templateClassificationError: state.templateClassificationError,
 		};
 		for (const line of formatTransferNotices(outcome)) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(line);
 		}
 		process.exitCode = resolveTransferExitCode(outcome);

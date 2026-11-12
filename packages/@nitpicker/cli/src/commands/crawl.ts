@@ -466,7 +466,7 @@ function createCrawlInitializedCallback(
 			requestHeaders,
 		);
 		if (missingHeaderNames.length > 0) {
-			// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
+			// oxlint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
 			console.warn(formatMissingRequestHeaderWarning(missingHeaderNames));
 		}
 		const triggerLabel = typeof trigger === 'function' ? trigger(config) : trigger;
@@ -518,8 +518,8 @@ function unwrapTaskListStepError(error: unknown): unknown {
 
 /**
  * Coerces an unwrapped, potentially non-`Error` thrown value into an
- * `Error` so it can join {@link CrawlAggregateError}'s `(CrawlerError |
- * Error)[]` list alongside genuine crawl-time errors.
+ * `Error` so it can join {@link CrawlAggregateError}'s
+ * `(CrawlerError | Error)[]` list alongside genuine crawl-time errors.
  * @param value - The value to coerce.
  * @returns `value` unchanged if it's already an `Error`, otherwise a new
  *   `Error` wrapping its string form.
@@ -572,7 +572,7 @@ async function finishCrawlMode(
 
 	if (errStack.length > 0) {
 		const error = new CrawlAggregateError(errStack);
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(`\n${error.message}`);
 		throw error;
 	}
@@ -765,10 +765,10 @@ async function inventoryCrawl(archivePath: string, listFile: string, flags: Craw
 
 	if (invalid.length > 0) {
 		for (const item of invalid) {
-			// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
+			// oxlint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
 			console.warn(formatInvalidInventoryUrlWarning(listFile, item));
 		}
-		// eslint-disable-next-line no-console -- see above
+		// oxlint-disable-next-line no-console -- see above
 		console.warn(
 			formatInventorySkipSummary(invalid.length, urls.length + invalid.length),
 		);
@@ -836,10 +836,10 @@ async function recrawlCrawl(archivePath: string, listFile: string, flags: CrawlF
 
 	if (invalid.length > 0) {
 		for (const item of invalid) {
-			// eslint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
+			// oxlint-disable-next-line no-console -- operator-facing warning, must be visible regardless of DEBUG filters or --silent
 			console.warn(formatInvalidRecrawlUrlWarning(listFile, item));
 		}
-		// eslint-disable-next-line no-console -- see above
+		// oxlint-disable-next-line no-console -- see above
 		console.warn(formatRecrawlSkipSummary(invalid.length, urls.length + invalid.length));
 	}
 	if (urls.length === 0) {
@@ -1020,7 +1020,7 @@ export async function crawl(args: string[], rawFlags: RawCrawlFlags) {
 	const hasListFlag = !!flags.list && flags.list.length > 0;
 
 	if (flags.single && (hasListFlag || flags.listFile)) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.warn('Warning: --single is ignored when --list or --list-file is specified.');
 	}
 

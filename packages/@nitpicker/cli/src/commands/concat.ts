@@ -88,9 +88,9 @@ function buildConcatRowLabels(sourceCount: number): string[] {
  */
 export async function concat(args: string[], flags: ConcatFlags): Promise<void> {
 	if (!flags.output) {
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error('Error: -o/--output is required.');
-		// eslint-disable-next-line no-console
+		// oxlint-disable-next-line no-console
 		console.error(
 			'Usage: npx @nitpicker/cli concat <archive> <archive> [<archive>...] -o <output> [--skip-templates] [--verbose]',
 		);
@@ -133,7 +133,7 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 	};
 
 	try {
-		// eslint-disable-next-line unicorn/no-useless-undefined -- `from<T>(value: T)` has no optional/default parameter; omitting it is a TS2554 error
+		// oxlint-disable-next-line unicorn/no-useless-undefined -- `from<T>(value: T)` has no optional/default parameter; omitting it is a TS2554 error
 		let pipeline = TaskList.from<void>(undefined);
 		for (const [index, inputPath] of inputPaths.entries()) {
 			const label =
@@ -255,7 +255,7 @@ export async function concat(args: string[], flags: ConcatFlags): Promise<void> 
 			templateClassificationError: state.templateClassificationError,
 		};
 		for (const line of formatTransferNotices(outcome)) {
-			// eslint-disable-next-line no-console
+			// oxlint-disable-next-line no-console
 			console.error(line);
 		}
 		process.exitCode = resolveTransferExitCode(outcome);

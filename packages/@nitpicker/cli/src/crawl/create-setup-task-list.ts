@@ -122,7 +122,7 @@ export function createSetupTaskList(
 			new Promise<undefined>((resolve, reject) => {
 				if (isPrebuilt && skipRemaining) {
 					ctx.progress('skipped');
-					// eslint-disable-next-line unicorn/no-useless-undefined -- `Promise<undefined>`'s resolve requires the argument in this TS config; `Promise<void>` would let it be a `StepFn<undefined, void>` mismatch against the pipeline's carried `undefined` type instead
+					// oxlint-disable-next-line unicorn/no-useless-undefined -- `Promise<undefined>`'s resolve requires the argument in this TS config; `Promise<void>` would let it be a `StepFn<undefined, void>` mismatch against the pipeline's carried `undefined` type instead
 					resolve(undefined);
 					return;
 				}
@@ -135,14 +135,14 @@ export function createSetupTaskList(
 						if (outcome === 'skip') {
 							ctx.progress('skipped');
 						}
-						// eslint-disable-next-line unicorn/no-useless-undefined -- see above
+						// oxlint-disable-next-line unicorn/no-useless-undefined -- see above
 						resolve(undefined);
 					},
 					reject,
 				};
 			});
 
-	// eslint-disable-next-line unicorn/no-useless-undefined -- `from<T>(value: T)` has no optional/default parameter; omitting it is a TS2554 error
+	// oxlint-disable-next-line unicorn/no-useless-undefined -- `from<T>(value: T)` has no optional/default parameter; omitting it is a TS2554 error
 	let pipeline = TaskList.from(undefined);
 	for (const name of phaseNames) {
 		pipeline = pipeline.pipe(name, makeStep(true));
