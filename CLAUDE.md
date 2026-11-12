@@ -48,7 +48,7 @@ yarn bench:smoke                                   # Rust 化の基準値ベン�
 yarn vitest run --config vitest.e2e.config.ts      # E2E（maxWorkers: 1、test-server はOS割り当ての動的ポート）
 yarn workspace @nitpicker/viewer test:e2e          # viewer の Playwright E2E
 yarn build                                         # 全パッケージビルド（@nitpicker/core のネイティブアドオンを cargo でビルドする）
-yarn lint                                          # lint + prettier + cspell + rustfmt + clippy
+yarn lint                                          # oxlint（型情報あり）+ oxfmt + stylelint + markuplint + textlint + rustfmt + clippy
 ```
 
 - **Rust ツールチェーン必須**: `@nitpicker/core`は Rust（napi-rs）のネイティブアドオンで、`yarn build`が`cargo build`を呼ぶ。バージョンはルートの`rust-toolchain.toml`で固定（rustup が自動取得）。セットアップは CONTRIBUTING.md。ローカルでは cargo も`yarn test:rust`/`yarn lint`経由で実行し、直接叩かない（CI の`rust-test`ジョブだけは`yarn install`を省くため`test:rust`と同じコマンドを直接実行しており、`test:rust`を変えたら`.github/workflows/ci.yml`も合わせる）
@@ -61,7 +61,7 @@ yarn lint                                          # lint + prettier + cspell + 
 ## コマンド制約
 
 - **yarn のみ使用**: npm/npx 直実行は禁止。`yarn <script>`経由で実行する
-- **全体実行の強制**: 時間がかかっても`yarn build`/`yarn lint`/`yarn test`のリポジトリ全体実行を使う。`tsc`/`eslint`/`prettier`の単発実行・ファイルスコープ実行（`npx eslint <file>`、`prettier --write <file>`、`tsc -p <pkg>`等）は禁止
+- **全体実行の強制**: 時間がかかっても`yarn build`/`yarn lint`/`yarn test`のリポジトリ全体実行を使う。`tsc`/`oxlint`/`oxfmt`の単発実行・ファイルスコープ実行（`oxlint <file>`、`oxfmt <file>`、`tsc -p <pkg>`等）は禁止
 - **パッケージディレクトリに cd しない**: 常にリポジトリルートから実行する
 - **コマンドの連続実行禁止**: `&&`/`;`/改行連結をしない。1 回の実行で 1 コマンドのみ（permissions のパターンマッチを守るため）
 

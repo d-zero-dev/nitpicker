@@ -64,7 +64,7 @@ yarn bench:smoke
 # E2E テスト
 yarn vitest run --config vitest.e2e.config.ts
 
-# lint（rustfmt / clippy を含む）
+# lint（oxlint / oxfmt / rustfmt / clippy を含む。型情報ルールのため yarn build 済みであること）
 yarn lint:check
 ```
 

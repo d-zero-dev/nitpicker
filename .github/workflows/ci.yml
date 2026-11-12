@@ -157,7 +157,7 @@ jobs:
           node-version: 26.8.1
           cache: yarn
       - run: yarn install --immutable
-      # Type-aware lint rules (e.g. @typescript-eslint/no-unnecessary-type-assertion)
+      # Type-aware lint rules (oxlint --type-aware, e.g. typescript/no-unnecessary-type-assertion)
       # resolve cross-package types from each package's built lib/*.d.ts. Without the
       # build artifact, `@nitpicker/*` types collapse to `any` and the rules misfire,
       # so the lint job must consume the build output just like the test job does.
