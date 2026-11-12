@@ -12,7 +12,6 @@ import { validateSearchPattern } from '@nitpicker/archive/html-snapshot/validate
  * (`/static/images/` — a leading and a trailing slash — or `/a/s`) is a regular
  * expression, unless the caller asks for a literal (`literal: true`).
  */
-// cspell:disable-next-line
 const REGEX_FORM = /^\/(.*)\/([dgimsuvy]*)$/;
 
 /** Flags `search-html` does not support; every other flag is `g`, `u`, `i`, `m` or `s`. */

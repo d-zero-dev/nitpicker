@@ -32,6 +32,10 @@ import type { Knex } from 'knex';
 // `PageListItem.templateLabel` don't reach across packages for it.
 export type { TemplateLabel } from '@nitpicker/archive/db-ops/templates/types';
 
+// Re-exported for the viewer's cluster block-kind type, which is derived from
+// `TemplateClusterBlockingEvidence['reason']['kind']`.
+export type { TemplateClusterBlockingEvidence } from '@nitpicker/archive/db-ops/templates/types';
+
 /**
  * One row of {@link import('./list-isolated-pages.js').listIsolatedPages} output — a **完全孤立** (singleton)
  * inventory-* HTML page with no resolved-anchor inbound from any other

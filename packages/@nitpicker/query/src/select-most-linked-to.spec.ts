@@ -51,7 +51,7 @@ describe('selectMostLinkedTo', () => {
 			const limit = next(inDegree.length + 2);
 			expect(
 				selectMostLinkedTo(inDegree, limit),
-				`${[...inDegree]} limit ${limit}`,
+				`${[...inDegree].join(',')} limit ${limit}`,
 			).toStrictEqual(sortAndSlice(inDegree, limit));
 		}
 	});

@@ -58,7 +58,7 @@ const META = {
 
 describe('computeFromListAllowedPageIds', () => {
 	const workingDir = path.resolve(
-		__dirname,
+		import.meta.dirname,
 		'__test_fixtures_compute_from_list_allowed_page_ids__',
 	);
 	const archiveFilePath = path.resolve(workingDir, 'from-list-allowed-test.nitpicker');

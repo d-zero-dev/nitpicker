@@ -237,7 +237,7 @@ describe('computeResourceGroupRows', () => {
 		const knex = archive.getKnex();
 		const rows = await knex.transaction((trx) => computeResourceGroupRows(trx));
 		const urls = rows.map((r) => r.canonical_url);
-		expect(urls).toEqual([...urls].toSorted());
+		expect(urls).toEqual([...urls].toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
 	});
 
 	it('orders numbers in a canonical URL by value, as the pages and resources lists do', async () => {

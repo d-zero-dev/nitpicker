@@ -280,7 +280,7 @@ export async function getPageDetail(
 	if (page.extras_body != null) {
 		const jsonText = decodeJsonRef(page.extras_body, page.extras_codec);
 		if (jsonText === null) {
-			// eslint-disable-next-line no-console -- surfaces DB data-integrity issues
+			// oxlint-disable-next-line no-console -- surfaces DB data-integrity issues
 			console.warn(`Failed to decode meta_extras for ${url}`);
 		} else {
 			try {
@@ -289,7 +289,7 @@ export async function getPageDetail(
 					metaExtras = parsed as Record<string, unknown>;
 				}
 			} catch (error) {
-				// eslint-disable-next-line no-console -- surfaces DB data-integrity issues
+				// oxlint-disable-next-line no-console -- surfaces DB data-integrity issues
 				console.warn(`Failed to decode meta_extras for ${url}:`, error);
 			}
 		}

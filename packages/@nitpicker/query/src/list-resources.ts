@@ -72,8 +72,8 @@ export async function listResources(
 			contentType: string | null;
 			contentLength: number | null;
 			isExternal: 0 | 1;
-			compress: string | 0 | '0.0';
-			cdn: string | 0 | '0.0';
+			compress: string | 0;
+			cdn: string | 0;
 			referrerCount: number;
 		},
 		ResourceEntry

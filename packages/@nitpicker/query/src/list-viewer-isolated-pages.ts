@@ -49,8 +49,8 @@ function applyIsolatedPageOrder(
  * Fast-path counterpart of `listIsolatedPages`, backed by
  * `viewer_isolated_components` + `viewer_isolated_component_pages`.
  *
- * Unlike the live implementation's in-memory `sortArrayItems(..., type:
- * 'url')`, URL ordering here is plain SQLite `BINARY` on the precomputed
+ * Unlike the live implementation's in-memory
+ * `sortArrayItems(..., type: 'url')`, URL ordering here is plain SQLite `BINARY` on the precomputed
  * `url_sort_key`, matching the established `viewer_pages` fast-path
  * convention.
  * Takes {@link ListViewerIsolatedPagesOptions}, not

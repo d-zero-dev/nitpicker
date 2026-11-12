@@ -191,8 +191,12 @@ describe('listViewerImages', () => {
 			listViewerImages(archive, { missingAlt: false, limit: 100 }),
 			listImages(archive, { missingAlt: false, limit: 100 }),
 		]);
-		expect(viewerResult.items.map((i) => i.src).toSorted()).toEqual(
-			liveResult.items.map((i) => i.src).toSorted(),
+		expect(
+			viewerResult.items
+				.map((i) => i.src)
+				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual(
+			liveResult.items.map((i) => i.src).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
 		);
 		expect(viewerResult.total).toBe(2);
 	});
@@ -202,8 +206,12 @@ describe('listViewerImages', () => {
 			listViewerImages(archive, { missingDimensions: false, limit: 100 }),
 			listImages(archive, { missingDimensions: false, limit: 100 }),
 		]);
-		expect(viewerResult.items.map((i) => i.src).toSorted()).toEqual(
-			liveResult.items.map((i) => i.src).toSorted(),
+		expect(
+			viewerResult.items
+				.map((i) => i.src)
+				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual(
+			liveResult.items.map((i) => i.src).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
 		);
 	});
 

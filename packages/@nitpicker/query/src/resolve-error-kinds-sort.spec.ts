@@ -32,7 +32,7 @@ describe('resolveErrorKindsSort', () => {
 	it("falls back to 'count' (and its 'desc' default) for an out-of-range sortBy — e.g. a hand-edited ?sortBy= query string", () => {
 		expect(
 			resolveErrorKindsSort({
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller (e.g. a raw query string).
+				// oxlint-disable-next-line typescript/no-explicit-any -- simulating an out-of-range value from an untyped caller (e.g. a raw query string).
 				sortBy: 'bogus' as any,
 			}),
 		).toEqual({ sortBy: 'count', sortOrder: 'desc' });
@@ -44,7 +44,7 @@ describe('resolveErrorKindsSort', () => {
 		// defaulted to 'asc' even though the actual sort column falls back to
 		// 'count' (whose default is 'desc'). Both must agree.
 		const result = resolveErrorKindsSort({
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- simulating an out-of-range value from an untyped caller.
+			// oxlint-disable-next-line typescript/no-explicit-any -- simulating an out-of-range value from an untyped caller.
 			sortBy: 'status' as any,
 		});
 		expect(result.sortBy).toBe('count');

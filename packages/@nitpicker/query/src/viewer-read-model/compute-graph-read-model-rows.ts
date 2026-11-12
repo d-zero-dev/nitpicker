@@ -23,6 +23,8 @@ const READ_CHUNK_SIZE = 2000;
  *   scanned up to so far and the max `viewer_anchor_facts.edge_id` (issue
  *   #294: on a large archive this scan runs for minutes with no other
  *   signal it hasn't hung). Omit for no reporting (the default; e.g. tests).
+ * @yields {GraphEdgeInsertRow[]} One keyset chunk of graph edge rows, in
+ *   `viewer_anchor_facts.edge_id` order.
  */
 export async function* computeGraphReadModelRows(
 	trx: Knex,

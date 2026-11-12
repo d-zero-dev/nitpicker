@@ -84,7 +84,7 @@ async function insertPage(
 }
 
 describe('excludeSkippedPages', () => {
-	let archive: InstanceType<typeof Archive> | undefined;
+	let archive: Archive | undefined;
 
 	afterEach(async () => {
 		if (archive) {

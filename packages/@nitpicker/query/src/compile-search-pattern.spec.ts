@@ -27,7 +27,6 @@ describe('compileSearchPattern', () => {
 		{ flags: 'i', ignoreCase: true, multiLine: false, dotAll: false },
 		{ flags: 'm', ignoreCase: false, multiLine: true, dotAll: false },
 		{ flags: 's', ignoreCase: false, multiLine: false, dotAll: true },
-		// cspell:disable-next-line
 		{ flags: 'gimsu', ignoreCase: true, multiLine: true, dotAll: true },
 		{ flags: 'gg', ignoreCase: false, multiLine: false, dotAll: false },
 	])('reads the flags "$flags"', ({ flags, ...expected }) => {

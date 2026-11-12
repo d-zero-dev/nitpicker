@@ -21,7 +21,7 @@ const READ_CHUNK_SIZE = 2000;
  *   per report run, not once per batch.
  * @param chunkSize - `viewer_anchor_facts` rows read per chunk. Must be
  *   positive.
- * @yields One chunk's rows, in `edge_id` order.
+ * @yields {AnchorFactEdgeStreamRow[]} One chunk's rows, in `edge_id` order.
  * @throws {RangeError} If `chunkSize` is not positive.
  * @example
  * for await (const chunk of streamAnchorFactEdges(accessor)) {

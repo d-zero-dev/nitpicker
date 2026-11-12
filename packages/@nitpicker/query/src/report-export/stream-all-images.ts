@@ -31,7 +31,7 @@ export interface StreamAllImagesOptions {
  * @param accessor - The archive accessor to query.
  * @param options - Read size and page-URL allowlist. Defaults to the whole
  *   archive read in {@link READ_CHUNK_SIZE}-row chunks.
- * @yields One chunk's rows, in `image_items.id` order.
+ * @yields {ImageStreamRow[]} One chunk's rows, in `image_items.id` order.
  * @throws {RangeError} If `options.chunkSize` is not positive.
  * @example
  * for await (const chunk of streamAllImages(accessor)) {

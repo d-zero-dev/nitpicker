@@ -189,8 +189,8 @@ describe('getResourceReferrerPageEdges', () => {
 			const withUrls = await getResourceReferrerEdges(knex, [styleId]);
 			expect(pageEdges).toHaveLength(2);
 			expect(withUrls).toHaveLength(2);
-			expect(pageEdges.map((edge) => edge.pageId).toSorted()).toEqual(
-				withUrls.map((edge) => edge.pageId).toSorted(),
+			expect(pageEdges.map((edge) => edge.pageId).toSorted((a, b) => a - b)).toEqual(
+				withUrls.map((edge) => edge.pageId).toSorted((a, b) => a - b),
 			);
 			expect(pageEdges.some((edge) => edge.pageId === 987_654)).toBe(false);
 		} finally {
@@ -204,10 +204,11 @@ describe('getResourceReferrerPageEdges', () => {
 		const pageIds = pageEdges.map((edge) => edge.pageId);
 		const urlByPageId = await resolvePageUrls(knex, pageIds);
 		expect(pageIds).toHaveLength(2);
-		expect(pageIds.map((pageId) => urlByPageId.get(pageId)).toSorted()).toEqual([
-			'https://example.com',
-			'https://example.com/about',
-		]);
+		expect(
+			pageIds
+				.map((pageId) => urlByPageId.get(pageId) ?? '')
+				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual(['https://example.com', 'https://example.com/about']);
 	});
 
 	it('handles more resource ids than one IN chunk holds', async () => {

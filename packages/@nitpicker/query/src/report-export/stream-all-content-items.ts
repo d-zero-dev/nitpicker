@@ -46,7 +46,7 @@ export interface StreamAllContentItemsOptions {
  * @param accessor - The archive accessor to query.
  * @param options - Read size and URL allowlist. Defaults to the whole
  *   archive read in {@link READ_CHUNK_SIZE}-row chunks.
- * @yields One chunk's rows, in `content_items.id` order.
+ * @yields {ContentItemStreamRow[]} One chunk's rows, in `content_items.id` order.
  * @throws {RangeError} If `options.chunkSize` is not positive.
  * @example
  * for await (const chunk of streamAllContentItems(accessor)) {

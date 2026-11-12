@@ -175,7 +175,7 @@ describe('listUnusedResources', () => {
 		const urls = result.items.map((row) => row.url);
 		// Expected: orphan.pdf + inventory-seed.pdf + inventory-discovered.png.
 		// Excluded: used.css (has a referrer), external.js (isExternal=1).
-		expect(urls.toSorted()).toEqual([
+		expect(urls.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0))).toEqual([
 			'https://example.com/inventory-discovered.png',
 			'https://example.com/inventory-seed.pdf',
 			'https://example.com/orphan.pdf',

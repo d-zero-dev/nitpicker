@@ -171,8 +171,12 @@ describe('listViewerUnusedResources', () => {
 			listViewerUnusedResources(archive, { limit: 100 }),
 			listUnusedResources(archive, { limit: 100 }),
 		]);
-		expect(viewerResult.items.map((i) => i.url).toSorted()).toEqual(
-			liveResult.items.map((i) => i.url).toSorted(),
+		expect(
+			viewerResult.items
+				.map((i) => i.url)
+				.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+		).toEqual(
+			liveResult.items.map((i) => i.url).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
 		);
 		expect(viewerResult.total).toBe(3);
 		const urls = viewerResult.items.map((i) => i.url);

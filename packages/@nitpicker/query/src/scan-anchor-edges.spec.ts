@@ -276,7 +276,7 @@ describe('scanAnchorEdges', () => {
 			whereRaw: () => builder,
 			orderBy: () => builder,
 			limit: () => builder,
-			// eslint-disable-next-line unicorn/no-thenable
+			// oxlint-disable-next-line unicorn/no-thenable
 			then: (resolve: (value: unknown) => void) => {
 				resolve({ rows: [] });
 			},
