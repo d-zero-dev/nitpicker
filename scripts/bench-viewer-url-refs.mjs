@@ -23,6 +23,8 @@ import knex from 'knex';
 
 import { LibsqlDialect } from '../packages/@nitpicker/archive/lib/libsql-dialect.js';
 
+import { compareStrings } from './compare-strings.mjs';
+
 const SIZES = process.env.BENCH_SIZES
 	? process.env.BENCH_SIZES.split(',').map((s) => Number(s.trim()))
 	: [50_000];
@@ -180,7 +182,7 @@ async function seedRef(edgeCount) {
 		urlSet.add(makeUrl(edgeId));
 		urlSet.add(makeUrl(edgeId * 13));
 	}
-	const urls = [...urlSet].toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+	const urls = [...urlSet].toSorted(compareStrings);
 	const idByUrl = new Map(urls.map((url, index) => [url, index + 1]));
 	for (let start = 0; start < urls.length; start += 500) {
 		await db('viewer_url_refs').insert(

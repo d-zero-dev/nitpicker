@@ -16,9 +16,7 @@ describe('runBenchSuite', () => {
 	});
 
 	it('runs every case of every bench in order', async () => {
-		const runCase = vi.fn((bench, caseName) =>
-			Promise.resolve({ bench, case: caseName }),
-		);
+		const runCase = vi.fn(async (bench, caseName) => ({ bench, case: caseName }));
 		const { records, failures } = await runBenchSuite({
 			cases: CASES,
 			only: new Set(),
@@ -33,9 +31,7 @@ describe('runBenchSuite', () => {
 	});
 
 	it('runs only the selected benches', async () => {
-		const runCase = vi.fn((bench, caseName) =>
-			Promise.resolve({ bench, case: caseName }),
-		);
+		const runCase = vi.fn(async (bench, caseName) => ({ bench, case: caseName }));
 		const { records } = await runBenchSuite({
 			cases: CASES,
 			only: new Set(['tech-signals']),
@@ -45,11 +41,11 @@ describe('runBenchSuite', () => {
 	});
 
 	it('records a failed case, prints its error, and carries on with the rest', async () => {
-		const runCase = vi.fn((bench, caseName) => {
+		const runCase = vi.fn(async (bench, caseName) => {
 			if (caseName === 'js') {
-				return Promise.reject(new Error('bench-body-hash --case js exited with 1'));
+				throw new Error('bench-body-hash --case js exited with 1');
 			}
-			return Promise.resolve({ bench, case: caseName });
+			return { bench, case: caseName };
 		});
 		const { records, failures } = await runBenchSuite({
 			cases: CASES,

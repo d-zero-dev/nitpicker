@@ -40,9 +40,8 @@ describe('digestRowChunks', () => {
 		 * @yields {{ a: number }} Two rows.
 		 */
 		async function* generate() {
-			// An `await` keeps this a real async generator for typescript/require-await.
-			yield await Promise.resolve({ a: 1 });
-			yield await Promise.resolve({ a: 2 });
+			yield { a: 1 };
+			yield { a: 2 };
 		}
 		const entries = await digestRowChunks(generate(), 10);
 		expect(entries.get('rows')).toBe('2');

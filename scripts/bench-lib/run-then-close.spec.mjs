@@ -4,17 +4,17 @@ import { runThenClose } from './run-then-close.mjs';
 
 describe('runThenClose', () => {
 	it('closes after the work succeeds and returns its value', async () => {
-		const close = vi.fn(() => Promise.resolve());
-		await expect(runThenClose(() => Promise.resolve('result'), close)).resolves.toBe(
-			'result',
-		);
+		const close = vi.fn(async () => {});
+		await expect(runThenClose(async () => 'result', close)).resolves.toBe('result');
 		expect(close).toHaveBeenCalledOnce();
 	});
 
 	it('closes after the work fails and rethrows the work error', async () => {
-		const close = vi.fn(() => Promise.resolve());
+		const close = vi.fn(async () => {});
 		await expect(
-			runThenClose(() => Promise.reject(new Error('work failed')), close),
+			runThenClose(async () => {
+				throw new Error('work failed');
+			}, close),
 		).rejects.toThrow('work failed');
 		expect(close).toHaveBeenCalledOnce();
 	});
@@ -23,8 +23,12 @@ describe('runThenClose', () => {
 		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 		await expect(
 			runThenClose(
-				() => Promise.reject(new Error('work failed')),
-				() => Promise.reject(new Error('close failed')),
+				async () => {
+					throw new Error('work failed');
+				},
+				async () => {
+					throw new Error('close failed');
+				},
 			),
 		).rejects.toThrow('work failed');
 		expect(consoleError).toHaveBeenCalledWith(
@@ -37,8 +41,10 @@ describe('runThenClose', () => {
 	it('rejects with the cleanup error when only the cleanup fails', async () => {
 		await expect(
 			runThenClose(
-				() => Promise.resolve('result'),
-				() => Promise.reject(new Error('close failed')),
+				async () => 'result',
+				async () => {
+					throw new Error('close failed');
+				},
 			),
 		).rejects.toThrow('close failed');
 	});

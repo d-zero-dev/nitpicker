@@ -1,3 +1,5 @@
+import { compareStrings } from '../compare-strings.mjs';
+
 /**
  * Builds an object whose keys are in code-unit order, so two dumps of the
  * same classification serialize identically whatever order the rows came
@@ -8,5 +10,5 @@
  * sortedRecord([['b', '1'], ['a', '2']]); // { a: '2', b: '1' }
  */
 export function sortedRecord(entries) {
-	return Object.fromEntries(entries.toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+	return Object.fromEntries(entries.toSorted(([a], [b]) => compareStrings(a, b)));
 }

@@ -23,6 +23,8 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { compareStrings } from '../../../../scripts/compare-strings.mjs';
+
 const PINNED_VERSION = '12.0.0';
 const FIXTURES = 'archive/src/template-classification/page-cluster/__fixtures__';
 
@@ -139,7 +141,7 @@ function htmlFiles(directory) {
 	return readdirSync(directory, { recursive: true })
 		.filter((file) => file.endsWith('.html'))
 		.map((file) => file.split(path.sep).join('/'))
-		.toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+		.toSorted(compareStrings);
 }
 
 const fixturesDir = path.resolve(packageDir, '..', FIXTURES);
