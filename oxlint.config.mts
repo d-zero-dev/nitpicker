@@ -80,6 +80,9 @@ export default {
 		'jsdoc/require-returns-type': 'off',
 		'jsdoc/require-returns-description': 'off',
 		'unicorn/prefer-event-target': 'off',
+		// oxfmt always lowercases hex digits, so this rule (which wants uppercase) could
+		// only ever disagree with the formatter.
+		'unicorn/number-literal-case': 'off',
 		'typescript/no-floating-promises': 'error',
 	},
 	ignorePatterns: [

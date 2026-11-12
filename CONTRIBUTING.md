@@ -72,7 +72,7 @@ yarn lint:check
 
 - **oxlint**（`oxlint.config.mts`）: 型情報ルール（`--type-aware`）が各パッケージの`lib/*.d.ts`を読むため、`yarn build`の後に実行する。ビルドが無いと`@nitpicker/*`の型が`any`に崩れて誤検知する。ESLint 専用だったルール（`#private`の強制、import 順、正規表現・Storybook 系）は無く、設定ファイルのヘッダーに一覧がある
 - **pre-commit**（lint-staged）の oxlint は型情報なしで、型情報ルール（`no-floating-promises`等）は CI の`yarn lint:check`で初めて報告される
-- **oxfmt**（`.oxfmtrc.json`）: oxfmt は 16 進リテラルの英字を小文字にするが`unicorn/number-literal-case`は大文字を求めるため、英字を含む 16 進リテラルは書けない（10 進・2 進で書く）
+- **oxfmt**（`.oxfmtrc.json`）: oxfmt は 16 進リテラルの英字を常に小文字にするため、大文字を求める`unicorn/number-literal-case`は無効にしている
 - **markuplint**（`.markuplintrc.json`）: D-ZERO のクラス名規約はクライアントサイト向けなので`@d-zero/markuplint-config/base`を使う。viewer の tsx では、flexbox で table を組むため明示する ARIA role の検査と、クライアントサイト向けの規則を無効にしている（JSON はコメントを書けないため、無効にしたルールの一覧は Issue で追う）
 - スペルチェック（cspell）は使わない
 
