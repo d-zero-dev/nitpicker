@@ -61,7 +61,10 @@ export function computeDisplayTitleByPageId(
 			? (indexTitleByDirname.get(parentDirKey) ?? indexTitleByDirname.get(dirKey))
 			: (indexTitleByDirname.get(dirKey) ?? indexTitleByDirname.get(parentDirKey));
 		if (dirTitle && row.title.includes(dirTitle)) {
-			const stripped = row.title.replace(dirTitle, '').replaceAll(/\||｜/g, '').trim();
+			const stripped = row.title
+				.replace(dirTitle, '')
+				.replaceAll(/\||｜/g, '')
+				.trim();
 			result.set(row.id, stripped || row.title);
 		} else {
 			result.set(row.id, row.title);

@@ -10,7 +10,13 @@ export type SelectorCombinator = 'descendant' | 'child';
 
 /** The attribute selector operators the matcher evaluates. */
 export type SelectorAttributeOperator =
-	'exists' | 'equals' | 'includes' | 'dash' | 'prefix' | 'suffix' | 'substring';
+	| 'exists'
+	| 'equals'
+	| 'includes'
+	| 'dash'
+	| 'prefix'
+	| 'suffix'
+	| 'substring';
 
 /** One attribute condition of a compound (`[a]`, `[a^=v]`, `.cls`, `#id`, ...). */
 export interface SelectorAttributeTest {

@@ -10,13 +10,14 @@ const mockLanesUpdate = vi.fn();
 const mockLanesClose = vi.fn();
 
 vi.mock('@d-zero/dealer', () => ({
-	Lanes: vi.fn().mockImplementation(function (this: {
-		update: typeof mockLanesUpdate;
-		close: typeof mockLanesClose;
-	}) {
-		this.update = mockLanesUpdate;
-		this.close = mockLanesClose;
-	}),
+	Lanes: vi
+		.fn()
+		.mockImplementation(
+			function (this: { update: typeof mockLanesUpdate; close: typeof mockLanesClose }) {
+				this.update = mockLanesUpdate;
+				this.close = mockLanesClose;
+			},
+		),
 }));
 
 vi.mock('@nitpicker/viewer', () => ({

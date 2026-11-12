@@ -96,7 +96,8 @@ async function driveDeal() {
 			// factory signature: (process, update, index, setLineHeader, push, unshift)
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- deal factory signature is complex; cast is intentional in test
 			const workFn = (factory as Function)(item, noop, index, noop, push, unshift) as
-				(() => Promise<void>) | undefined;
+				| (() => Promise<void>)
+				| undefined;
 			if (workFn) {
 				await workFn();
 			}
@@ -144,7 +145,8 @@ async function driveDealRecursive() {
 			const noop = () => {};
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- deal factory signature is complex; cast is intentional in test
 			const workFn = (factory as Function)(item, noop, 0, noop, push, unshift) as
-				(() => Promise<void>) | undefined;
+				| (() => Promise<void>)
+				| undefined;
 			if (workFn) {
 				await workFn();
 			}

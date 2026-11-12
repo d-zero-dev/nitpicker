@@ -63,7 +63,10 @@ const [command] = args;
 try {
 	if (command === 'status' && args.length === 2) {
 		console.log(status(fetchPr(args[1])));
-	} else if (command === 'mark' && (args.length === 4 || (args.length === 5 && args[4] === '--dry-run'))) {
+	} else if (
+		command === 'mark' &&
+		(args.length === 4 || (args.length === 5 && args[4] === '--dry-run'))
+	) {
 		console.log(mark(args[1], args[2], args[3], args.length === 5));
 	} else {
 		console.log(
@@ -83,7 +86,9 @@ function prNumberOf(prArg) {
 	if (prArg === undefined || prArg.trim() === '') {
 		throw new Error('no PR number given (usage: leftovers.mjs status <pr-number>)');
 	}
-	const match = prArg.trim().match(/^(?:https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/)?(\d+)\/?$/);
+	const match = prArg
+		.trim()
+		.match(/^(?:https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/)?(\d+)\/?$/);
 	if (!match) {
 		throw new Error(`"${prArg}" is not a PR number or a PR URL`);
 	}
@@ -95,7 +100,13 @@ function prNumberOf(prArg) {
  */
 function fetchPr(prArg) {
 	const prNumber = prNumberOf(prArg);
-	const json = gh(['pr', 'view', prNumber, '--json', 'number,state,mergedAt,baseRefName,author,body']);
+	const json = gh([
+		'pr',
+		'view',
+		prNumber,
+		'--json',
+		'number,state,mergedAt,baseRefName,author,body',
+	]);
 	const data = JSON.parse(json);
 	const body = String(data.body ?? '');
 	const eol = body.includes('\r\n') ? '\r\n' : '\n';
@@ -107,10 +118,18 @@ function fetchPr(prArg) {
  */
 function gh(args) {
 	try {
-		return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+		return execFileSync('gh', args, {
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
 	} catch (error) {
-		const stderr = error && typeof error === 'object' && 'stderr' in error ? String(error.stderr).trim() : '';
-		throw new Error(`gh ${args.slice(0, 3).join(' ')} failed${stderr ? `: ${stderr.split('\n')[0]}` : ''}`);
+		const stderr =
+			error && typeof error === 'object' && 'stderr' in error
+				? String(error.stderr).trim()
+				: '';
+		throw new Error(
+			`gh ${args.slice(0, 3).join(' ')} failed${stderr ? `: ${stderr.split('\n')[0]}` : ''}`,
+		);
 	}
 }
 
@@ -124,7 +143,7 @@ function gh(args) {
  * @returns {{ found: boolean, bullets: { end: number, text: string }[], otherText: boolean }}
  */
 function section(lines) {
-	const headingAt = lines.findIndex(line => SECTION_HEADING.test(line));
+	const headingAt = lines.findIndex((line) => SECTION_HEADING.test(line));
 	if (headingAt === -1) {
 		return { found: false, bullets: [], otherText: false };
 	}
@@ -153,14 +172,20 @@ function section(lines) {
 			}
 		}
 	}
-	return { found: true, bullets: bullets.map(b => ({ end: b.end, text: b.parts.join(' ') })), otherText };
+	return {
+		found: true,
+		bullets: bullets.map((b) => ({ end: b.end, text: b.parts.join(' ') })),
+		otherText,
+	};
 }
 
 /**
  * @param {ReturnType<typeof fetchPr>} data
  */
 function unfiled(data) {
-	return section(data.lines).bullets.filter(item => !MARKED_LAST_LINE.test(data.lines[item.end]));
+	return section(data.lines).bullets.filter(
+		(item) => !MARKED_LAST_LINE.test(data.lines[item.end]),
+	);
 }
 
 /**
