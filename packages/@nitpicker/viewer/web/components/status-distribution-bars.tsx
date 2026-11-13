@@ -27,14 +27,8 @@ function StatusDistributionRow(props: {
 		props.entry.status === -1 &&
 		props.entry.errorKindBreakdown !== undefined &&
 		props.entry.errorKindBreakdown.length > 0;
-	return (
-		<div
-			role={showBreakdown ? 'group' : undefined}
-			aria-label={
-				showBreakdown
-					? t('views.summary.statusBreakdownAria', { count: props.entry.count })
-					: undefined
-			}>
+	const content = (
+		<>
 			<div className="bar-row">
 				<span>{props.label}</span>
 				<span className="bar-track">
@@ -51,7 +45,18 @@ function StatusDistributionRow(props: {
 					breakdown={props.entry.errorKindBreakdown}
 				/>
 			)}
+		</>
+	);
+	// Only a row with a breakdown is a labelled group; `aria-label` is not
+	// allowed on a plain (generic) `div`, so the two cases are separate elements.
+	return showBreakdown ? (
+		<div
+			role="group"
+			aria-label={t('views.summary.statusBreakdownAria', { count: props.entry.count })}>
+			{content}
 		</div>
+	) : (
+		<div>{content}</div>
 	);
 }
 

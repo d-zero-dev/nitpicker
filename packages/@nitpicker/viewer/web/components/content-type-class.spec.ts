@@ -63,7 +63,7 @@ describe('contentTypeBarClass', () => {
 			);
 			const match = css.match(rule);
 			expect(match, `missing --ct-color for ${category}`).not.toBeNull();
-			const color = match![1].trim().toLowerCase();
+			const color = match![1]!.trim().toLowerCase();
 			colorByCategory.set(category, color);
 		}
 		const uniqueColors = new Set(colorByCategory.values());

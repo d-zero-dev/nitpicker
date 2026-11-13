@@ -19,8 +19,6 @@ export interface DirectoryTreeProps {
 	sortOrder: DirectoryTreeSortOrder;
 	/** Toggles a node's expanded state, given its current value. */
 	onToggle: (node: DirectoryTreeNode, isExpanded: boolean) => void;
-	/** Navigates to the Pages view filtered to a node's subtree. */
-	onSelect: (node: DirectoryTreeNode) => void;
 }
 
 /**
@@ -33,7 +31,6 @@ export interface DirectoryTreeProps {
  * @param props.collapseDepthThreshold
  * @param props.sortOrder
  * @param props.onToggle
- * @param props.onSelect
  * @returns The tree element, or `null` if the root has no root node (should
  *   not happen for a well-formed payload).
  */
@@ -43,7 +40,6 @@ export function DirectoryTree({
 	collapseDepthThreshold,
 	sortOrder,
 	onToggle,
-	onSelect,
 }: DirectoryTreeProps) {
 	const childrenByParent = useMemo(() => {
 		const grouped = groupDirectoryTreeNodesByParent(root.nodes);
@@ -76,7 +72,6 @@ export function DirectoryTree({
 					collapseDepthThreshold={collapseDepthThreshold}
 					sortOrder={sortOrder}
 					onToggle={onToggle}
-					onSelect={onSelect}
 				/>
 			</ul>
 		</div>

@@ -71,9 +71,10 @@ yarn lint:check
 #### lint の構成
 
 - **oxlint**（`oxlint.config.mts`）: 型情報ルール（`--type-aware`）が各パッケージの`lib/*.d.ts`を読むため、`yarn build`の後に実行する。ビルドが無いと`@nitpicker/*`の型が`any`に崩れて誤検知する。ESLint 専用だったルール（`#private`の強制、import 順、正規表現・Storybook 系）は無く、設定ファイルのヘッダーに一覧がある
+- **viewer の`web/`の型検査**（`lint:tsc-web` = `tsc -p packages/@nitpicker/viewer/tsconfig.web.json --noEmit`）: viewer のビルドの`tsc`は`src/`だけで、`web/`（コンポーネント・routes・stories・spec）はどこでも型検査されていなかった。`yarn lint`/`yarn lint:check`の一部として走らせることで CI（build の後の lint ジョブ）が強制する。`lib/*.d.ts`を読むので`yarn build`の後に実行する。`tsc -p`をこのスクリプトの外から単発で実行しない
 - **pre-commit**（lint-staged）の oxlint は型情報なしで、型情報ルール（`no-floating-promises`等）は CI の`yarn lint:check`で初めて報告される
 - **oxfmt**（`.oxfmtrc.json`）: oxfmt は 16 進リテラルの英字を常に小文字にするため、大文字を求める`unicorn/number-literal-case`は無効にしている
-- **markuplint**（`.markuplintrc.json`）: D-ZERO のクラス名規約はクライアントサイト向けなので`@d-zero/markuplint-config/base`を使う。viewer の tsx では、flexbox で table を組むため明示する ARIA role の検査と、クライアントサイト向けの規則を無効にしている（JSON はコメントを書けないため、無効にしたルールの一覧は Issue で追う）
+- **markuplint**（`.markuplintrc.json`）: D-ZERO のクラス名規約はクライアントサイト向けなので`@d-zero/markuplint-config/base`を使う。viewer の tsx のボタンは`onClick`ではなく Invoker Commands（`command`/`commandfor`）で書く（詳細は`ARCHITECTURE.md`の不変条件）。例外は`.markuplintrc.json`に要素単位で置く — flexbox で組む paged-table/virtual-table の明示 ARIA role など。selector は対象コンポーネントのクラス名・id（`.vt-table`・`tr[role=row]`・`button.tree-toggle`・`#tree-collapse-depth-input`・`.hp-frame`など）と対応するので、これらを変えるときは設定も直す（JSON はコメントを書けないため、各例外の理由はコンポーネント側のコメントに書く）
 - スペルチェック（cspell）は使わない
 
 ### コミットメッセージ

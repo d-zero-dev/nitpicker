@@ -3,10 +3,13 @@ import type { PagerToken } from './build-pager-window.js';
 
 import { useId, useState } from 'react';
 
+import { applySetPage } from '../hooks/apply-set-page.js';
 import { parsePageSize } from '../hooks/parse-page-size.js';
 import { PAGE_SIZE_OPTIONS } from '../hooks/use-page-size.js';
+import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { AppLink } from './app-link.js';
 import { buildPagerWindow } from './build-pager-window.js';
 import { parseJumpTarget } from './parse-jump-target.js';
 
@@ -18,19 +21,25 @@ export interface PagerProps {
 	total: number;
 	/** Rows per page. */
 	pageSize: PageSize;
-	/** Called when the user requests a different page (1-indexed). */
+	/** Called when the jump input requests a different page (1-indexed); the links navigate on their own. */
 	onPageChange: (next: number) => void;
 	/** Called when the user picks a new page size. */
 	onPageSizeChange: (next: PageSize) => void;
 }
 
 /**
- * The MPA pagination footer: Prev / page-number buttons / Next / a jump-to
+ * The MPA pagination footer: Prev / page-number links / Next / a jump-to
  * input / a page-size select / a textual `Page X of Y · {rows} rows` summary.
  *
- * Page-number buttons collapse around the current page via
+ * Prev, Next and the page numbers are links to `?page=N` (other query
+ * parameters kept, history entry replaced), so a page can be opened in a new
+ * tab or shared as a URL. The jump input and the page-size select call
+ * `onPageChange` / `onPageSizeChange`.
+ *
+ * Page-number links collapse around the current page via
  * {@link buildPagerWindow} so the strip stays bounded even at 10k+ pages.
- * Prev disables at page 1; Next disables at the last page. The jump input is
+ * Prev is a disabled link (`aria-disabled`, no `href`) at page 1; Next likewise
+ * at the last page. The jump input is
  * a free-form number field — invalid entries are coerced to the nearest
  * valid page on submit.
  *
@@ -72,28 +81,51 @@ export function Pager(props: PagerProps) {
 		setJumpValue('');
 	};
 
+	// Page links keep the other filters and replace the history entry, like
+	// `useCurrentPage().setPage` (paging is incremental state, not a new view).
+	const { params } = useUrlFilter();
+	const pageLink = (page: number) => ({ search: applySetPage(params, page).toString() });
+
 	return (
 		<nav className="pager" aria-label={t('pagination.navLabel')}>
 			<div className="pager-controls">
-				<button
-					type="button"
-					className="pager-button pager-prev"
-					disabled={clamped <= 1}
-					onClick={() => goTo(clamped - 1)}
-					aria-label={t('pagination.prev')}>
-					‹ {t('pagination.prev')}
-				</button>
+				{clamped <= 1 ? (
+					<span
+						role="link"
+						aria-disabled="true"
+						className="pager-button pager-prev"
+						aria-label={t('pagination.prev')}>
+						‹ {t('pagination.prev')}
+					</span>
+				) : (
+					<AppLink
+						replace
+						className="pager-button pager-prev"
+						to={pageLink(clamped - 1)}
+						aria-label={t('pagination.prev')}>
+						‹ {t('pagination.prev')}
+					</AppLink>
+				)}
 				<ol className="pager-list plain-list">
-					{tokens.map((token) => renderToken(token, clamped, goTo, t))}
+					{tokens.map((token) => renderToken(token, clamped, pageLink, t))}
 				</ol>
-				<button
-					type="button"
-					className="pager-button pager-next"
-					disabled={clamped >= totalPages}
-					onClick={() => goTo(clamped + 1)}
-					aria-label={t('pagination.next')}>
-					{t('pagination.next')} ›
-				</button>
+				{clamped >= totalPages ? (
+					<span
+						role="link"
+						aria-disabled="true"
+						className="pager-button pager-next"
+						aria-label={t('pagination.next')}>
+						{t('pagination.next')} ›
+					</span>
+				) : (
+					<AppLink
+						replace
+						className="pager-button pager-next"
+						to={pageLink(clamped + 1)}
+						aria-label={t('pagination.next')}>
+						{t('pagination.next')} ›
+					</AppLink>
+				)}
 			</div>
 			<div className="pager-meta">
 				<span aria-live="polite">
@@ -161,15 +193,15 @@ export function Pager(props: PagerProps) {
 /**
  * Renders a single pager token (page number or ellipsis) as a `<li>`.
  * @param token - The token from {@link buildPagerWindow}.
- * @param currentPage - The active page for `aria-current` marking.
- * @param goTo - The page-change handler.
+ * @param currentPage - The active page, rendered as a non-link `aria-current` marker.
+ * @param pageLink - Builds the `to` of the link to a page.
  * @param t - The i18n translate function.
  * @returns The list item element.
  */
 function renderToken(
 	token: PagerToken,
 	currentPage: number,
-	goTo: (next: number) => void,
+	pageLink: (page: number) => { search: string },
 	t: (key: string, params?: Record<string, string | number>) => string,
 ) {
 	if (token === 'ellipsis-start' || token === 'ellipsis-end') {
@@ -179,18 +211,25 @@ function renderToken(
 			</li>
 		);
 	}
-	const isCurrent = token === currentPage;
+	if (token === currentPage) {
+		// The active page is not a link: there is nowhere to go.
+		return (
+			<li key={token}>
+				<span className="pager-button pager-number is-current" aria-current="page">
+					{token}
+				</span>
+			</li>
+		);
+	}
 	return (
 		<li key={token}>
-			<button
-				type="button"
-				className={`pager-button pager-number${isCurrent ? ' is-current' : ''}`}
-				aria-current={isCurrent ? 'page' : undefined}
-				aria-label={t('pagination.gotoPage', { page: token })}
-				disabled={isCurrent}
-				onClick={() => goTo(token)}>
+			<AppLink
+				replace
+				className="pager-button pager-number"
+				to={pageLink(token)}
+				aria-label={t('pagination.gotoPage', { page: token })}>
 				{token}
-			</button>
+			</AppLink>
 		</li>
 	);
 }

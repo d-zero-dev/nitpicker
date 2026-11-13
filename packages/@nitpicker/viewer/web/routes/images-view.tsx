@@ -122,12 +122,10 @@ export function ImagesView() {
 				{
 					value: 'true',
 					label: t('views.images.filterMissingAlt'),
-					checked: missingAlt.includes('true'),
 				},
 				{
 					value: 'false',
 					label: t('common.present'),
-					checked: missingAlt.includes('false'),
 				},
 			],
 		);
@@ -141,17 +139,15 @@ export function ImagesView() {
 				{
 					value: 'true',
 					label: t('views.images.filterMissingDimensions'),
-					checked: missingDimensions.includes('true'),
 				},
 				{
 					value: 'false',
 					label: t('common.present'),
-					checked: missingDimensions.includes('false'),
 				},
 			],
 		);
 		return controls;
-	}, [missingAlt, missingDimensions, params, t, updateMany]);
+	}, [params, t, updateMany]);
 
 	return (
 		<div className="view">

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { useCommandTarget } from '../hooks/use-command-target.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
 /** Props for {@link HtmlPreview}. */
@@ -27,29 +28,40 @@ export function HtmlPreview(props: HtmlPreviewProps) {
 	const { html, truncated } = props;
 	const { t } = useI18n();
 	const [mode, setMode] = useState<PreviewMode>('render');
+	// The tab buttons send `--render` / `--source` to the toolbar.
+	const { id: toolbarId, ref: toolbarRef } = useCommandTarget<HTMLDivElement>({
+		'--render': () => {
+			setMode('render');
+		},
+		'--source': () => {
+			setMode('source');
+		},
+	});
 
 	return (
 		<div className="html-preview">
-			<div className="hp-toolbar">
+			<div ref={toolbarRef} id={toolbarId} className="hp-toolbar">
 				<button
 					type="button"
 					className={mode === 'render' ? 'hp-tab hp-tab-active' : 'hp-tab'}
-					onClick={() => {
-						setMode('render');
-					}}>
+					command="--render"
+					commandfor={toolbarId}>
 					{t('common.render')}
 				</button>
 				<button
 					type="button"
 					className={mode === 'source' ? 'hp-tab hp-tab-active' : 'hp-tab'}
-					onClick={() => {
-						setMode('source');
-					}}>
+					command="--source"
+					commandfor={toolbarId}>
 					{t('common.source')}
 				</button>
 				{truncated && <span className="hp-truncated">{t('common.truncated')}</span>}
 			</div>
 			{mode === 'render' ? (
+				// No `loading="lazy"`: the snapshot is an inline `srcDoc` (no network
+				// fetch to defer), and a lazy frame outside the viewport stays empty in
+				// screenshots and print. `.markuplintrc.json` exempts `.hp-frame` from
+				// `performance/iframe-lazy-loading` for the same reason.
 				<iframe
 					className="hp-frame"
 					sandbox=""

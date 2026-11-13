@@ -68,6 +68,13 @@ const viewerReactRules = Object.fromEntries(
 // `exhaustive-deps` is advisory in the react-hooks recommended preset.
 viewerReactRules['react/exhaustive-deps'] = 'warn';
 
+// The rule's attribute table predates Invoker Commands, so it reports `command` and
+// `commandfor` of `<button>` (see `web/react-invoker-commands.d.ts`) as unknown.
+viewerReactRules['react/no-unknown-property'] = [
+	'error',
+	{ ignore: ['command', 'commandfor'] },
+];
+
 export default {
 	...config,
 	jsPlugins: ['@d-zero/oxlint-plugin'],

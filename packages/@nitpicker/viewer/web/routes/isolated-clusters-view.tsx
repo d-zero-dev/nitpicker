@@ -4,6 +4,7 @@ import type {
 	IsolatedClusterSummary,
 	PageSource,
 } from '@nitpicker/query';
+import type { To } from 'react-router';
 
 import { useMemo } from 'react';
 
@@ -18,9 +19,11 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { ExternalUrl } from '../components/external-url.js';
+import { FilterLink } from '../components/filter-link.js';
 import { IsolatedClusterDetailPane } from '../components/isolated-cluster-detail-pane.js';
 import { IsolatedClusterListPane } from '../components/isolated-cluster-list-pane.js';
 import { SourceBadge } from '../components/source-badge.js';
+import { applyFilterUpdates } from '../hooks/apply-filter-updates.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { getStatusLabel } from '../i18n/get-status-label.js';
@@ -37,41 +40,27 @@ import { useI18n } from '../i18n/use-i18n.js';
  * @returns The isolated clusters view element.
  */
 export function IsolatedClustersView() {
-	const { params, update } = useUrlFilter();
+	const { params } = useUrlFilter();
 	const cluster = params.get('cluster');
 
 	if (cluster === null || cluster.length === 0) {
-		return (
-			<ClusterListPane
-				onSelectCluster={(url) => {
-					update('cluster', url);
-				}}
-			/>
-		);
+		return <ClusterListPane />;
 	}
 	return (
 		<ClusterDetailPane
 			representativeUrl={cluster}
-			onBack={() => {
-				update('cluster', '');
-			}}
+			backTo={{ search: applyFilterUpdates(params, [['cluster', '']]).toString() }}
 		/>
 	);
 }
 
 /**
  * Renders the paginated list of cluster summaries. Each row is keyboard-
- * accessible (button role with `onClick`) so the operator can drill into the
- * cluster without a mouse.
- * @param props - Component props.
- * @param props.onSelectCluster - Called with the cluster's representativeUrl when the operator drills in.
+ * accessible (a link to `?cluster=<representativeUrl>`) so the operator can
+ * drill into the cluster without a mouse.
  * @returns The list pane element.
  */
-function ClusterListPane({
-	onSelectCluster,
-}: {
-	onSelectCluster: (representativeUrl: string) => void;
-}) {
+function ClusterListPane() {
 	const { t } = useI18n();
 	const { params, updateMany } = useUrlFilter();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
@@ -107,12 +96,9 @@ function ClusterListPane({
 				cell: (info) => {
 					const url = info.getValue<string>();
 					return (
-						<button
-							type="button"
-							className="link-button"
-							onClick={() => onSelectCluster(url)}>
+						<FilterLink className="link-button" updates={[['cluster', url]]}>
 							<code>{url}</code>
-						</button>
+						</FilterLink>
 					);
 				},
 			},
@@ -135,7 +121,7 @@ function ClusterListPane({
 				accessorFn: (r) => getStatusLabel(r.representativeStatus, t) ?? '—',
 			},
 		],
-		[t, onSelectCluster],
+		[t],
 	);
 	const columnControls = useMemo(() => {
 		const context = { params, updateMany };
@@ -212,15 +198,15 @@ function ClusterListPane({
  * full array to the windowed table.
  * @param props - Component props.
  * @param props.representativeUrl - The cluster's representative URL.
- * @param props.onBack - Called when the operator navigates back to the cluster list.
+ * @param props.backTo - Where the back link goes: the cluster list.
  * @returns The detail pane element.
  */
 function ClusterDetailPane({
 	representativeUrl,
-	onBack,
+	backTo,
 }: {
 	representativeUrl: string;
-	onBack: () => void;
+	backTo: To;
 }) {
 	const { t } = useI18n();
 	const { params, updateMany } = useUrlFilter();
@@ -319,7 +305,7 @@ function ClusterDetailPane({
 	return mode === 'mpa' ? (
 		<IsolatedClusterDetailPane
 			representativeUrl={representativeUrl}
-			onBack={onBack}
+			backTo={backTo}
 			mode="mpa"
 			columns={columns}
 			data={members}
@@ -337,7 +323,7 @@ function ClusterDetailPane({
 	) : (
 		<IsolatedClusterDetailPane
 			representativeUrl={representativeUrl}
-			onBack={onBack}
+			backTo={backTo}
 			mode="virtual"
 			columns={columns}
 			data={members}

@@ -1,11 +1,12 @@
 import type { ColumnDef, PageSize } from '../types.js';
 import type { TableColumnControls } from './paged-table.js';
+import type { RowData } from '@tanstack/react-table';
 
 import { PagedTable } from './paged-table.js';
 import { VirtualTable } from './virtual-table.js';
 
 /** Common props shared by both pagination modes. */
-interface DataTableBaseProps<T> {
+interface DataTableBaseProps<T extends RowData> {
 	/** Column definitions, shared verbatim between the two modes. */
 	columns: ColumnDef<T>[];
 	/** Total matching rows on the server. */
@@ -26,7 +27,7 @@ interface DataTableBaseProps<T> {
 }
 
 /** MPA-mode props for {@link DataTable}. */
-export interface DataTableMpaProps<T> extends DataTableBaseProps<T> {
+export interface DataTableMpaProps<T extends RowData> extends DataTableBaseProps<T> {
 	/** The discriminator value. */
 	mode: 'mpa';
 	/** The rows on the currently selected page. */
@@ -44,7 +45,7 @@ export interface DataTableMpaProps<T> extends DataTableBaseProps<T> {
 }
 
 /** Virtual-mode props for {@link DataTable}. */
-export interface DataTableVirtualProps<T> extends DataTableBaseProps<T> {
+export interface DataTableVirtualProps<T extends RowData> extends DataTableBaseProps<T> {
 	/** The discriminator value. */
 	mode: 'virtual';
 	/** The accumulated rows from every fetched infinite-query page. */
@@ -56,7 +57,9 @@ export interface DataTableVirtualProps<T> extends DataTableBaseProps<T> {
 }
 
 /** The union of MPA and virtual props for {@link DataTable}. */
-export type DataTableProps<T> = DataTableMpaProps<T> | DataTableVirtualProps<T>;
+export type DataTableProps<T extends RowData> =
+	| DataTableMpaProps<T>
+	| DataTableVirtualProps<T>;
 
 /**
  * A thin dispatcher that picks the concrete table component based on the
@@ -74,7 +77,7 @@ export type DataTableProps<T> = DataTableMpaProps<T> | DataTableVirtualProps<T>;
  * @param props - Mode-specific data and handlers.
  * @returns The chosen table element.
  */
-export function DataTable<T>(props: DataTableProps<T>) {
+export function DataTable<T extends RowData>(props: DataTableProps<T>) {
 	const errorBanner =
 		props.isError === true ? (
 			<p className="error" role="alert">

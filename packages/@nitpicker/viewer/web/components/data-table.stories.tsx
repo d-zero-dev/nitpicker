@@ -1,7 +1,12 @@
-import type { DataTableMpaProps, DataTableVirtualProps } from './data-table.js';
+import type {
+	DataTableMpaProps,
+	DataTableProps,
+	DataTableVirtualProps,
+} from './data-table.js';
 import type { DemoRow } from './demo-table-fixtures.js';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { MemoryRouter } from 'react-router';
 import { fn } from 'storybook/test';
 
 import { DataTable } from './data-table.js';
@@ -11,10 +16,19 @@ const rows = buildDemoRows(20);
 
 const meta = {
 	component: DataTable<DemoRow>,
+	decorators: [
+		(Story) => (
+			<MemoryRouter>
+				<Story />
+			</MemoryRouter>
+		),
+	],
 } satisfies Meta<typeof DataTable<DemoRow>>;
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+// Props are a discriminated union on `mode`, which `StoryObj<typeof meta>` collapses to
+// `never`; typing the stories by the props type keeps each story checked against its branch.
+type Story = StoryObj<DataTableProps<DemoRow>>;
 
 /** MPA mode: page-numbered navigation. The `mode` discriminator selects `PagedTable` internally. */
 export const Mpa: Story = {

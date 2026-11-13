@@ -5,6 +5,8 @@ import type {
 } from '../report-ui/types.js';
 import type { ReactNode } from 'react';
 
+import { useId } from 'react';
+
 import { getStatusLabel } from '../i18n/get-status-label.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -40,6 +42,7 @@ function reportAlert(alert: boolean, value: ReactNode) {
  */
 export function HtmlReportDocument(props: HtmlReportData) {
 	const { t } = useI18n();
+	const themeToggleId = useId();
 	const columns: readonly StaticTableColumn<HtmlReportPage>[] = [
 		{
 			key: 'title',
@@ -113,8 +116,14 @@ export function HtmlReportDocument(props: HtmlReportData) {
 					{props.title ?? t('views.report.title')}
 				</strong>
 				<div className="top-bar-actions">
+					{/* No React runs in the static report: the embedded script in
+					    render-html-report.tsx listens for the `--toggle-theme`
+					    command this button sends to itself. */}
 					<button
+						id={themeToggleId}
 						type="button"
+						command="--toggle-theme"
+						commandfor={themeToggleId}
 						className="icon-button"
 						data-report-theme-toggle
 						data-to-light={t('theme.toLight')}

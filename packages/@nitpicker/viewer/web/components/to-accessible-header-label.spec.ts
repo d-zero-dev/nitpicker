@@ -16,6 +16,7 @@ describe('toAccessibleHeaderLabel', () => {
 	});
 
 	it('undefined は undefined を返す', () => {
+		// @ts-expect-error -- calling without an argument is the case under test
 		expect(toAccessibleHeaderLabel()).toBeUndefined();
 	});
 });

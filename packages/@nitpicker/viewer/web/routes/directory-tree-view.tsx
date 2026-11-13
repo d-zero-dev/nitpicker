@@ -3,11 +3,11 @@ import type { DirectoryTreeNode } from '@nitpicker/query';
 
 import { INITIAL_DIRECTORY_TREE_DEPTH } from '@nitpicker/query/directory-tree-constants';
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
 
 import { useDirectoryTree } from '../api/use-directory-tree.js';
 import { DirectoryTree } from '../components/directory-tree.js';
 import { ViewHeader } from '../components/view-header.js';
+import { useCommandTarget } from '../hooks/use-command-target.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -36,7 +36,8 @@ function parseNodeIdList(raw: string | null): number[] {
  * Fetches the initial (depth ≤ 3) tree per root host on load and expands
  * directories on demand via `useDirectoryTreeChildren`.
  *
- * Selecting a node navigates to `/pages?directory=<path>&contentTypeCategory=html`
+ * Selecting a node (a link in `DirectoryTreeNodeRow`) opens
+ * `/pages?directory=<path>&contentTypeCategory=html`
  * rather than showing a page list in place — the Pages view's `directory`
  * filter (a SQL `LIKE` match) already covers the whole subtree with full
  * sort/filter/pagination for free, so there is no separate selection state
@@ -64,7 +65,6 @@ function parseNodeIdList(raw: string | null): number[] {
  */
 export function DirectoryTreeView() {
 	const { t } = useI18n();
-	const navigate = useNavigate();
 	const { data, isLoading, isError, error } = useDirectoryTree();
 	const { params, update, updateMany } = useUrlFilter();
 
@@ -116,17 +116,6 @@ export function DirectoryTreeView() {
 		[params, updateMany],
 	);
 
-	const select = useCallback(
-		(node: DirectoryTreeNode) => {
-			const query = new URLSearchParams({
-				directory: node.path,
-				contentTypeCategory: 'html',
-			});
-			void navigate(`/pages?${query.toString()}`);
-		},
-		[navigate],
-	);
-
 	const collapseToDepth = useCallback(() => {
 		updateMany([
 			[DEPTH_PARAM, String(collapseDepthInput)],
@@ -139,13 +128,28 @@ export function DirectoryTreeView() {
 		update(SORT_PARAM, sortOrderInput === 'path' ? '' : sortOrderInput);
 	}, [sortOrderInput, update]);
 
+	// Each control's button sends a command to its own container, which runs
+	// the handler above (the container is the `commandfor` target).
+	const collapseControl = useCommandTarget<HTMLDivElement>({
+		'--collapse': collapseToDepth,
+	});
+	const sortControl = useCommandTarget<HTMLDivElement>({
+		'--apply-sort': applySortOrder,
+	});
+
 	return (
 		<div className="view directory-tree-view">
 			<ViewHeader
 				titleKey="views.directoryTree.title"
 				descriptionKey="views.directoryTree.description"
 			/>
-			<div className="tree-collapse-control">
+			<div
+				ref={collapseControl.ref}
+				id={collapseControl.id}
+				className="tree-collapse-control">
+				{/* The fixed ids of this input and the sort select below are how the
+				    E2E (`e2e/directory-tree.spec.ts`) finds them, so `.markuplintrc.json`
+				    exempts exactly these two from `react/no-hard-code-id`. */}
 				<label htmlFor="tree-collapse-depth-input">
 					{t('views.directoryTree.collapseDepthInputLabel')}
 				</label>
@@ -162,11 +166,15 @@ export function DirectoryTreeView() {
 						);
 					}}
 				/>
-				<button type="button" className="tree-collapse-button" onClick={collapseToDepth}>
+				<button
+					type="button"
+					className="tree-collapse-button"
+					command="--collapse"
+					commandfor={collapseControl.id}>
 					{t('views.directoryTree.collapseToDepth')}
 				</button>
 			</div>
-			<div className="tree-sort-control">
+			<div ref={sortControl.ref} id={sortControl.id} className="tree-sort-control">
 				<label htmlFor="tree-sort-order-select">
 					{t('views.directoryTree.sortOrderLabel')}
 				</label>
@@ -180,7 +188,11 @@ export function DirectoryTreeView() {
 					<option value="pagesDesc">{t('views.directoryTree.sortOrderPagesDesc')}</option>
 					<option value="pagesAsc">{t('views.directoryTree.sortOrderPagesAsc')}</option>
 				</select>
-				<button type="button" className="tree-sort-button" onClick={applySortOrder}>
+				<button
+					type="button"
+					className="tree-sort-button"
+					command="--apply-sort"
+					commandfor={sortControl.id}>
 					{t('views.directoryTree.applySortOrder')}
 				</button>
 			</div>
@@ -198,7 +210,6 @@ export function DirectoryTreeView() {
 						collapseDepthThreshold={collapseDepthThreshold}
 						sortOrder={sortOrder}
 						onToggle={toggle}
-						onSelect={select}
 					/>
 				))}
 			</div>

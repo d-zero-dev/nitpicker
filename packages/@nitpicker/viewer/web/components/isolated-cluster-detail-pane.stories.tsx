@@ -1,7 +1,9 @@
 import type { ColumnDef } from '../types.js';
+import type { IsolatedClusterDetailPaneProps } from './isolated-cluster-detail-pane.js';
 import type { IsolatedClusterMember } from '@nitpicker/query';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { MemoryRouter } from 'react-router';
 import { fn } from 'storybook/test';
 
 import { IsolatedClusterDetailPane } from './isolated-cluster-detail-pane.js';
@@ -44,16 +46,25 @@ const members: IsolatedClusterMember[] = [
 
 const meta = {
 	component: IsolatedClusterDetailPane,
+	decorators: [
+		(Story) => (
+			<MemoryRouter>
+				<Story />
+			</MemoryRouter>
+		),
+	],
 } satisfies Meta<typeof IsolatedClusterDetailPane>;
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+// Props are a discriminated union on `mode`, which `StoryObj<typeof meta>` collapses to
+// `never`; typing the stories by the props type keeps each story checked against its branch.
+type Story = StoryObj<IsolatedClusterDetailPaneProps>;
 
 /** MPA mode: page-numbered navigation over the cluster's members. */
 export const Mpa: Story = {
 	args: {
 		representativeUrl: 'https://example.com/a',
-		onBack: fn(),
+		backTo: { search: '' },
 		mode: 'mpa',
 		data: members,
 		columns,
@@ -70,7 +81,7 @@ export const Mpa: Story = {
 export const Virtual: Story = {
 	args: {
 		representativeUrl: 'https://example.com/a',
-		onBack: fn(),
+		backTo: { search: '' },
 		mode: 'virtual',
 		data: members,
 		columns,

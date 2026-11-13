@@ -41,12 +41,12 @@ const populated: TechnologyStarChartProps = {
 	error: null,
 };
 
-/** Every row collapsed. Click a row to expand its contributing signals. */
+/** Every technology collapsed. Click one to expand its contributing signals. */
 export const Default: Story = { args: populated };
 
 /**
- * The first row expanded by a click, so the nested signals table and the
- * tinted detail cell beneath it are visible without interaction.
+ * The first technology expanded by a click, so its signals table in the
+ * tinted detail block is visible without interaction.
  */
 export const Expanded: Story = {
 	args: populated,
@@ -54,6 +54,23 @@ export const Expanded: Story = {
 		const canvas = within(canvasElement);
 		await userEvent.click(canvas.getByText('Next.js'));
 		await expect(canvas.getByText('html-marker')).toBeVisible();
+	},
+};
+
+/** Opening a second technology closes the first: the `<details>` share a `name`. */
+export const ExclusiveOpen: Story = {
+	args: populated,
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const first = canvas.getByText('Next.js').closest('details');
+		const second = canvas.getByText('Google Tag Manager').closest('details');
+
+		await userEvent.click(canvas.getByText('Next.js'));
+		await expect(first?.open).toBe(true);
+
+		await userEvent.click(canvas.getByText('Google Tag Manager'));
+		await expect(second?.open).toBe(true);
+		await expect(first?.open).toBe(false);
 	},
 };
 

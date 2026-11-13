@@ -57,8 +57,13 @@ export const Choices: Story = {
 export const Disabled: Story = {
 	render: () => (
 		<div style={{ display: 'grid', gap: 12, maxInlineSize: 360 }}>
-			<input type="text" defaultValue="Disabled input" disabled />
-			<select disabled>
+			<input
+				type="text"
+				aria-label="Disabled input"
+				defaultValue="Disabled input"
+				disabled
+			/>
+			<select aria-label="Disabled select" disabled>
 				<option>Disabled select</option>
 			</select>
 		</div>

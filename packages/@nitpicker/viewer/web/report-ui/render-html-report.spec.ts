@@ -47,6 +47,7 @@ const data: HtmlReportData = {
 			resourceFilesExists: 3,
 			resourceFilesTotal: 4,
 			consoleErrorCount: 0,
+			redirectTo: null,
 		},
 		{
 			title: 'First',
@@ -57,6 +58,7 @@ const data: HtmlReportData = {
 			resourceFilesExists: 1,
 			resourceFilesTotal: 1,
 			consoleErrorCount: null,
+			redirectTo: null,
 		},
 	],
 };
@@ -116,6 +118,7 @@ describe('renderHtmlReport', () => {
 					resourceFilesExists: 0,
 					resourceFilesTotal: 0,
 					consoleErrorCount: 0,
+					redirectTo: null,
 				},
 			],
 		});
@@ -137,6 +140,7 @@ describe('renderHtmlReport', () => {
 					resourceFilesExists: 2,
 					resourceFilesTotal: 2,
 					consoleErrorCount: 0,
+					redirectTo: null,
 				},
 				{
 					title: 'Problems',
@@ -147,6 +151,7 @@ describe('renderHtmlReport', () => {
 					resourceFilesExists: 1,
 					resourceFilesTotal: 3,
 					consoleErrorCount: 2,
+					redirectTo: null,
 				},
 			],
 		});
@@ -155,5 +160,19 @@ describe('renderHtmlReport', () => {
 		expect(html).toContain('<strong class="report-alert">2</strong>');
 		expect(html).not.toContain('<strong class="report-alert">200</strong>');
 		expect(html).not.toContain('<strong class="report-alert">2 / 2</strong>');
+	});
+
+	it('toggles the theme through an Invoker Commands button that targets itself', () => {
+		const html = renderHtmlReport(data);
+		const button = html.match(/<button[^>]*data-report-theme-toggle[^>]*>/)?.[0] ?? '';
+		const id = button.match(/ id="([^"]+)"/)?.[1];
+		const script = html.match(/<script>(.*?)<\/script>/)?.[1];
+
+		expect(button).toContain('command="--toggle-theme"');
+		expect(id).toBeTruthy();
+		expect(button).toContain(`commandfor="${id}"`);
+		expect(script).toContain("addEventListener('command'");
+		expect(script).toContain("'--toggle-theme'");
+		expect(script).not.toContain("addEventListener('click'");
 	});
 });

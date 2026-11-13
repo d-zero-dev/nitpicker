@@ -62,6 +62,7 @@ export const Default: Story = {
 				resourceFilesExists: 12,
 				resourceFilesTotal: 13,
 				consoleErrorCount: 0,
+				redirectTo: null,
 			},
 			{
 				title: 'Moved page',
@@ -72,6 +73,7 @@ export const Default: Story = {
 				resourceFilesExists: 0,
 				resourceFilesTotal: 0,
 				consoleErrorCount: 1,
+				redirectTo: null,
 			},
 			{
 				title: 'Missing page',
@@ -82,6 +84,7 @@ export const Default: Story = {
 				resourceFilesExists: 0,
 				resourceFilesTotal: 2,
 				consoleErrorCount: 3,
+				redirectTo: null,
 			},
 		],
 	},

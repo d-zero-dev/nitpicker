@@ -39,7 +39,9 @@ test.describe('Nitpicker Viewer inbound links', () => {
 		);
 		await expect(page.locator('.pt-row').first()).toBeVisible();
 		await expect(page.locator('.pt-row')).toHaveCount(100);
-		const next = page.getByRole('button', { name: 'Next' });
+		// Behavior change: Prev / Next / page numbers are links to ?page=N, not buttons
+		const next = page.getByRole('link', { name: 'Next' });
+		// const next = page.getByRole('button', { name: 'Next' }); // previous
 		await next.click();
 		await expect(page).toHaveURL(/[?&]page=2(?:&|$)/);
 		await expect(page.locator('.pt-row').first()).toBeVisible();

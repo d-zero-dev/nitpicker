@@ -198,6 +198,7 @@ viewer ──→ @hono/node-server + react + @tanstack/*（外部）
   - **プリフィルタは各リテラルの最左出現を順に探す貪欲連鎖**（`passes_ordered_prefilter.rs`）で、`a.*?b.*?c`形の探索にしない（失敗時に組み合わせ爆発する）。開始タグの判定の前にも掛ける（一致しない文書を読まずに済ませる）。`:not()`内・エスケープされうる値・非 ASCII は使わない
   - **走査対象は`search-html`と同じ集合**（`page_html_ref`に行があり`is_skipped`でないページ。`html-snapshot-scan/create-html-snapshot-candidate-query.ts`を共有）にそろえる。Page List の行集合（`applyPageListUniverse`）にはしない。同じ HTML を検索する 2 コマンドで「検索できるページ」が食い違わないことを優先する
   - **セレクタは CLI がアーカイブを開く前に検証する**（`cli/src/commands/query.ts`が`compileSelector`を先に呼ぶ。`--selector`の未指定だけは他の必須フラグと同じく、展開後に mapper が報告する）。展開に分単位かかるアーカイブで typo が展開後に初めて失敗するのを避けるため。`matchSelector`自身も DB に触れる前にコンパイルする
+- **viewer の`<button>`は`onClick`を持たず、Invoker Commands（`command`/`commandfor`）で駆動する** — 状態更新は`web/hooks/use-command-target.ts`が`commandfor`の対象要素で`command`イベントを受けて`event.command`で分岐し（値はボタンの`value`を`event.source`から読む）、URL を変えるだけの遷移は`AppLink`、開閉は`popover`/`<details>`を使う。`onClick`が許されないのは Markuplint の`security/no-event-handler-attr`と`d-zero/button-require-command`のため（許可するイベントは`.markuplintrc.json`の`ignore`に列挙）。ポリフィルも機能検出・フォールバック表示も入れない — 対応は Chrome/Edge 135・Firefox 147・Safari 26.2 以降（Invoker Commands は Firefox 144、列フィルタの CSS Anchor Positioning は Firefox 147 から）で、未対応ブラウザではボタンが反応しない（意図的な不在。`viewer/README.md`に明記）。`command`/`commandfor`の型は`web/react-invoker-commands.d.ts`、oxlint の`react/no-unknown-property`の許可は`oxlint.config.mts`。対象要素は`ref`と`id`の両方を付けること（どちらかが欠けるとボタンは黙って無反応になる。対象が後からマウントされても、別の要素に替わっても、リスナーは`ref.current`に追従する）。静的 HTML レポートは React を実行しないので、同じ`command`イベントを`render-html-report.tsx`の埋め込みスクリプトが聞く（「静的HTMLレポートの変更」参照）
 
 ## Reading paths
 
@@ -299,14 +300,14 @@ Astro/Next.js/Vue/Nuxt/Svelte/SvelteKit/Remix/Gatsby/Angular 等のフロント�
 
 1. `viewer/src/create-app.ts`（ルート登録）と`viewer/src/routes/register-*-route.ts`（query 1:1）
 2. query 関数本体（`query/src/*.ts`）— backend は基本無改修で query に足す
-3. frontend: `viewer/web/routes/*.tsx`（ビュー）、`viewer/web/components/data-table.tsx`（PagedTable/VirtualTable dispatch。件数が有界でページング・仮想化が不要な表は`viewer/web/styles.css`の Plain table 節（`.plain-table-scroll`で包んだ`table.plain-table`）を使う。素の`<table>`は無スタイル）、`viewer/web/i18n/translations.ts`（en/ja 必須）
+3. frontend: ボタンの駆動は Invoker Commands（不変条件の「viewer の`<button>`は`onClick`を持たない」）。受け手は`viewer/web/hooks/use-command-target.ts`、型は`viewer/web/react-invoker-commands.d.ts`・`viewer/web/types.ts`の`CommandHandlers`。`viewer/web/routes/*.tsx`（ビュー）、`viewer/web/components/data-table.tsx`（PagedTable/VirtualTable dispatch。件数が有界でページング・仮想化が不要な表は`viewer/web/styles.css`の Plain table 節（`.plain-table-scroll`で包んだ`table.plain-table`）を使う。素の`<table>`は無スタイル）、`viewer/web/i18n/translations.ts`（en/ja 必須）
 4. キャッシュが要るなら`viewer/src/*-cache.ts` + `promise-lru.ts`（stub mode は bypass — live crawl 中は snapshot が永久 stale になるため）
 5. **frontend の consumer 探索は`src/`だけでなく`web/`も grep すること**
-6. URL の表示: viewer 内に遷移先がある URL は`AppLink`/navigate ボタン、遷移先のない URL（resources・images・canonical・referrer 等）は`viewer/web/components/external-url.tsx`の`ExternalUrl`（http(s) のみ`target="_blank"` + 別窓アイコン、それ以外はプレーンテキスト）。静的 HTML レポート（`html-report-document.tsx`）も同じコンポーネントを使う。新しい URL 列・一覧を足すときは素の`{url}`を置かない
+6. URL の表示: viewer 内に遷移先がある URL は`AppLink`（クエリだけを変える遷移は`web/hooks/apply-filter-updates.ts`の`applyFilterUpdates`で`search`を組み、`updateMany`と同じ規則にする。表のセルのように現在のクエリを自分で読みたい所は`web/components/filter-link.tsx`の`FilterLink`）、遷移先のない URL（resources・images・canonical・referrer 等）は`viewer/web/components/external-url.tsx`の`ExternalUrl`（http(s) のみ`target="_blank"` + 別窓アイコン、それ以外はプレーンテキスト）。静的 HTML レポート（`html-report-document.tsx`）も同じコンポーネントを使う。新しい URL 列・一覧を足すときは素の`{url}`を置かない
 
 ### viewer UI コンポーネント改善（データ取得非依存）
 
-データ取得（react-query hooks・API レスポンス）に直接関係しない UI のみの改善は、Storybook（`.storybook/`、`web/components/*.stories.tsx`）で対象コンポーネントを隔離した状態で確認・改善する。`yarn workspace @nitpicker/viewer storybook`で dev サーバーを起動する。データ取得を伴う変更は「viewer のビュー/API 追加」を参照。
+データ取得（react-query hooks・API レスポンス）に直接関係しない UI のみの改善は、Storybook（`.storybook/`、`web/components/*.stories.tsx`）で対象コンポーネントを隔離した状態で確認・改善する。`yarn workspace @nitpicker/viewer storybook`で dev サーバーを起動する。リンク（`AppLink`/`FilterLink`）や`useUrlFilter`を使うコンポーネントの stories は、`MemoryRouter`の decorator で包むこと（Router が無いと描画で落ちる）。データ取得を伴う変更は「viewer のビュー/API 追加」を参照。
 
 ### viewer read model の変更
 
@@ -330,7 +331,7 @@ Astro/Next.js/Vue/Nuxt/Svelte/SvelteKit/Remix/Gatsby/Angular 等のフロント�
 1. `report-html/src/report.ts`（アーカイブ展開・10,000件上限・ディレクトリ入力）
 2. `query/src/report-export/`（innerページの件数・ストリーム・resource-files集計）
 3. `viewer/web/components/html-report-document.tsx`/`static-table.tsx`（データ取得を持たない表示面。Storybookで確認）
-4. `viewer/web/report-ui/render-html-report.tsx`（SSRとviewer CSS・テーマ切替スクリプトの自己完結HTML化）
+4. `viewer/web/report-ui/render-html-report.tsx`（SSRとviewer CSS・テーマ切替スクリプトの自己完結HTML化）。テーマ切替ボタン（`html-report-document.tsx`の`id`/`command="--toggle-theme"`/`commandfor`）とスクリプトの`command`イベントリスナーは対 — 片方だけ変えるとビルドも lint も通るままボタンが無反応になる（`render-html-report.spec.ts`が両側の対応を検証する）
 5. `cli/src/commands/report-def.ts`/`report.ts`（`--sheet`と`--html`の相互排他、レポータの遅延import）
 
 ### URL リスト絞り込みレポート（`report --urls` / `query match-urls`）の変更

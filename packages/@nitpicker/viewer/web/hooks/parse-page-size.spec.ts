@@ -43,6 +43,7 @@ describe('parsePageSize', () => {
 	it('rejects non-numeric inputs (string, null, undefined, object)', () => {
 		expect(parsePageSize('100')).toBeNull();
 		expect(parsePageSize(null)).toBeNull();
+		// @ts-expect-error -- calling without an argument is the case under test
 		expect(parsePageSize()).toBeNull();
 		expect(parsePageSize({})).toBeNull();
 		expect(parsePageSize([100])).toBeNull();

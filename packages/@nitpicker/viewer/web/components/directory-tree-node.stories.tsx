@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { MemoryRouter } from 'react-router';
 import { fn } from 'storybook/test';
 
 import { demoDirectoryTreeNode } from './demo-directory-tree-fixtures.js';
@@ -33,8 +34,14 @@ const meta = {
 		collapseDepthThreshold: 3,
 		sortOrder: 'path',
 		onToggle: fn(),
-		onSelect: fn(),
 	},
+	decorators: [
+		(Story) => (
+			<MemoryRouter>
+				<Story />
+			</MemoryRouter>
+		),
+	],
 } satisfies Meta<typeof DirectoryTreeNodeRow>;
 
 export default meta;

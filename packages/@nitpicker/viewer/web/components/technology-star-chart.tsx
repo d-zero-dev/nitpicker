@@ -1,7 +1,5 @@
 import type { PageTechnologiesResult } from '../api/use-page-technologies.js';
 
-import { Fragment, useState } from 'react';
-
 import { useI18n } from '../i18n/use-i18n.js';
 
 /** Props for {@link TechnologyStarChart}. */
@@ -13,15 +11,15 @@ export interface TechnologyStarChartProps {
 
 /**
  * A page's detected-technology star chart: every technology detected on the
- * page, confidence descending, with a per-row expansion showing the raw
- * signals (evidence) that contributed to it.
+ * page, confidence descending, each a `<details>` whose body shows the raw
+ * signals (evidence) that contributed to it. The details share a `name`, so
+ * opening one closes the other.
  * @param props - The page's technologies query result.
  * @returns The technologies section.
  */
 export function TechnologyStarChart(props: TechnologyStarChartProps) {
 	const { t } = useI18n();
 	const { data, isLoading, error } = props;
-	const [expandedTechnology, setExpandedTechnology] = useState<string | null>(null);
 
 	return (
 		<>
@@ -34,69 +32,64 @@ export function TechnologyStarChart(props: TechnologyStarChartProps) {
 				<div className="state">{t('views.pageDetail.noTechnologies')}</div>
 			)}
 			{data && data.technologies.length > 0 && (
-				<div className="plain-table-scroll">
-					<table className="plain-table">
-						<thead>
-							<tr>
-								<th>{t('views.technologies.colTechnology')}</th>
-								<th>{t('views.technologies.colCategory')}</th>
-								<th>{t('views.pageDetail.colVersion')}</th>
-								<th className="plain-table-num">{t('views.pageDetail.colConfidence')}</th>
-								<th className="plain-table-num">
-									{t('views.pageDetail.colSignalCount')}
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							{data.technologies.map((tech) => (
-								<Fragment key={tech.technology}>
-									<tr
-										className={`is-expandable${
-											expandedTechnology === tech.technology ? ' is-expanded' : ''
-										}`}
-										onClick={() =>
-											setExpandedTechnology(
-												expandedTechnology === tech.technology ? null : tech.technology,
-											)
-										}>
-										<td>{tech.technology}</td>
-										<td>{tech.category ?? '—'}</td>
-										<td>{tech.version ?? '—'}</td>
-										<td className="plain-table-num">{tech.confidence}</td>
-										<td className="plain-table-num">{tech.signalCount}</td>
-									</tr>
-									{expandedTechnology === tech.technology && (
-										<tr>
-											<td colSpan={5} className="plain-table-detail">
-												<div className="plain-table-scroll">
-													<table className="plain-table">
-														<thead>
-															<tr>
-																<th>{t('views.pageDetail.colSignalType')}</th>
-																<th>{t('views.pageDetail.colEvidence')}</th>
-																<th className="plain-table-num">
-																	{t('views.pageDetail.colWeight')}
-																</th>
-															</tr>
-														</thead>
-														<tbody>
-															{tech.signals.map((signal, index) => (
-																<tr key={`${signal.signalType}-${index}`}>
-																	<td>{signal.signalType}</td>
-																	<td>{signal.evidence ?? '—'}</td>
-																	<td className="plain-table-num">{signal.weight}</td>
-																</tr>
-															))}
-														</tbody>
-													</table>
-												</div>
-											</td>
-										</tr>
-									)}
-								</Fragment>
-							))}
-						</tbody>
-					</table>
+				<div>
+					{data.technologies.map((tech) => (
+						// `name` makes the group exclusive: opening a technology closes the
+						// one that was open, so at most one signals table is shown at a time.
+						<details key={tech.technology} name="technology" className="tech-item">
+							<summary className="tech-summary">
+								<span className="tech-name">{tech.technology}</span>
+								<span className="tech-meta">
+									<span className="tech-meta-label">
+										{t('views.technologies.colCategory')}
+									</span>{' '}
+									{tech.category ?? '—'}
+								</span>
+								<span className="tech-meta">
+									<span className="tech-meta-label">
+										{t('views.pageDetail.colVersion')}
+									</span>{' '}
+									{tech.version ?? '—'}
+								</span>
+								<span className="tech-meta">
+									<span className="tech-meta-label">
+										{t('views.pageDetail.colConfidence')}
+									</span>{' '}
+									{tech.confidence}
+								</span>
+								<span className="tech-meta">
+									<span className="tech-meta-label">
+										{t('views.pageDetail.colSignalCount')}
+									</span>{' '}
+									{tech.signalCount}
+								</span>
+							</summary>
+							<div className="tech-detail">
+								<div className="plain-table-scroll">
+									<table className="plain-table">
+										<thead>
+											<tr>
+												<th>{t('views.pageDetail.colSignalType')}</th>
+												<th>{t('views.pageDetail.colEvidence')}</th>
+												<th className="plain-table-num">
+													{t('views.pageDetail.colWeight')}
+												</th>
+											</tr>
+										</thead>
+										<tbody>
+											{tech.signals.map((signal, index) => (
+												<tr key={`${signal.signalType}-${index}`}>
+													<td>{signal.signalType}</td>
+													<td>{signal.evidence ?? '—'}</td>
+													<td className="plain-table-num">{signal.weight}</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+							</div>
+						</details>
+					))}
 				</div>
 			)}
 		</>

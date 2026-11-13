@@ -1,5 +1,6 @@
 import type { ColumnDef } from '../types.js';
 import type { ErrorKind, ErrorKindEntry, FailureAttribution } from '@nitpicker/query';
+import type { To } from 'react-router';
 
 import { useMemo } from 'react';
 
@@ -11,7 +12,9 @@ import {
 	createTableControls,
 } from '../components/create-table-controls.js';
 import { DataTable } from '../components/data-table.js';
+import { FilterLink } from '../components/filter-link.js';
 import { ViewHeader } from '../components/view-header.js';
+import { applyFilterUpdates } from '../hooks/apply-filter-updates.js';
 import { useListPagination } from '../hooks/use-list-pagination.js';
 import { useUrlFilter } from '../hooks/use-url-filter.js';
 import { getAttributionLabel } from '../i18n/get-attribution-label.js';
@@ -34,6 +37,7 @@ const ERROR_KIND_KEYS: Record<ErrorKind, true> = {
 	'local-network': true,
 	'parse-error': true,
 	'client-blocked': true,
+	'redirect-loop': true,
 	timeout: true,
 	protocol: true,
 	unknown: true,
@@ -67,7 +71,7 @@ const ATTRIBUTIONS = Object.keys(ATTRIBUTION_KEYS) as FailureAttribution[];
  * @returns The errors view element.
  */
 export function ErrorsView() {
-	const { params, updateMany } = useUrlFilter();
+	const { params } = useUrlFilter();
 	const host = params.get('host');
 	const kind = params.get('kind');
 	const attribution = params.get('attribution');
@@ -87,42 +91,26 @@ export function ErrorsView() {
 						? (attribution as FailureAttribution)
 						: undefined
 				}
-				onBack={() =>
-					updateMany([
+				backTo={{
+					search: applyFilterUpdates(params, [
 						['host', ''],
 						['kind', ''],
 						['attribution', ''],
-					])
-				}
+					]).toString(),
+				}}
 			/>
 		);
 	}
-	return (
-		<ErrorListPane
-			onSelectRow={(rowHost, rowKind, rowAttribution) => {
-				updateMany([
-					['host', rowHost],
-					['kind', rowKind],
-					['attribution', rowAttribution],
-				]);
-			}}
-		/>
-	);
+	return <ErrorListPane />;
 }
 
 /**
  * Renders the paginated list of host×kind×attribution rows. Each host cell
- * is a button so the operator can drill into that row's sample URLs without
- * a mouse.
- * @param props - Component props.
- * @param props.onSelectRow - Called with the row's host, kind, and attribution when the operator drills in.
+ * is a link to `?host=&kind=&attribution=` so the operator can drill into
+ * that row's sample URLs without a mouse.
  * @returns The list pane element.
  */
-function ErrorListPane({
-	onSelectRow,
-}: {
-	onSelectRow: (host: string, kind: ErrorKind, attribution: FailureAttribution) => void;
-}) {
+function ErrorListPane() {
 	const { t } = useI18n();
 	const { params, updateMany } = useUrlFilter();
 	const { pageSize, currentPage, setPage, setPageSize } = useListPagination();
@@ -150,12 +138,15 @@ function ErrorListPane({
 				cell: (info) => {
 					const row = info.row.original;
 					return (
-						<button
-							type="button"
+						<FilterLink
 							className="link-button"
-							onClick={() => onSelectRow(row.host, row.kind, row.attribution)}>
+							updates={[
+								['host', row.host],
+								['kind', row.kind],
+								['attribution', row.attribution],
+							]}>
 							<code>{row.host}</code>
-						</button>
+						</FilterLink>
 					);
 				},
 			},
@@ -180,7 +171,7 @@ function ErrorListPane({
 				accessorFn: (r) => r.count,
 			},
 		],
-		[t, onSelectRow],
+		[t],
 	);
 	const columnControls = useMemo(() => {
 		const context = { params, updateMany };
@@ -219,7 +210,7 @@ function ErrorListPane({
 				titleKey="views.errors.title"
 				descriptionKey="views.errors.description"
 			/>
-			{data && (
+			{data?.facets && (
 				<p className="state">
 					{t('views.errors.total', { total: data.facets.totalRecords })}
 					{data.facets.channelSource !== 'none' && (
@@ -260,19 +251,19 @@ function ErrorListPane({
  * @param props.host - The host to look up.
  * @param props.kind - The classified cause to look up.
  * @param props.attribution - The attribution to look up, or `undefined` to match every attribution for this (host, kind).
- * @param props.onBack - Called when the operator navigates back to the host list.
+ * @param props.backTo - Where the back link goes: the host list.
  * @returns The detail pane element.
  */
 function ErrorDetailPane({
 	host,
 	kind,
 	attribution,
-	onBack,
+	backTo,
 }: {
 	host: string;
 	kind: ErrorKind;
 	attribution?: FailureAttribution;
-	onBack: () => void;
+	backTo: To;
 }) {
 	const { t } = useI18n();
 	const { data, isLoading, isError, error } = useErrorKinds({ host, kind, attribution });
@@ -285,9 +276,9 @@ function ErrorDetailPane({
 
 	return (
 		<div className="view">
-			<button type="button" className="link-button" onClick={onBack}>
+			<AppLink className="link-button" to={backTo}>
 				{t('views.errors.back')}
-			</button>
+			</AppLink>
 			<ViewHeader
 				titleKey="views.errors.detailTitle"
 				descriptionKey="views.errors.description"
