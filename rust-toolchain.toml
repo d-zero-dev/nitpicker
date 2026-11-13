@@ -4,6 +4,6 @@
 # directory, and the root `yarn lint` / `yarn test:rust` scripts run cargo
 # from here.
 [toolchain]
-channel = "1.98.1"
+channel = "1.99.1"
 components = ["clippy", "rustfmt"]
 profile = "minimal"
