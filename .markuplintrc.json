@@ -11,26 +11,83 @@
 		},
 		"packages/**/web/**/*.{tsx,jsx}": {
 			"rules": {
-				"security/no-event-handler-attr": false,
-				"d-zero/button-require-command": false,
-				"react/no-hard-code-id": false,
-				"performance/iframe-lazy-loading": false,
-				"a11y/no-merge-cells": false,
-				"a11y/require-accessible-name": false,
-				"a11y/redundant-accessible-name": false,
-				"a11y/wai-aria/disallowed-props": false,
-				"a11y/wai-aria/permitted-roles": false,
-				"a11y/wai-aria/presentational-children": false
-			}
+				"security/no-event-handler-attr": {
+					"rules": {
+						"no-event-handler-attr": {
+							"value": true,
+							"options": {
+								"ignore": [
+									"onChange",
+									"onKeyDown",
+									"onMouseDown",
+									"onTouchStart",
+									"onScroll",
+									"onSubmit"
+								]
+							}
+						}
+					}
+				}
+			},
+			"nodeRules": [
+				{
+					"selector": "table.vt-table, table.pt-table",
+					"rules": {
+						"no-redundant-role": false
+					}
+				},
+				{
+					"selector": "tr[role=row]",
+					"rules": {
+						"no-redundant-role": false,
+						"permitted-roles": false,
+						"require-owned-elements": false
+					}
+				},
+				{
+					"selector": "td[aria-colindex]",
+					"rules": {
+						"aria-prop-requires-role": false
+					}
+				},
+				{
+					"selector": "#tree-collapse-depth-input, #tree-sort-order-select",
+					"rules": {
+						"no-hardcoded-id": false
+					}
+				},
+				{
+					"selector": "button.tree-toggle",
+					"rules": {
+						"element-supports-aria-prop": false
+					}
+				},
+				{
+					"name": "performance/iframe-lazy-loading",
+					"specConformance": "non-normative",
+					"selector": "iframe:not(.hp-frame)",
+					"rules": {
+						"require-attr": [
+							"title",
+							{
+								"name": "loading",
+								"value": "lazy"
+							}
+						]
+					}
+				},
+				{
+					"selector": "button.icon-button",
+					"rules": {
+						"no-redundant-accessible-name": false
+					}
+				}
+			]
 		},
-		"packages/@nitpicker/viewer/web/components/{paged-table,virtual-table,technology-star-chart}.tsx": {
+		"packages/@nitpicker/viewer/web/components/{paged-table,virtual-table}.tsx": {
 			"rules": {
-				"html-standard/permitted-contents": false,
 				"a11y/no-empty-table-track": false,
-				"a11y/table-row-column-alignment": false,
-				"a11y/wai-aria/implicit-role": false,
-				"a11y/wai-aria/no-global-prop": false,
-				"a11y/wai-aria/required-owned-elements": false
+				"a11y/table-row-column-alignment": false
 			}
 		}
 	}
