@@ -65,8 +65,7 @@ export function GraphView() {
 		}, LAYOUT_DURATION);
 
 		const renderer = new Sigma(graph, container, {
-			defaultEdgeType: 'arrow',
-			renderEdgeLabels: false,
+			settings: { renderEdgeLabels: false },
 		});
 		renderer.on('clickNode', ({ node }) => {
 			void navigate(`/pages/detail?url=${encodeURIComponent(node)}`);

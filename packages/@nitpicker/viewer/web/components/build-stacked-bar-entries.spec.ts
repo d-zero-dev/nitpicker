@@ -35,7 +35,7 @@ describe('buildStackedBarEntries', () => {
 		const result = buildStackedBarEntries([
 			{ category: 'html', internal: 7, external: 3 },
 		]);
-		expect(result[0].total).toBe(10);
+		expect(result[0]?.total).toBe(10);
 	});
 
 	it('does not mutate the input array', () => {

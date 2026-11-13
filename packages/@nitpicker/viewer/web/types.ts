@@ -7,6 +7,7 @@ import type {
 import type {
 	CellContext as TanstackCellContext,
 	ColumnDef as TanstackColumnDef,
+	RowData,
 } from '@tanstack/react-table';
 
 /**
@@ -15,14 +16,14 @@ import type {
  * a single feature set change here does not require touching every call
  * site's type arguments.
  */
-export type ColumnDef<TData, TValue = unknown> = TanstackColumnDef<
+export type ColumnDef<TData extends RowData, TValue = unknown> = TanstackColumnDef<
 	typeof viewerTableFeatures,
 	TData,
 	TValue
 >;
 
 /** {@link TanstackCellContext} pinned to {@link viewerTableFeatures} — see {@link ColumnDef}. */
-export type CellContext<TData, TValue = unknown> = TanstackCellContext<
+export type CellContext<TData extends RowData, TValue = unknown> = TanstackCellContext<
 	typeof viewerTableFeatures,
 	TData,
 	TValue
@@ -41,6 +42,7 @@ export type PagesFilter = Omit<
 	ListPagesOptions,
 	| 'limit'
 	| 'offset'
+	| 'onSortProgress'
 	| 'status'
 	| 'contentTypeCategory'
 	| 'templateKey'
@@ -251,6 +253,16 @@ export interface TemplateClusterOverview {
 	/** One row per block kind that at least one cluster has, in `css` / `path` / `orphanMerge` / `unknown` order. */
 	blockKinds: ClusterBlockKindOverview[];
 }
+
+/**
+ * Handlers for the custom commands (`command="--name"`) a
+ * {@link import('./hooks/use-command-target.js').useCommandTarget} element
+ * receives, keyed by the command name. Custom commands must start with `--`
+ * (HTML Living Standard, Invoker Commands).
+ */
+export type CommandHandlers = Readonly<
+	Record<`--${string}`, (event: CommandEvent) => void>
+>;
 
 /** Every cluster that drew pages from one page-cluster Pass-0 block. */
 export interface ClusterBlockGroup {

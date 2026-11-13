@@ -21,12 +21,12 @@ describe('buildStackedBarRows', () => {
 			{ category: 'pdf', internal: 40, external: 0 },
 		]);
 		expect(rows).toHaveLength(2);
-		expect(rows[0].entry.category).toBe('html');
-		expect(rows[0].width).toBeCloseTo(60, 5);
-		expect(rows[0].ratio).toBeCloseTo(0.6, 5);
-		expect(rows[1].entry.category).toBe('pdf');
-		expect(rows[1].width).toBeCloseTo(40, 5);
-		expect(rows[1].ratio).toBeCloseTo(0.4, 5);
+		expect(rows[0]?.entry.category).toBe('html');
+		expect(rows[0]?.width).toBeCloseTo(60, 5);
+		expect(rows[0]?.ratio).toBeCloseTo(0.6, 5);
+		expect(rows[1]?.entry.category).toBe('pdf');
+		expect(rows[1]?.width).toBeCloseTo(40, 5);
+		expect(rows[1]?.ratio).toBeCloseTo(0.4, 5);
 	});
 
 	it('orders rows by total descending (largest first)', () => {
@@ -63,7 +63,7 @@ describe('buildStackedBarRows', () => {
 	it('preserves external-only categories', () => {
 		const rows = buildStackedBarRows([{ category: 'image', internal: 0, external: 3 }]);
 		expect(rows).toHaveLength(1);
-		expect(rows[0].entry.external).toBe(3);
-		expect(rows[0].ratio).toBeCloseTo(1, 5);
+		expect(rows[0]?.entry.external).toBe(3);
+		expect(rows[0]?.ratio).toBeCloseTo(1, 5);
 	});
 });

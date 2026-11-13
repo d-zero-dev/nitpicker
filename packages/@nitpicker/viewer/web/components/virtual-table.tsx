@@ -1,4 +1,5 @@
 import type { ColumnDef } from '../types.js';
+import type { RowData } from '@tanstack/react-table';
 
 import { flexRender, useTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -10,7 +11,7 @@ import { viewerTableFeatures } from '../table-features.js';
 import { toAccessibleHeaderLabel } from './to-accessible-header-label.js';
 
 /** Props for {@link VirtualTable}. */
-export interface VirtualTableProps<T> {
+export interface VirtualTableProps<T extends RowData> {
 	/** The currently loaded rows (a flat slice of the full result set). */
 	data: T[];
 	/** Column definitions. */
@@ -56,7 +57,7 @@ const MAX_COLUMN_WIDTH = 1000;
  * @param props - The table data, columns, and pagination callbacks.
  * @returns The virtualized table element.
  */
-export function VirtualTable<T>(props: VirtualTableProps<T>) {
+export function VirtualTable<T extends RowData>(props: VirtualTableProps<T>) {
 	const {
 		data,
 		columns,
@@ -132,6 +133,9 @@ export function VirtualTable<T>(props: VirtualTableProps<T>) {
 				 * `aria-colindex` restore them, so screen readers can navigate the
 				 * windowed data by row and column even though only a slice is in the
 				 * DOM (header row counts as row index 1; data rows start at 2).
+				 * `.markuplintrc.json` exempts `table.vt-table`/`tr[role=row]`/`td[aria-colindex]`
+				 * from the role and ARIA-prop rules for this reason, and this file from the
+				 * table-model rules (`.map()` cells cannot be counted).
 				 */}
 				<table
 					className="vt-table"

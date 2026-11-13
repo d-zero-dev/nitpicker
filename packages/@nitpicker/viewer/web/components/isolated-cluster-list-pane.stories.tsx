@@ -1,7 +1,9 @@
 import type { ColumnDef } from '../types.js';
+import type { IsolatedClusterListPaneProps } from './isolated-cluster-list-pane.js';
 import type { IsolatedClusterSummary } from '@nitpicker/query';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { MemoryRouter } from 'react-router';
 import { fn } from 'storybook/test';
 
 import { IsolatedClusterListPane } from './isolated-cluster-list-pane.js';
@@ -22,10 +24,19 @@ const rows: IsolatedClusterSummary[] = Array.from({ length: 12 }, (_, i) => ({
 
 const meta = {
 	component: IsolatedClusterListPane,
+	decorators: [
+		(Story) => (
+			<MemoryRouter>
+				<Story />
+			</MemoryRouter>
+		),
+	],
 } satisfies Meta<typeof IsolatedClusterListPane>;
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+// Props are a discriminated union on `mode`, which `StoryObj<typeof meta>` collapses to
+// `never`; typing the stories by the props type keeps each story checked against its branch.
+type Story = StoryObj<IsolatedClusterListPaneProps>;
 
 /** MPA mode: page-numbered navigation. */
 export const Mpa: Story = {

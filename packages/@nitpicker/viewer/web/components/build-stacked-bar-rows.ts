@@ -48,7 +48,7 @@ export function buildStackedBarRows(
 	const widths = computeStackedBarWidths(visible, grandTotal);
 	return visible.map((entry, index) => ({
 		entry,
-		width: widths[index],
+		width: widths[index] ?? 0,
 		ratio: entry.total / grandTotal,
 	}));
 }

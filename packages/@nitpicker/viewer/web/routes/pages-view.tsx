@@ -9,11 +9,11 @@ import {
 } from '@nitpicker/query/categories';
 import { HEADER_PRESENCE_KEYS } from '@nitpicker/query/header-presence';
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router';
 
 import { useDedupeCapEvents } from '../api/use-dedupe-cap-events.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
 import { usePagesInfinite } from '../api/use-pages-infinite.js';
+import { AppLink } from '../components/app-link.js';
 import {
 	addChecklistFilter,
 	addSort,
@@ -71,7 +71,6 @@ const HEADER_PRESENCE_LABELS: Record<keyof HeaderPresence, string> = {
  */
 export function PagesView() {
 	const { params, updateMany } = useUrlFilter();
-	const navigate = useNavigate();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 
@@ -172,16 +171,11 @@ export function PagesView() {
 				header: t('views.pages.colUrl'),
 				size: 340,
 				cell: (info) => (
-					<button
-						type="button"
+					<AppLink
 						className="link-button"
-						onClick={() => {
-							void navigate(
-								`/pages/detail?url=${encodeURIComponent(info.row.original.url)}`,
-							);
-						}}>
+						to={`/pages/detail?url=${encodeURIComponent(info.row.original.url)}`}>
 						{info.getValue<string>()}
-					</button>
+					</AppLink>
 				),
 			},
 			{
@@ -200,14 +194,11 @@ export function PagesView() {
 						return '—';
 					}
 					return (
-						<button
-							type="button"
+						<AppLink
 							className="link-button"
-							onClick={() => {
-								void navigate(`/pages/detail?url=${encodeURIComponent(destUrl)}`);
-							}}>
+							to={`/pages/detail?url=${encodeURIComponent(destUrl)}`}>
 							{destUrl}
-						</button>
+						</AppLink>
 					);
 				},
 			},
@@ -401,7 +392,7 @@ export function PagesView() {
 				cell: boolCell,
 			},
 		];
-	}, [navigate, t]);
+	}, [t]);
 	const columnControls = useMemo(() => {
 		const controls = createTableControls({ params, updateMany });
 		for (const key of [
@@ -513,21 +504,13 @@ export function PagesView() {
 				{
 					value: 'true',
 					label: t('views.pages.filterMissingTitle'),
-					checked: missingTitle.includes('true'),
 				},
 				{
 					value: 'false',
 					label: t('common.present'),
-					checked: missingTitle.includes('false'),
 				},
 			],
 		);
-		const headerPresenceValues: Record<keyof HeaderPresence, readonly string[]> = {
-			hasCSP,
-			hasXFrameOptions,
-			hasXContentTypeOptions,
-			hasHSTS,
-		};
 		for (const key of HEADER_PRESENCE_KEYS) {
 			addSort(controls, { params, updateMany }, key, key);
 			addChecklistFilter(
@@ -540,12 +523,10 @@ export function PagesView() {
 					{
 						value: 'true',
 						label: t('common.yes'),
-						checked: headerPresenceValues[key].includes('true'),
 					},
 					{
 						value: 'false',
 						label: t('common.none'),
-						checked: headerPresenceValues[key].includes('false'),
 					},
 				],
 			);
@@ -575,12 +556,10 @@ export function PagesView() {
 				{
 					value: 'true',
 					label: t('common.yes'),
-					checked: isDedupeCapped.includes('true'),
 				},
 				{
 					value: 'false',
 					label: t('common.none'),
-					checked: isDedupeCapped.includes('false'),
 				},
 			],
 		);
@@ -592,15 +571,9 @@ export function PagesView() {
 		facets?.templateKeys,
 		facets?.templateLabelsByKey,
 		facets?.types,
-		hasCSP,
-		hasHSTS,
-		hasXContentTypeOptions,
-		hasXFrameOptions,
 		imageScan,
-		isDedupeCapped,
 		isExternal,
 		lang,
-		missingTitle,
 		params,
 		status,
 		t,

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import { StaticTable } from '../components/static-table.js';
 
-/** `table`: the shared plain table for static data, its cell variants, expandable rows, and the report table. */
+/** `table`: the shared plain table for static data, its cell variants, and the report table. */
 const meta = {
 	title: 'Foundation/Table',
 } satisfies Meta;
@@ -69,37 +69,6 @@ export const ProseCell: Story = {
 								behaviour of the cell is visible: it breaks inside the column rather than
 								pushing the table wider than its container.
 							</div>
-						</td>
-					</tr>
-				</tbody>
-			</table>
-		</div>
-	),
-};
-
-/** Rows that expand in place: collapsed, hovered-style and expanded with a detail row. */
-export const ExpandableRows: Story = {
-	render: () => (
-		<div className="plain-table-scroll">
-			<table className="plain-table">
-				<thead>
-					<tr>
-						<th>Technology</th>
-						<th className="plain-table-num">Pages</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr className="is-expandable">
-						<td>Collapsed row</td>
-						<td className="plain-table-num">12</td>
-					</tr>
-					<tr className="is-expandable is-expanded">
-						<td>Expanded row</td>
-						<td className="plain-table-num">34</td>
-					</tr>
-					<tr>
-						<td colSpan={2} className="plain-table-detail">
-							Detail content shown under the expanded row.
 						</td>
 					</tr>
 				</tbody>

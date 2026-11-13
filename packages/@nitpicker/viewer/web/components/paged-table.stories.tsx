@@ -1,6 +1,7 @@
 import type { DemoRow } from './demo-table-fixtures.js';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { MemoryRouter } from 'react-router';
 import { fn } from 'storybook/test';
 
 import { buildDemoRows, demoTableColumns } from './demo-table-fixtures.js';
@@ -10,6 +11,13 @@ const rows = buildDemoRows(20);
 
 const meta = {
 	component: PagedTable<DemoRow>,
+	decorators: [
+		(Story) => (
+			<MemoryRouter>
+				<Story />
+			</MemoryRouter>
+		),
+	],
 	args: {
 		columns: demoTableColumns,
 		total: 4123,

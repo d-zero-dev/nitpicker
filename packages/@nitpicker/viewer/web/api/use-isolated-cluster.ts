@@ -46,7 +46,11 @@ export function useIsolatedCluster(
 		retry: false,
 		queryFn: async () => {
 			const path = `/api/isolated-clusters/${encodeURIComponent(representativeUrl)}`;
-			return apiGet<IsolatedClusterDetail>(path, options);
+			// The spread is deliberate: an interface has no implicit index signature, so
+			// `UseIsolatedClusterOptions` itself is not assignable to apiGet's
+			// `Record<string, ParamValue>`, while the anonymous copy is (and tsc still
+			// rejects a non-serializable member, e.g. a function).
+			return apiGet<IsolatedClusterDetail>(path, { ...options });
 		},
 	});
 }

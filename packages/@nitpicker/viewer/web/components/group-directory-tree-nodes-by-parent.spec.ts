@@ -21,6 +21,8 @@ function makeNode(overrides: Partial<DirectoryTreeNode>): DirectoryTreeNode {
 		descendantPageCount: 0,
 		internalDescendantPageCount: 0,
 		externalDescendantPageCount: 0,
+		directHtmlPageCount: 0,
+		descendantHtmlPageCount: 0,
 		hasChildren: false,
 		...overrides,
 	};

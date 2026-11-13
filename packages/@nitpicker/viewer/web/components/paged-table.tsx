@@ -1,10 +1,11 @@
 import type { ColumnDef, PageSize } from '../types.js';
-import type { CSSProperties } from 'react';
+import type { RowData } from '@tanstack/react-table';
 
 import { flexRender, useTable } from '@tanstack/react-table';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { useCommandTarget } from '../hooks/use-command-target.js';
 import { useI18n } from '../i18n/use-i18n.js';
 import { viewerTableFeatures } from '../table-features.js';
 
@@ -30,7 +31,7 @@ export interface TableFilterControl {
 	kind: 'checklist' | 'text';
 	value?: string;
 	options?: TableFilterOption[];
-	onApply: (next: string | string[] | undefined) => void;
+	onApply: (next?: string | string[]) => void;
 }
 
 export interface TableColumnControls {
@@ -39,7 +40,7 @@ export interface TableColumnControls {
 }
 
 /** Props for {@link PagedTable}. */
-export interface PagedTableProps<T> {
+export interface PagedTableProps<T extends RowData> {
 	/** The rows on the currently selected page (already sliced server-side). */
 	data: T[];
 	/** Column definitions (shared with the virtual variant). */
@@ -101,7 +102,8 @@ function HeaderControls(props: { columnId: string; controls?: TableColumnControl
 }
 
 /**
- * Advances the column sort cycle: ascending, descending, off.
+ * Advances the column sort cycle: ascending, descending, off. The button is
+ * its own `commandfor` target: it receives the `--sort` command it sends.
  * @param props - Sort control props.
  * @param props.control
  */
@@ -113,23 +115,24 @@ function SortButton({ control }: { control: TableSortControl }) {
 			? 'desc'
 			: undefined
 		: 'asc';
+	const { id, ref } = useCommandTarget<HTMLButtonElement>({
+		'--sort': () => {
+			control.onChange(next);
+		},
+	});
 	return (
 		<button
+			ref={ref}
+			id={id}
 			type="button"
+			command="--sort"
+			commandfor={id}
 			className={`pt-header-button${control.active ? ' is-active' : ''}`}
-			aria-label={t('tableControls.sort')}
-			onClick={() => {
-				control.onChange(next);
-			}}>
+			aria-label={t('tableControls.sort')}>
 			{control.active ? (order === 'asc' ? '^' : 'v') : 'S'}
 		</button>
 	);
 }
-
-const POPOVER_GAP = 6;
-const POPOVER_VIEWPORT_MARGIN = 8;
-const POPOVER_WIDTH = 320;
-const POPOVER_MAX_HEIGHT = 320;
 
 /**
  * Extracts selected filter option values from the current URL-backed control.
@@ -143,162 +146,178 @@ function selectedValues(control: TableFilterControl) {
 }
 
 /**
- * Keep a popover coordinate inside the current viewport bounds.
- * @param value - Preferred coordinate.
- * @param min - Lower bound.
- * @param max - Upper bound.
- * @returns Clamped coordinate.
- */
-function clamp(value: number, min: number, max: number) {
-	return Math.min(Math.max(value, min), max);
-}
-
-/**
  * Popover editor for a column filter; changes are committed only on Apply.
+ *
+ * The editor is a `popover="auto"` element opened by the F button's built-in
+ * `toggle-popover` command, so the browser closes it on an outside click or
+ * Escape. Closing that way discards the draft: every open re-reads the
+ * URL-backed `control` (`beforetoggle`). The element is rendered into
+ * `document.body` so no ancestor's overflow or stacking context can clip it,
+ * and anchored to the F button with CSS anchor positioning (below it, flipped
+ * above when there is no room, clamped to the viewport, following the button
+ * when the page scrolls or resizes). The popover is also the
+ * `commandfor` target of its own Select all / None / Reset / Apply buttons.
  * @param props - Filter control props.
  * @param props.control
  */
 function FilterButton({ control }: { control: TableFilterControl }) {
 	const { t } = useI18n();
-	const [isOpen, setIsOpen] = useState(false);
-	const [popoverStyle, setPopoverStyle] = useState<CSSProperties>();
+	const [hasOpened, setHasOpened] = useState(false);
 	const [textValue, setTextValue] = useState(control.value ?? '');
 	const [selected, setSelected] = useState(() => selectedValues(control));
 	const active =
 		control.kind === 'text'
 			? (control.value?.length ?? 0) > 0
 			: (control.options?.some((option) => option.checked) ?? false);
-	const popover =
-		isOpen && popoverStyle ? (
-			<div
-				className="pt-filter-popover"
-				role="dialog"
-				aria-label={control.label}
-				style={popoverStyle}>
-				{control.kind === 'text' ? (
-					<input
-						className="pt-filter-input"
-						aria-label={control.label}
-						value={textValue}
-						onChange={(event) => {
-							setTextValue(event.target.value);
-						}}
-						onKeyDown={(event) => {
-							if (event.key === 'Enter') {
-								control.onApply(textValue || undefined);
-								setIsOpen(false);
-							}
-						}}
-					/>
-				) : (
-					<>
-						<div className="pt-filter-actions">
-							<button
-								type="button"
-								onClick={() => {
-									setSelected(new Set(control.options?.map((option) => option.value)));
-								}}>
-								{t('tableControls.selectAll')}
-							</button>
-							<button
-								type="button"
-								onClick={() => {
-									setSelected(new Set());
-								}}>
-								{t('tableControls.selectNone')}
-							</button>
-						</div>
-						<div className="pt-filter-list">
-							{control.options?.map((option) => (
-								<label key={option.value} className="pt-filter-option">
-									<input
-										type="checkbox"
-										checked={selected.has(option.value)}
-										onChange={(event) => {
-											const next = new Set(selected);
-											if (event.target.checked) {
-												next.add(option.value);
-											} else {
-												next.delete(option.value);
-											}
-											setSelected(next);
-										}}
-									/>
-									<span>{option.label}</span>
-								</label>
-							))}
-						</div>
-					</>
-				)}
-				<div className="pt-filter-actions">
-					<button
-						type="button"
-						onClick={() => {
-							control.onApply();
-							setIsOpen(false);
-						}}>
-						{t('tableControls.reset')}
-					</button>
-					<button
-						type="button"
-						onClick={() => {
-							if (control.kind === 'text') {
-								control.onApply(textValue || undefined);
-							} else {
-								control.onApply([...selected]);
-							}
-							setIsOpen(false);
-						}}>
-						{t('tableControls.apply')}
-					</button>
-				</div>
+
+	const { id: popoverId, ref: popoverRef } = useCommandTarget<HTMLDivElement>({
+		'--select-all': () => {
+			setSelected(new Set(control.options?.map((option) => option.value)));
+		},
+		'--select-none': () => {
+			setSelected(new Set());
+		},
+		// The command event is dispatched on the popover, so `currentTarget` is it.
+		'--reset': (event) => {
+			control.onApply();
+			(event.currentTarget as HTMLElement).hidePopover();
+		},
+		'--apply': (event) => {
+			if (control.kind === 'text') {
+				control.onApply(textValue || undefined);
+			} else {
+				control.onApply([...selected]);
+			}
+			(event.currentTarget as HTMLElement).hidePopover();
+		},
+	});
+
+	// The popover is positioned by CSS anchor positioning against the F button: a
+	// per-instance anchor name ties the two (see `.pt-filter-popover` in styles.css).
+	// `useId` output is only a valid dashed-ident in some React versions (`_r_0_`, not
+	// `:r0:`), so keep just the characters a CSS identifier allows.
+	const anchorName = `--pt-filter-${popoverId.replaceAll(/[^\w-]/g, '')}`;
+
+	// `control` is rebuilt on every render of the table; the listeners below read the
+	// latest one instead of being re-attached with it.
+	const latestControl = useRef(control);
+	latestControl.current = control;
+
+	useEffect(() => {
+		const popover = popoverRef.current;
+		if (!popover) {
+			return;
+		}
+		const onBeforeToggle = (event: Event) => {
+			if ((event as ToggleEvent).newState !== 'open') {
+				return;
+			}
+			const current = latestControl.current;
+			setHasOpened(true);
+			setTextValue(current.value ?? '');
+			setSelected(selectedValues(current));
+		};
+		// Drop the body again once closed, so a closed filter holds no option list.
+		const onToggle = (event: Event) => {
+			if ((event as ToggleEvent).newState === 'closed') {
+				setHasOpened(false);
+			}
+		};
+		popover.addEventListener('beforetoggle', onBeforeToggle);
+		popover.addEventListener('toggle', onToggle);
+		return () => {
+			popover.removeEventListener('beforetoggle', onBeforeToggle);
+			popover.removeEventListener('toggle', onToggle);
+		};
+	}, [popoverRef]);
+
+	// Rendered only while open: the popover shell must exist for the
+	// F button's command to find (one empty `<div popover>` per filterable
+	// column stays in `document.body`), but the inputs/options of a column's filter
+	// need not be in the DOM until that filter is opened.
+	const body = (
+		<>
+			{control.kind === 'text' ? (
+				<input
+					className="pt-filter-input"
+					aria-label={control.label}
+					value={textValue}
+					onChange={(event) => {
+						setTextValue(event.target.value);
+					}}
+					onKeyDown={(event) => {
+						if (event.key === 'Enter') {
+							control.onApply(textValue || undefined);
+							popoverRef.current?.hidePopover();
+						}
+					}}
+				/>
+			) : (
+				<>
+					<div className="pt-filter-actions">
+						<button type="button" command="--select-all" commandfor={popoverId}>
+							{t('tableControls.selectAll')}
+						</button>
+						<button type="button" command="--select-none" commandfor={popoverId}>
+							{t('tableControls.selectNone')}
+						</button>
+					</div>
+					<div className="pt-filter-list">
+						{control.options?.map((option) => (
+							<label key={option.value} className="pt-filter-option">
+								<input
+									type="checkbox"
+									checked={selected.has(option.value)}
+									onChange={(event) => {
+										const next = new Set(selected);
+										if (event.target.checked) {
+											next.add(option.value);
+										} else {
+											next.delete(option.value);
+										}
+										setSelected(next);
+									}}
+								/>
+								<span>{option.label}</span>
+							</label>
+						))}
+					</div>
+				</>
+			)}
+			<div className="pt-filter-actions">
+				<button type="button" command="--reset" commandfor={popoverId}>
+					{t('tableControls.reset')}
+				</button>
+				<button type="button" command="--apply" commandfor={popoverId}>
+					{t('tableControls.apply')}
+				</button>
 			</div>
-		) : null;
+		</>
+	);
+	const popover = (
+		<div
+			ref={popoverRef}
+			id={popoverId}
+			className="pt-filter-popover"
+			popover="auto"
+			role="dialog"
+			style={{ positionAnchor: anchorName }}
+			aria-label={control.label}>
+			{hasOpened ? body : null}
+		</div>
+	);
 	return (
 		<span className="pt-filter">
 			<button
 				type="button"
 				className={`pt-header-button${active ? ' is-active' : ''}`}
-				aria-label={control.label}
-				aria-haspopup="dialog"
-				aria-expanded={isOpen}
-				onClick={(event) => {
-					const willOpen = !isOpen;
-					if (willOpen) {
-						setTextValue(control.value ?? '');
-						setSelected(selectedValues(control));
-					}
-					const rect = event.currentTarget.getBoundingClientRect();
-					const popoverWidth = Math.min(
-						POPOVER_WIDTH,
-						window.innerWidth - POPOVER_VIEWPORT_MARGIN * 2,
-					);
-					const maxInlineStart = Math.max(
-						POPOVER_VIEWPORT_MARGIN,
-						window.innerWidth - popoverWidth - POPOVER_VIEWPORT_MARGIN,
-					);
-					const blockStartBelow = rect.bottom + POPOVER_GAP;
-					const blockStartAbove = rect.top - POPOVER_GAP - POPOVER_MAX_HEIGHT;
-					const hasRoomBelow =
-						blockStartBelow + POPOVER_MAX_HEIGHT <=
-						window.innerHeight - POPOVER_VIEWPORT_MARGIN;
-					setPopoverStyle({
-						insetBlockStart: hasRoomBelow
-							? blockStartBelow
-							: Math.max(POPOVER_VIEWPORT_MARGIN, blockStartAbove),
-						insetInlineStart: clamp(
-							rect.right - popoverWidth,
-							POPOVER_VIEWPORT_MARGIN,
-							maxInlineStart,
-						),
-					});
-					setIsOpen(willOpen);
-				}}>
+				command="toggle-popover"
+				commandfor={popoverId}
+				style={{ anchorName }}
+				aria-label={control.label}>
 				F
 			</button>
-			{popover && typeof document !== 'undefined'
-				? createPortal(popover, document.body)
-				: null}
+			{typeof document === 'undefined' ? null : createPortal(popover, document.body)}
 		</span>
 	);
 }
@@ -321,7 +340,7 @@ function FilterButton({ control }: { control: TableFilterControl }) {
  * @param props - Page rows, columns, and pagination handlers.
  * @returns The paged table element.
  */
-export function PagedTable<T>(props: PagedTableProps<T>) {
+export function PagedTable<T extends RowData>(props: PagedTableProps<T>) {
 	const {
 		data,
 		columns,
@@ -390,7 +409,9 @@ export function PagedTable<T>(props: PagedTableProps<T>) {
 				 * `cell`) plus `aria-rowcount`/`aria-colcount`/`aria-rowindex`/
 				 * `aria-colindex` restore them so screen readers can navigate the
 				 * page by row and column (header row counts as row index 1; data
-				 * rows start at 2).
+				 * rows start at 2). `.markuplintrc.json` exempts `table.pt-table`/`tr[role=row]`/
+				 * `td[aria-colindex]` from the role and ARIA-prop rules for this reason, and
+				 * this file from the table-model rules (`.map()` cells cannot be counted).
 				 */}
 				<table
 					className="pt-table"

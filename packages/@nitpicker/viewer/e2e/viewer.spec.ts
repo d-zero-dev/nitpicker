@@ -9,11 +9,14 @@ import { expect, test } from '@playwright/test';
  */
 
 /**
- * Asserts that the active filter popover is visible and fully inside viewport.
+ * Asserts that the open filter popover is visible and fully inside viewport.
+ * Every column filter keeps its `popover="auto"` element in the DOM (closed
+ * ones are `display: none`), so the open one is targeted with
+ * `:popover-open`.
  * @param page - Playwright page.
  */
-async function expectPopoverInViewport(page: Page) {
-	const popover = page.locator('.pt-filter-popover');
+async function expectOpenPopoverInViewport(page: Page) {
+	const popover = page.locator('.pt-filter-popover:popover-open');
 	await expect(popover).toBeVisible();
 	const box = await popover.boundingBox();
 	const viewport = page.viewportSize();
@@ -47,6 +50,19 @@ test.describe('Nitpicker Viewer', () => {
 			page.getByRole('heading', { name: 'Page detail', level: 1 }),
 		).toBeVisible();
 		await expect(page.locator('.detail-grid').first()).toBeVisible();
+		await expect(page.locator('.hp-frame')).toBeVisible();
+	});
+
+	test('HTML スナップショットは Render / Source タブで切り替わる', async ({ page }) => {
+		await page.goto('/pages');
+		await page.locator('.pt-row .link-button').first().click();
+		await expect(page.locator('.hp-frame')).toBeVisible();
+
+		await page.getByRole('button', { name: 'Source' }).click();
+		await expect(page.locator('.hp-source')).toBeVisible();
+		await expect(page.locator('.hp-frame')).toHaveCount(0);
+
+		await page.getByRole('button', { name: 'Render' }).click();
 		await expect(page.locator('.hp-frame')).toBeVisible();
 	});
 
@@ -191,7 +207,9 @@ test.describe('MPA ページネーション', () => {
 	}) => {
 		await page.goto('/pages');
 		await expect(page.locator('.pt-row').first()).toBeVisible();
-		const next = page.getByRole('button', { name: 'Next' });
+		// Behavior change: Prev / Next / page numbers are links to ?page=N, not buttons
+		const next = page.getByRole('link', { name: 'Next' });
+		// const next = page.getByRole('button', { name: 'Next' }); // previous
 		await next.click();
 		await expect(page).toHaveURL(/[?&]page=2(?:&|$)/);
 		await expect(page.locator('.pt-row').first()).toBeVisible();
@@ -199,7 +217,9 @@ test.describe('MPA ページネーション', () => {
 
 	test('1 ページ目では Prev が disabled', async ({ page }) => {
 		await page.goto('/pages');
-		const prev = page.getByRole('button', { name: 'Previous' });
+		// Behavior change: Prev / Next / page numbers are links to ?page=N, not buttons
+		const prev = page.getByRole('link', { name: 'Previous' });
+		// const prev = page.getByRole('button', { name: 'Previous' }); // previous
 		await expect(prev).toBeDisabled();
 	});
 
@@ -423,12 +443,14 @@ test.describe('MPA ページネーション', () => {
 		await expect(sortButton).toHaveText('^');
 	});
 
-	test('フィルタポップオーバーは body 直下に表示される', async ({ page }) => {
+	test('開いているフィルタポップオーバーは body 直下の top layer に表示される', async ({
+		page,
+	}) => {
 		await page.goto('/pages');
 		await expect(page.locator('.pt-row').first()).toBeVisible();
 		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
 
-		const popover = page.locator('.pt-filter-popover');
+		const popover = page.locator('.pt-filter-popover:popover-open');
 		await expect(popover).toBeVisible();
 		await expect
 			.poll(async () =>
@@ -436,18 +458,103 @@ test.describe('MPA ページネーション', () => {
 			)
 			.toBe('body');
 		await expect(popover.locator('xpath=ancestor::span')).toHaveCount(0);
-		await expectPopoverInViewport(page);
+		await expectOpenPopoverInViewport(page);
 	});
 
-	test('狭い画面でもフィルタポップオーバーが viewport 内に収まる', async ({ page }) => {
+	test('狭い画面でも開いたフィルタポップオーバーが viewport 内に収まる', async ({
+		page,
+	}) => {
 		await page.setViewportSize({ width: 360, height: 480 });
 		await page.goto('/pages');
 		await expect(page.locator('.pt-row').first()).toBeVisible();
 		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
-		await expectPopoverInViewport(page);
+		await expectOpenPopoverInViewport(page);
 	});
 
-	test('代表DataTableビューでフィルタポップオーバーが viewport 内に収まる', async ({
+	test('下に収まらない低い画面でも開いたフィルタポップオーバーが viewport 内に収まる', async ({
+		page,
+	}) => {
+		// The F button sits near the top, so a 400px-high viewport leaves less than the
+		// popover's 320px max height below it and the popover is placed above it
+		// (clamped to the viewport margin).
+		await page.setViewportSize({ width: 800, height: 400 });
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+		await expectOpenPopoverInViewport(page);
+	});
+
+	test('開いたフィルタポップオーバーは F ボタンに追従し、画面サイズを変えても viewport 内に収まる', async ({
+		page,
+	}) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		const filter = page.getByRole('button', { name: 'URL pattern (%foo%)' });
+		await filter.click();
+		const popover = page.locator('.pt-filter-popover:popover-open');
+		await expect(popover).toBeVisible();
+
+		await page.setViewportSize({ width: 360, height: 480 });
+
+		await expectOpenPopoverInViewport(page);
+		const button = await filter.boundingBox();
+		const box = await popover.boundingBox();
+		// CSS anchor positioning keeps the popover just below the button (6px gap),
+		// not at the coordinates it had when it opened.
+		expect(
+			Math.abs((box?.y ?? 0) - ((button?.y ?? 0) + (button?.height ?? 0) + 6)),
+		).toBeLessThan(2);
+	});
+
+	test('フィルタポップオーバーは Esc で閉じ、未適用の入力は次に開くとき URL の状態に戻る', async ({
+		page,
+	}) => {
+		await page.goto('/pages?urlPattern=%25page-1%25');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+		await page.getByRole('textbox', { name: 'URL pattern (%foo%)' }).fill('%unapplied%');
+		await page.keyboard.press('Escape');
+		await expect(page.locator('.pt-filter-popover:popover-open')).toHaveCount(0);
+		await expect(page).toHaveURL(/urlPattern=%25page-1%25/);
+
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+		await expect(page.getByRole('textbox', { name: 'URL pattern (%foo%)' })).toHaveValue(
+			'%page-1%',
+		);
+	});
+
+	test('フィルタの入力欄は開くまで描画されず、Apply / Reset で閉じる', async ({
+		page,
+	}) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+		await expect(page.locator('.pt-filter-popover')).not.toHaveCount(0);
+		await expect(page.locator('.pt-filter-popover input')).toHaveCount(0);
+
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+		await page.getByRole('textbox', { name: 'URL pattern (%foo%)' }).fill('%page-1%');
+		await page.getByRole('button', { name: 'Apply' }).click();
+		await expect(page.locator('.pt-filter-popover:popover-open')).toHaveCount(0);
+		await expect(page).toHaveURL(/urlPattern=/);
+
+		await page.getByRole('button', { name: 'URL pattern (%foo%)' }).click();
+		await page.getByRole('button', { name: 'Reset' }).click();
+		await expect(page.locator('.pt-filter-popover:popover-open')).toHaveCount(0);
+		await expect(page).not.toHaveURL(/urlPattern=/);
+	});
+
+	test('ページ番号リンクで該当ページへ移動する', async ({ page }) => {
+		await page.goto('/pages');
+		await expect(page.locator('.pt-row').first()).toBeVisible();
+
+		await page.getByRole('link', { name: 'Go to page 2' }).click();
+
+		await expect(page).toHaveURL(/[?&]page=2/);
+		await expect(page.locator('.pager-number[aria-current="page"]')).toHaveText('2');
+	});
+
+	test('代表DataTableビューで開いたフィルタポップオーバーが viewport 内に収まる', async ({
 		page,
 	}) => {
 		for (const target of [
@@ -461,7 +568,7 @@ test.describe('MPA ページネーション', () => {
 			// the role query resolves to two buttons — either one is fine for
 			// this generic "does the popover fit in viewport" smoke check.
 			await page.getByRole('button', { name: target.filter }).first().click();
-			await expectPopoverInViewport(page);
+			await expectOpenPopoverInViewport(page);
 		}
 	});
 

@@ -1,3 +1,4 @@
+import { useCommandTarget } from '../hooks/use-command-target.js';
 import { usePaginationMode } from '../hooks/use-pagination-mode.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
@@ -9,18 +10,25 @@ import { useI18n } from '../i18n/use-i18n.js';
  * the change immediately re-renders every list view consumer in the tab via
  * the {@link usePaginationMode} singleton store. The button's icon and
  * `aria-label` reflect the *next* mode the user will land in if clicked —
- * same UX promise as the existing ThemeToggle.
+ * same UX promise as the existing ThemeToggle. The button is its own
+ * `commandfor` target: it receives the `--toggle` command it sends.
  * @returns The toggle button element.
  */
 export function PaginationModeToggle() {
 	const { mode, toggleMode } = usePaginationMode();
 	const { t } = useI18n();
+	const { id, ref } = useCommandTarget<HTMLButtonElement>({
+		'--toggle': toggleMode,
+	});
 	const label = mode === 'mpa' ? t('pagination.toVirtual') : t('pagination.toMpa');
 	return (
 		<button
+			ref={ref}
+			id={id}
 			type="button"
+			command="--toggle"
+			commandfor={id}
 			className="icon-button"
-			onClick={toggleMode}
 			aria-label={label}
 			title={label}
 			data-mode={mode}>

@@ -160,18 +160,16 @@ export function ResourcesView() {
 				{
 					value: 'false',
 					label: t('common.internal'),
-					checked: isExternal.includes('false'),
 				},
 				{
 					value: 'true',
 					label: t('common.external'),
-					checked: isExternal.includes('true'),
 				},
 			],
 			['false'],
 		);
 		return controls;
-	}, [isExternal, paged.data?.items, params, status, t, updateMany]);
+	}, [paged.data?.items, params, status, t, updateMany]);
 
 	return (
 		<div className="view">

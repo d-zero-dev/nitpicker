@@ -4,8 +4,10 @@ import type { DirectoryTreeNode } from '@nitpicker/query';
 import { memo, useMemo } from 'react';
 
 import { useDirectoryTreeChildren } from '../api/use-directory-tree-children.js';
+import { useCommandTarget } from '../hooks/use-command-target.js';
 import { useI18n } from '../i18n/use-i18n.js';
 
+import { AppLink } from './app-link.js';
 import { sortDirectoryTreeNodes } from './sort-directory-tree-nodes.js';
 
 /** Props for {@link DirectoryTreeNodeRow}. */
@@ -42,11 +44,6 @@ export interface DirectoryTreeNodeRowProps {
 	sortOrder: DirectoryTreeSortOrder;
 	/** Toggles a node's expanded state, given its current value. */
 	onToggle: (node: DirectoryTreeNode, isExpanded: boolean) => void;
-	/**
-	 * Navigates to the Pages view filtered to this node's subtree. Receives
-	 * the full node (not just its id) since the caller needs `node.path`.
-	 */
-	onSelect: (node: DirectoryTreeNode) => void;
 }
 
 /**
@@ -88,7 +85,6 @@ export interface DirectoryTreeNodeRowProps {
  * @param props.collapseDepthThreshold
  * @param props.sortOrder
  * @param props.onToggle
- * @param props.onSelect
  * @returns The tree row element, plus its expanded subtree when applicable.
  */
 export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
@@ -98,7 +94,6 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 	collapseDepthThreshold,
 	sortOrder,
 	onToggle,
-	onSelect,
 }: DirectoryTreeNodeRowProps) {
 	const { t } = useI18n();
 	// A host's root node (the top of the tree, not just a shallow depth) is
@@ -113,6 +108,23 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 		[childrenByParent, node.nodeId],
 	);
 	const needsFetch = node.hasChildren && knownChildren.length === 0;
+	// The toggle button sends `--toggle` to the row, which reads the latest
+	// `node`/`isExpanded` (see useCommandTarget), so it needs no click handler.
+	const { id: rowId, ref: rowRef } = useCommandTarget<HTMLDivElement>({
+		'--toggle': () => {
+			onToggle(node, isExpanded);
+		},
+	});
+	// Selecting a node opens the Pages view filtered to its subtree
+	// (`directory` is a prefix match) and to HTML documents only.
+	const pagesSearch = useMemo(
+		() =>
+			new URLSearchParams({
+				directory: node.path,
+				contentTypeCategory: 'html',
+			}).toString(),
+		[node.path],
+	);
 
 	const childrenQuery = useDirectoryTreeChildren(node.nodeId, {
 		enabled: isExpanded && needsFetch,
@@ -137,13 +149,10 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 
 	return (
 		<li className="tree-node">
-			<div className="tree-row">
-				<button
-					type="button"
+			<div ref={rowRef} id={rowId} className="tree-row">
+				<AppLink
 					className="tree-label link-button"
-					onClick={() => {
-						onSelect(node);
-					}}>
+					to={{ pathname: '/pages', search: pagesSearch }}>
 					<span className="tree-icon" aria-hidden="true">
 						{folderIcon}
 					</span>
@@ -153,26 +162,30 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 							count: node.descendantHtmlPageCount.toLocaleString(),
 						})}
 					</span>
-				</button>
+				</AppLink>
 				{node.hasChildren && !isRoot ? (
+					// `aria-expanded` stays: the command is custom (`--toggle`), so the
+					// browser has no expanded state to provide for this button, unlike
+					// the built-in popover/dialog commands. `.markuplintrc.json` exempts
+					// `button.tree-toggle` from `element-supports-aria-prop` for that.
+					// The icon needs no `aria-hidden`: a button's children are
+					// presentational and its `aria-label` names it.
 					<button
 						type="button"
 						className="tree-toggle"
+						command="--toggle"
+						commandfor={rowId}
 						aria-expanded={isExpanded}
 						aria-label={
 							isExpanded
 								? t('views.directoryTree.collapseNode', { name })
 								: t('views.directoryTree.expandNode', { name })
-						}
-						onClick={() => {
-							onToggle(node, isExpanded);
-						}}>
+						}>
 						<svg
 							className="tree-toggle-icon"
 							viewBox="0 0 24 24"
 							width="18"
 							height="18"
-							aria-hidden="true"
 							style={{ transform: isExpanded ? 'rotate(90deg)' : undefined }}>
 							<path
 								d="M9 6l6 6-6 6"
@@ -194,8 +207,8 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 						<li className="tree-loading">{t('common.loading')}</li>
 					)}
 					{needsFetch && childrenQuery.isError && (
-						<li className="tree-error" role="alert">
-							{childrenQuery.error.message}
+						<li className="tree-error">
+							<span role="alert">{childrenQuery.error.message}</span>
 						</li>
 					)}
 					{children.map((child) => (
@@ -207,7 +220,6 @@ export const DirectoryTreeNodeRow = memo(function DirectoryTreeNodeRow({
 							collapseDepthThreshold={collapseDepthThreshold}
 							sortOrder={sortOrder}
 							onToggle={onToggle}
-							onSelect={onSelect}
 						/>
 					))}
 				</ul>

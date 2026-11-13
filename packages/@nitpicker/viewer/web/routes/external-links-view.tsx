@@ -2,10 +2,10 @@ import type { ColumnDef } from '../types.js';
 import type { ExternalLinkEntry } from '@nitpicker/query';
 
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router';
 
 import { useExternalLinksInfinite } from '../api/use-external-links-infinite.js';
 import { usePagedQuery } from '../api/use-paged-query.js';
+import { AppLink } from '../components/app-link.js';
 import { buildStatusFilterOptions } from '../components/build-status-filter-options.js';
 import {
 	addChecklistFilter,
@@ -30,7 +30,6 @@ import { useI18n } from '../i18n/use-i18n.js';
  */
 export function ExternalLinksView() {
 	const { params, updateMany } = useUrlFilter();
-	const navigate = useNavigate();
 	const { t } = useI18n();
 	const { mode, pageSize, currentPage, setPage, setPageSize } = useListPagination();
 	const status = params.getAll('status');
@@ -62,16 +61,11 @@ export function ExternalLinksView() {
 				header: t('views.externalLinks.colDest'),
 				size: 420,
 				cell: (info) => (
-					<button
-						type="button"
+					<AppLink
 						className="link-button"
-						onClick={() => {
-							void navigate(
-								`/pages/detail?url=${encodeURIComponent(info.row.original.destUrl)}`,
-							);
-						}}>
+						to={`/pages/detail?url=${encodeURIComponent(info.row.original.destUrl)}`}>
 						{info.getValue<string>()}
-					</button>
+					</AppLink>
 				),
 			},
 			{
@@ -87,7 +81,7 @@ export function ExternalLinksView() {
 				cell: (i) => i.getValue<number>(),
 			},
 		],
-		[navigate, t],
+		[t],
 	);
 	const columnControls = useMemo(() => {
 		const context = { params, updateMany };
