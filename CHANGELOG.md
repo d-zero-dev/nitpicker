@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.25.1](https://github.com/d-zero-dev/nitpicker/compare/v0.25.0...v0.25.1) (2026-11-13)
+
+### Bug Fixes
+
+- **crawler:** trim JS license scan body to byteLimit ([153667b](https://github.com/d-zero-dev/nitpicker/commit/153667be866fbcaf733ab7f64791c17d681119e0))
+- **crawler:** update beholder and puppeteer for security advisories ([353cc40](https://github.com/d-zero-dev/nitpicker/commit/353cc40f193c4bc8fb08c45fd310f7f376e4ba79))
+- **github:** build the darwin-arm64 addon on macos-15 ([3a9bbc4](https://github.com/d-zero-dev/nitpicker/commit/3a9bbc4401def70a73ab45ad8147b56c57bfbc28))
+
 # [0.25.0](https://github.com/d-zero-dev/nitpicker/compare/v0.24.0...v0.25.0) (2026-10-28)
 
 ### Bug Fixes
