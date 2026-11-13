@@ -560,17 +560,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/beholder@npm:5.0.2":
-  version: 5.0.2
-  resolution: "@d-zero/beholder@npm:5.0.2"
+"@d-zero/beholder@npm:5.0.3":
+  version: 5.0.3
+  resolution: "@d-zero/beholder@npm:5.0.3"
   dependencies:
-    "@d-zero/puppeteer-page-scan": "npm:4.7.2"
-    "@d-zero/puppeteer-scroll": "npm:4.0.14"
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/puppeteer-page-scan": "npm:4.7.3"
+    "@d-zero/puppeteer-scroll": "npm:4.0.15"
+    "@d-zero/shared": "npm:0.23.2"
     debug: "npm:4.4.3"
     puppeteer: "npm:25.15.0"
     simple-wappalyzer: "npm:1.1.108"
-  checksum: 10c0/3f1b1f65f9aa4ecc62513bede7b5621d7b1323c4402bf4cbf41320974b7ed04c307bb8f42ef5c586b0b7f7117559064d2fb00d8c08bc76c58c410fcead19461e
+  checksum: 10c0/3d7dca6350df040c9f4557fa89603a9302a16eb549560069cd92df43ca9a2ee896e1bfd15fc7026333e5ba6be3727136385e6ad879b7d39a2683541b517c6ac1
   languageName: node
   linkType: hard
 
@@ -673,36 +673,36 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-general-actions@npm:1.2.7":
-  version: 1.2.7
-  resolution: "@d-zero/puppeteer-general-actions@npm:1.2.7"
+"@d-zero/puppeteer-general-actions@npm:1.2.8":
+  version: 1.2.8
+  resolution: "@d-zero/puppeteer-general-actions@npm:1.2.8"
   dependencies:
     ansi-colors: "npm:4.1.3"
-  checksum: 10c0/2c6d96e1a6f94a6eff5ad0792b9c6df2e71d79d12efb902d9941df428acccfa287e766ca44e0586b7207feacfbbd4cc23949569b6f3f3bcb55d03c04cdd3ff87
+  checksum: 10c0/b525ddcf2ee827376f3ddbabe239df3c08f74300873744251e17aa23361888df097a77ecccf9a0f3531bcf139e2574539cf54c40be8d61cc4ce1bc2763110a70
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-page-scan@npm:4.7.2":
-  version: 4.7.2
-  resolution: "@d-zero/puppeteer-page-scan@npm:4.7.2"
+"@d-zero/puppeteer-page-scan@npm:4.7.3":
+  version: 4.7.3
+  resolution: "@d-zero/puppeteer-page-scan@npm:4.7.3"
   dependencies:
-    "@d-zero/puppeteer-general-actions": "npm:1.2.7"
-    "@d-zero/puppeteer-scroll": "npm:4.0.14"
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/puppeteer-general-actions": "npm:1.2.8"
+    "@d-zero/puppeteer-scroll": "npm:4.0.15"
+    "@d-zero/shared": "npm:0.23.2"
   peerDependencies:
     puppeteer: 25.15.0
-  checksum: 10c0/ca8e685bd4fa801b347fe49301f1764e639caa889941cacc24f72bd0e0341756bae2b13ca0cd45455748a23b1332d31830d240881c1301317aa39a338002dcba
+  checksum: 10c0/32beb32ce555183c4e5fd596d30077cd2f6efe67c51e93b25851a6f1adf6f229c6b8ece587875506dab0d0db6cfd37376903f47354cf1baaef8b091669d5cf96
   languageName: node
   linkType: hard
 
-"@d-zero/puppeteer-scroll@npm:4.0.14":
-  version: 4.0.14
-  resolution: "@d-zero/puppeteer-scroll@npm:4.0.14"
+"@d-zero/puppeteer-scroll@npm:4.0.15":
+  version: 4.0.15
+  resolution: "@d-zero/puppeteer-scroll@npm:4.0.15"
   dependencies:
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/shared": "npm:0.23.2"
   peerDependencies:
     puppeteer: 25.15.0
-  checksum: 10c0/50250f1e7a0c093a9e6d2e6dd2d985d63f3c47d58584be5d35d70f177452bee42ef6c66e777609aa2edf9fc19ba02c4476e594fc4edd329b01c4db731ae09337
+  checksum: 10c0/97ac86aae4655921f7a4ebc20c6055254e66932faa2e1e60ba8e3bae45a869864ea6fec1379ab6f830238f943ff92f78ae75d5a37b2499cafcf3dc5f2fdcc393
   languageName: node
   linkType: hard
 
@@ -734,6 +734,21 @@ __metadata:
     micromatch: "npm:4.0.8"
     sanitize-filename: "npm:1.6.4"
   checksum: 10c0/2bd2608556c07e56805b26f611ea0620fb349ca413afdb1da7dd6cf7eb7672521e5433b5d65c5ee97c5c0b2777c609a223e1c99a58f32eebb1e335d01a15a6d7
+  languageName: node
+  linkType: hard
+
+"@d-zero/shared@npm:0.23.2":
+  version: 0.23.2
+  resolution: "@d-zero/shared@npm:0.23.2"
+  dependencies:
+    "@holiday-jp/holiday_jp": "npm:2.5.2"
+    await-event-emitter: "npm:2.0.2"
+    dayjs: "npm:1.11.21"
+    escape-string-regexp: "npm:5.0.0"
+    front-matter: "npm:4.0.2"
+    micromatch: "npm:4.0.8"
+    sanitize-filename: "npm:1.6.4"
+  checksum: 10c0/b679bacb1cee61f893e6fa494bdf38a052fa5f6e1b0ac380d16adab6537e44cb1903d9f28841b6b454ba8673a1259dc8ac79ffd3fddf2b086675f9f28b6dd9e4
   languageName: node
   linkType: hard
 
@@ -2037,7 +2052,7 @@ __metadata:
   resolution: "@nitpicker/archive@workspace:packages/@nitpicker/archive"
   dependencies:
     "@d-zero/fs": "npm:0.2.8"
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/shared": "npm:0.23.2"
     "@nitpicker/core": "npm:0.25.0"
     "@types/debug": "npm:4.1.13"
     "@types/fs-extra": "npm:11.0.4"
@@ -2058,7 +2073,7 @@ __metadata:
     "@d-zero/dealer": "npm:1.14.1"
     "@d-zero/readtext": "npm:1.2.1"
     "@d-zero/roar": "npm:2.3.0"
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/shared": "npm:0.23.2"
     "@nitpicker/archive": "npm:0.25.0"
     "@nitpicker/crawler": "npm:0.25.0"
     "@nitpicker/query": "npm:0.25.0"
@@ -2104,9 +2119,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/crawler@workspace:packages/@nitpicker/crawler"
   dependencies:
-    "@d-zero/beholder": "npm:5.0.2"
+    "@d-zero/beholder": "npm:5.0.3"
     "@d-zero/dealer": "npm:1.14.1"
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/shared": "npm:0.23.2"
     "@nitpicker/archive": "npm:0.25.0"
     "@types/debug": "npm:4.1.13"
     "@types/follow-redirects": "npm:1.14.4"
@@ -2135,7 +2150,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@nitpicker/query@workspace:packages/@nitpicker/query"
   dependencies:
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/shared": "npm:0.23.2"
     "@nitpicker/archive": "npm:0.25.0"
     css-what: "npm:8.0.0"
   languageName: unknown
@@ -2148,7 +2163,7 @@ __metadata:
     "@d-zero/dealer": "npm:1.14.1"
     "@d-zero/google-auth": "npm:0.7.6"
     "@d-zero/google-sheets": "npm:0.13.0"
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/shared": "npm:0.23.2"
     "@nitpicker/archive": "npm:0.25.0"
     "@nitpicker/crawler": "npm:0.25.0"
     "@nitpicker/query": "npm:0.25.0"
@@ -2166,7 +2181,7 @@ __metadata:
   resolution: "@nitpicker/report-html@workspace:packages/@nitpicker/report-html"
   dependencies:
     "@d-zero/dealer": "npm:1.14.1"
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/shared": "npm:0.23.2"
     "@nitpicker/archive": "npm:0.25.0"
     "@nitpicker/query": "npm:0.25.0"
     "@nitpicker/viewer": "npm:0.25.0"
@@ -2182,7 +2197,7 @@ __metadata:
   resolution: "@nitpicker/viewer@workspace:packages/@nitpicker/viewer"
   dependencies:
     "@d-zero/dealer": "npm:1.14.1"
-    "@d-zero/shared": "npm:0.23.1"
+    "@d-zero/shared": "npm:0.23.2"
     "@hono/node-server": "npm:2.1.6"
     "@nitpicker/archive": "npm:0.25.0"
     "@nitpicker/query": "npm:0.25.0"

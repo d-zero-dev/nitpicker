@@ -62,7 +62,7 @@
 		"sigma": "4.0.4"
 	},
 	"devDependencies": {
-		"@d-zero/shared": "0.23.1",
+		"@d-zero/shared": "0.23.2",
 		"@playwright/test": "1.64.1",
 		"@storybook/addon-a11y": "10.6.5",
 		"@storybook/react-vite": "10.6.5",
