@@ -70,9 +70,55 @@ export async function crawl(
 }
 
 /**
- * Removes the temporary working directory created by {@link crawl}.
- * @param result - The crawl result whose working directory should be deleted.
+ * The part of a {@link CrawlResult} that {@link cleanup} touches.
  */
-export async function cleanup(result: CrawlResult) {
-	await fs.rm(result.cwd, { recursive: true, force: true });
+export interface CleanupTarget {
+	/** Read-only accessor; its `close()` can be called again after a test closed it. */
+	accessor: Pick<ArchiveAccessor, 'close'>;
+	/** Writable archive handle; `releaseHandle()` is a no-op after the test called `close()`. */
+	archive: Pick<Archive, 'releaseHandle'>;
+	/** Working directory to remove. */
+	cwd: string;
+}
+
+/**
+ * Releases the archive handles opened by {@link crawl} and removes its
+ * temporary working directory.
+ *
+ * The writable archive is released with `releaseHandle()` rather than
+ * `close()`: `close()` writes the `.nitpicker` file when it does not exist yet
+ * (a tar of the whole archive), which is wasted work for a directory about to
+ * be deleted. `releaseHandle()` only drops the SQLite handle and the advisory
+ * lock. It and `accessor.close()` are both idempotent, so a test may close
+ * either handle itself before calling this. Both are released together; no
+ * order between them is relied on.
+ *
+ * The working directory is removed even when a handle fails to close, and the
+ * failure is rethrown afterwards on purpose: a handle that cannot be released
+ * should fail the suite instead of leaving a held lock behind unnoticed. When
+ * both handles fail, both errors are kept in an `AggregateError`.
+ * @param target - The crawl result whose handles and working directory should be released.
+ * @example
+ * ```ts
+ * let result: CrawlResult;
+ * afterAll(async () => {
+ * 	if (result) await cleanup(result);
+ * });
+ * ```
+ */
+export async function cleanup(target: CleanupTarget) {
+	const outcomes = await Promise.allSettled([
+		target.accessor.close(),
+		target.archive.releaseHandle(),
+	]);
+	await fs.rm(target.cwd, { recursive: true, force: true });
+	const errors = outcomes.flatMap((outcome) =>
+		outcome.status === 'rejected' ? [outcome.reason as unknown] : [],
+	);
+	if (errors.length === 1) {
+		throw errors[0];
+	}
+	if (errors.length > 1) {
+		throw new AggregateError(errors, 'Failed to release the crawl handles');
+	}
 }

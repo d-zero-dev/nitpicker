@@ -94,17 +94,48 @@ describe('dedupe-cap trap fixture (issue #208)', () => {
 });
 
 describe('dedupe-cap trap fixture — --dedupe-cap opt-in (issue #208)', () => {
-	let result: CrawlResult;
+	// Each test starts its own crawl, and every crawl holds an open archive and a
+	// working directory, so all of them are kept here for `afterAll` to release.
+	// The promise is kept rather than the result: a test that times out while its
+	// crawl is still running still has that crawl released once it settles.
+	const crawled: Promise<CrawlResult>[] = [];
+
+	/**
+	 * Crawls `url` with `dedupeCap: 3` and tracks the result for cleanup.
+	 *
+	 * Tests do not share a crawl even when the URL is the same (`/trap/date/` is
+	 * crawled by two of them): one of them writes the viewer read model into its
+	 * archive, so a shared archive would make the tests depend on the order they
+	 * run in.
+	 * @param url - The trap fixture URL to crawl.
+	 */
+	function crawlCapped(url: string): Promise<CrawlResult> {
+		const pending = crawl([url], { parallels: 1, dedupeCap: 3 });
+		crawled.push(pending);
+		return pending;
+	}
 
 	afterAll(async () => {
-		if (result) await cleanup(result);
+		// `allSettled` so one failing cleanup does not end the hook while the
+		// others are still removing their directories. A crawl that itself failed
+		// has nothing to release, and its error is already reported by its test.
+		const crawls = await Promise.allSettled(crawled);
+		const cleanups = await Promise.allSettled(
+			crawls.flatMap((outcome) =>
+				outcome.status === 'fulfilled' ? [cleanup(outcome.value)] : [],
+			),
+		);
+		const errors = cleanups.flatMap((outcome) =>
+			outcome.status === 'rejected' ? [outcome.reason as unknown] : [],
+		);
+		if (errors.length === 1) throw errors[0];
+		if (errors.length > 1) {
+			throw new AggregateError(errors, 'Failed to release the crawl handles');
+		}
 	});
 
 	it('同一メタデータ+同一bodyのtrapはbody_hash一致とog:url不一致の両シグナルで早期にcapする', async () => {
-		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/trap/date/`], {
-			parallels: 1,
-			dedupeCap: 3,
-		});
+		const result = await crawlCapped(`http://localhost:${TEST_SERVER_PORT}/trap/date/`);
 
 		const pages = await result.accessor.getPages('internal-page');
 		const trapPages = pages.filter((p) => /^\/trap\/date\/\d+\/$/.test(p.url.pathname));
@@ -120,10 +151,7 @@ describe('dedupe-cap trap fixture — --dedupe-cap opt-in (issue #208)', () => {
 	}, 120_000);
 
 	it('cap発火後、backfillDedupeCapEventIdが同一shapeの全ページをcontent_items.dedupe_cap_event_idでマークする', async () => {
-		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/trap/date/`], {
-			parallels: 1,
-			dedupeCap: 3,
-		});
+		const result = await crawlCapped(`http://localhost:${TEST_SERVER_PORT}/trap/date/`);
 
 		const { items } = await listDedupeCapEvents(result.accessor);
 		expect(items).toHaveLength(1);
@@ -147,10 +175,7 @@ describe('dedupe-cap trap fixture — --dedupe-cap opt-in (issue #208)', () => {
 	}, 120_000);
 
 	it('bodyがパラメータをエコーしてもmetaSigのみでcapする（body_hash加点が効かない変種）', async () => {
-		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/trap/echo/`], {
-			parallels: 1,
-			dedupeCap: 3,
-		});
+		const result = await crawlCapped(`http://localhost:${TEST_SERVER_PORT}/trap/echo/`);
 
 		const pages = await result.accessor.getPages('internal-page');
 		const trapPages = pages.filter((p) => /^\/trap\/echo\/\d+\/$/.test(p.url.pathname));
@@ -166,10 +191,7 @@ describe('dedupe-cap trap fixture — --dedupe-cap opt-in (issue #208)', () => {
 	}, 120_000);
 
 	it('クエリパラメータtrapもshapeKeyで畳み込まれてcapする', async () => {
-		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/trap/query/`], {
-			parallels: 1,
-			dedupeCap: 3,
-		});
+		const result = await crawlCapped(`http://localhost:${TEST_SERVER_PORT}/trap/query/`);
 
 		const { items, total } = await listDedupeCapEvents(result.accessor);
 		expect(total).toBe(1);
@@ -179,10 +201,7 @@ describe('dedupe-cap trap fixture — --dedupe-cap opt-in (issue #208)', () => {
 	}, 120_000);
 
 	it('正当なページャ（各ページでtitleが異なる）はcapしない（false-positiveなし）', async () => {
-		result = await crawl([`http://localhost:${TEST_SERVER_PORT}/pagination/`], {
-			parallels: 1,
-			dedupeCap: 3,
-		});
+		const result = await crawlCapped(`http://localhost:${TEST_SERVER_PORT}/pagination/`);
 
 		const pages = await result.accessor.getPages('internal-page');
 		const paginationPages = pages.filter((p) =>

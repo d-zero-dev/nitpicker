@@ -115,6 +115,10 @@ describe('page template classification at crawl end', () => {
 	// Spawns the real built CLI (not `CrawlerOrchestrator`): the crawl-end
 	// classification row lives in the CLI layer (`run-post-crawl-task-list.ts`),
 	// which every orchestrator-level e2e test bypasses.
+	//
+	// Every test crawls into its own directory instead of sharing one archive:
+	// `viewer-build` rewrites the archive, and the template tables a later test
+	// reads would then depend on which tests ran before it.
 	let root: string;
 
 	beforeAll(async () => {
