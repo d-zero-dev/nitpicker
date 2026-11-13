@@ -1,8 +1,19 @@
 name: E2E
 
-# Full E2E suite (Puppeteer-driven, maxWorkers:1). Sequential local: ~22 min.
-# Split into 4 matrix shards balanced by LPT (longest-processing-time-first)
-# to land the wall-clock at ~6-8 min while keeping the test bodies untouched.
+# Full E2E suite (Puppeteer-driven, maxWorkers:1), run as a single job after
+# `build`. A single job needs no list of files to keep in step with the files on
+# disk: `vitest.e2e.config.ts` includes every `*.e2e.ts` under
+# `packages/test-server/src/__tests__/e2e/`, so a new file runs in CI as soon as
+# it exists. Narrowing that `include` would bring back the risk of a file that
+# silently never runs.
+#
+# The vitest run takes about 7 minutes; the 15-minute job timeout also covers
+# install, cache restore and Chrome setup. When the job gets close to the
+# timeout, split it into matrix shards and add a step that diffs
+# `find ... -name '*.e2e.ts'` against the file names listed in this workflow, so
+# a file left out of the lists fails CI instead of silently never running.
+# Sharding only spreads files across jobs: a single file that alone approaches
+# the timeout has to be made faster itself.
 #
 # Triggers:
 #   - nightly via cron (catch regressions on the default branch)
@@ -50,7 +61,7 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
       - run: yarn build
       # Cache the build output keyed by commit SHA. A re-run of the same SHA
-      # (e.g. retry after a flaky shard) reuses this cache and skips the ~2 min
+      # (e.g. retry after a flaky E2E run) reuses this cache and skips the ~2 min
       # build. hashFiles-based keys are tempting for cross-commit reuse but
       # caused build/e2e key mismatch when the build step generated *.d.ts
       # files that flipped `hashFiles('packages/**/*.ts')` between save & restore.
@@ -63,112 +74,10 @@ jobs:
           key: e2e-build-node26-${{ github.sha }}
           enableCrossOsArchive: true
 
-  verify-shards:
-    # Runs in parallel with `build`. Just a checkout + a grep diff; ~5 s.
-    # Catches the "added an e2e file but forgot to add it to the matrix below"
-    # mistake — that file would otherwise silently never run in CI.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Verify shard manifest covers all e2e files
-        run: |
-          expected=$(find packages/test-server/src/__tests__/e2e -name '*.e2e.ts' -printf '%f\n' | sort)
-          declared=$(grep -oE '[a-z][a-z0-9-]*\.e2e\.ts' .github/workflows/e2e.yml | sort -u)
-          if ! diff <(echo "$expected") <(echo "$declared"); then
-            echo "::error::e2e shard manifest in .github/workflows/e2e.yml is out of sync with packages/test-server/src/__tests__/e2e/*.e2e.ts"
-            exit 1
-          fi
-
   e2e:
-    needs: [build, verify-shards]
+    needs: [build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # fail-fast: false — surface every failing shard in one run so a single
-    # review/fix cycle can address them all (vs. fix-one → wait-for-CI →
-    # find-next). ~1.6x CI credit cost is acceptable for a public repo, and
-    # flaky failures would require re-running anyway.
-    strategy:
-      fail-fast: false
-      # LPT-balanced as of 2026-06-26 measurement (1340 s total, target 335 s/shard);
-      # `dedupe-cap.e2e.ts` (a full crawl -> viewer-read-model-build -> query
-      # pipeline test) was placed on `append-pipeline` rather than
-      # `inventory-snapshot` since the latter was already the heaviest shard
-      # and adding it there pushed the job past the 15-minute timeout.
-      # If a shard starts overshooting in the Actions UI, redo the bin-packing
-      # by hand from a recent run's per-file timings.
-      matrix:
-        shard:
-          - id: redirect-meta
-            files: [
-                redirect.e2e.ts,
-                meta.e2e.ts,
-                scope.e2e.ts,
-                multi-root.e2e.ts,
-                output-path.e2e.ts,
-                single-page.e2e.ts,
-                viewer-read-model-build.e2e.ts,
-                cache-cli.e2e.ts,
-                recrawl.e2e.ts,
-                report.e2e.ts,
-                # Kept off `append-pipeline`: that shard already runs ~14 min
-                # (the dedupe-cap suite alone is ~7.5 min), and this file's
-                # ~130 s pushed it past the 15-minute timeout, while this
-                # shard finished in ~9.5 min without it.
-                legacy-analysis-archive.e2e.ts,
-                # No crawl — reopens the committed fixture only (~2 s).
-                body-hash-stored-parity.e2e.ts,
-              ]
-          - id: inventory-snapshot
-            files: [
-                inventory.e2e.ts,
-                snapshot.e2e.ts,
-                options.e2e.ts,
-                pagination.e2e.ts,
-                config-persistence.e2e.ts,
-                scope-auth-leak.e2e.ts,
-                special-char-auth.e2e.ts,
-                empty-password-auth.e2e.ts,
-                main-contents.e2e.ts,
-                query.e2e.ts,
-                template-classification.e2e.ts,
-                # Lightest shard as of 2026-10-09 (10m23s); ~40 s locally.
-                crawl-sigint.e2e.ts,
-              ]
-          - id: retry-exclude
-            # concat.e2e.ts and split.e2e.ts both landed here (not split
-            # across retry-exclude/append-pipeline) after a real CI run
-            # showed append-pipeline — already the heavier of the two
-            # baseline shards via dedupe-cap.e2e.ts — blew past the
-            # 15-minute timeout with split.e2e.ts added, while retry-exclude
-            # finished concat.e2e.ts with ~5 min to spare (9m47s/15m).
-            files:
-              [
-                retry-failed.e2e.ts,
-                exclude.e2e.ts,
-                recursive.e2e.ts,
-                resource-reuse.e2e.ts,
-                archive-pipeline.e2e.ts,
-                scroll-jack.e2e.ts,
-                crawl-write-entity-tables.e2e.ts,
-                network-outage-gate.e2e.ts,
-                crawl-write-console-logs.e2e.ts,
-                concat.e2e.ts,
-                split.e2e.ts,
-                request-headers.e2e.ts,
-                cli-request-headers.e2e.ts,
-              ]
-          - id: append-pipeline
-            files:
-              [
-                append.e2e.ts,
-                parallel-and-interval.e2e.ts,
-                error-status.e2e.ts,
-                js-redirect.e2e.ts,
-                cli-process-exit.e2e.ts,
-                cli-version.e2e.ts,
-                viewer-migrated-archive.e2e.ts,
-                dedupe-cap.e2e.ts,
-              ]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Node 26 dropped the bundled corepack, so install it explicitly first.
@@ -203,12 +112,5 @@ jobs:
       # still start — this keeps the sandbox enabled rather than passing --no-sandbox.
       - name: Allow Chromium sandbox (unprivileged userns)
         run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
-      - name: Run shard ${{ matrix.shard.id }}
-        env:
-          SHARD_FILES: ${{ join(matrix.shard.files, ' ') }}
-        run: |
-          paths=()
-          for f in $SHARD_FILES; do
-            paths+=("packages/test-server/src/__tests__/e2e/$f")
-          done
-          yarn vitest run --config vitest.e2e.config.ts "${paths[@]}"
+      - name: Run E2E
+        run: yarn vitest run --config vitest.e2e.config.ts

@@ -406,12 +406,12 @@ Astro/Next.js/Vue/Nuxt/Svelte/SvelteKit/Remix/Gatsby/Angular 等のフロント�
 3. スコープ判定は`archive/src/scope/build-scope-map.ts`（`findScopeEntry`の入力を作る共有ヘルパー、crawler の`--append`と共用）。設定合成は`merge-archive-configs.ts`（`disableQueries`/`fromList`不一致は`ArchiveConfigConflictError`）/`build-split-config.ts`
 4. 列挙的な SQL 生成は`list-transfer-columns.ts`（`pragma_table_info`由来、`SELECT *`禁止 — 列順がアーカイブ間で異なりうるため）+ `quote-transfer-identifier.ts`（`order`等の予約語衝突対策）を土台にする。辞書テーブルの id remap は`temp.xfer_map_<table>`、`content_items`/`resource_items`の行アクションは`temp.xfer_ci_plan`/`xfer_ri_plan`（`transfer-action.ts`の`full`/`stub`/`replace`/`skip`）
 5. 出力側の read model 再構築は`query/src/viewer-read-model/worker/build-viewer-read-model-in-worker.ts`を **無条件**呼び出し（`ensureViewerReadModel`は使わない — コピー元と同じ schema version を持つ read model を誤って現在有効と判定しかねないため）
-6. テスト: `archive/src/transfer/*.spec.ts`（各ステップの単体・`transfer-archive-rows.spec.ts`/`concat-archives.spec.ts`/`split-archive.spec.ts`が end-to-end 相当）、`cli/src/transfer/*.spec.ts`、E2E は`test-server/src/__tests__/e2e/concat.e2e.ts`/`split.e2e.ts`（既存`/scope/blog|admin/`フィクスチャを再利用、CI shard は両方とも`retry-exclude`）
+6. テスト: `archive/src/transfer/*.spec.ts`（各ステップの単体・`transfer-archive-rows.spec.ts`/`concat-archives.spec.ts`/`split-archive.spec.ts`が end-to-end 相当）、`cli/src/transfer/*.spec.ts`、E2E は`test-server/src/__tests__/e2e/concat.e2e.ts`/`split.e2e.ts`（既存`/scope/blog|admin/`フィクスチャを再利用）
 
 ## テストと CLI 契約
 
 - ユニット: `yarn test`（Vitest 4、1関数1ファイルにユニットテスト必須）。Rust の crate は`yarn test:rust`（`cargo test`）
 - Rust 化のベンチ基準値: `yarn bench:smoke`（CI では独立した`bench-smoke`ジョブ。`scripts/bench-suite.mjs`をコミット済み 2 ページ fixture で全ケース実行。各ケースが動いて結果を出すことだけを確認し、値は検証しない。`yarn build`が必要。実アーカイブでの基準値の取り方は`scripts/README.md`）
-- E2E: `yarn vitest run --config vitest.e2e.config.ts`（maxWorkers: 1、test-server はOS割り当ての動的ポート（並行worktree/セッション間の`EADDRINUSE`を回避、#162）、**外部リンクは`127.0.0.1`でシミュレート**（`localhost`と別ホスト名扱い））
+- E2E: `yarn vitest run --config vitest.e2e.config.ts`（maxWorkers: 1、test-server はOS割り当ての動的ポート（並行worktree/セッション間の`EADDRINUSE`を回避）、**外部リンクは`127.0.0.1`でシミュレート**（`localhost`と別ホスト名扱い）。CI は E2E を 1 ジョブで実行し、新しい`*.e2e.ts`は`vitest.e2e.config.ts`の`include`が拾うので`.github/workflows/e2e.yml`への登録は不要）
 - viewer E2E: `yarn workspace @nitpicker/viewer test:e2e`（Playwright、fixture 生成 → 実 CLI 起動 → ブラウザ検証）
 - CLI 終了コード: `0` = 成功/`1` = 致命的（スコープ内エラー含む）/`2` = 警告（外部リンクエラーのみ。`--strict`で 1 に昇格）
