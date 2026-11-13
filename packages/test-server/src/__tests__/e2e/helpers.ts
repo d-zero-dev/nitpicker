@@ -70,9 +70,18 @@ export async function crawl(
 }
 
 /**
- * Removes the temporary working directory created by {@link crawl}.
- * @param result - The crawl result whose working directory should be deleted.
+ * Releases the archive handles opened by {@link crawl} and removes its
+ * temporary working directory.
+ *
+ * The writable archive is released with `releaseHandle()` rather than
+ * `close()`: `close()` writes the `.nitpicker` file when it does not exist yet
+ * (a tar of the whole archive), which is wasted work for a directory about to
+ * be deleted. `releaseHandle()` only drops the SQLite handle and the advisory
+ * lock, and it is a no-op when a test already called `close()` itself.
+ * @param result - The crawl result whose handles and working directory should be released.
  */
 export async function cleanup(result: CrawlResult) {
+	await result.accessor.close();
+	await result.archive.releaseHandle();
 	await fs.rm(result.cwd, { recursive: true, force: true });
 }
