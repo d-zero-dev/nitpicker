@@ -115,6 +115,10 @@ describe('page template classification at crawl end', () => {
 	// Spawns the real built CLI (not `CrawlerOrchestrator`): the crawl-end
 	// classification row lives in the CLI layer (`run-post-crawl-task-list.ts`),
 	// which every orchestrator-level e2e test bypasses.
+	//
+	// Every test crawls into its own directory instead of sharing one archive:
+	// `viewer-build` rewrites the archive, and the template tables a later test
+	// reads would then depend on which tests ran before it.
 	let root: string;
 
 	beforeAll(async () => {
@@ -126,17 +130,9 @@ describe('page template classification at crawl end', () => {
 		await fs.rm(root, { recursive: true, force: true }).catch(() => {});
 	});
 
-	// Three tests below need an archive from a default crawl (no extra flags).
-	// They share one: each takes its own `before` snapshot of the template
-	// tables right before the command it checks, so an earlier test's
-	// `viewer-build` does not change what a later one asserts.
-	const defaultCwd = () => path.join(root, 'default');
-	let defaultArchive: Promise<string> | undefined;
-	const getDefaultArchive = () => (defaultArchive ??= crawlInto(defaultCwd(), []));
-
 	it('crawl 完了時に既定でページが分類され、ラベルも保存される', async () => {
-		const cwd = defaultCwd();
-		const archivePath = await getDefaultArchive();
+		const cwd = path.join(root, 'default');
+		const archivePath = await crawlInto(cwd, []);
 
 		const tables = await readTemplateTables(archivePath, cwd);
 		expect(tables.pageTemplateCount).toBeGreaterThan(0);
@@ -172,8 +168,8 @@ describe('page template classification at crawl end', () => {
 	}, 90_000);
 
 	it('不正な --template-memory-budget は、viewer-build が分類に入る前に拒否し、既存の分類に触れない', async () => {
-		const cwd = defaultCwd();
-		const archivePath = await getDefaultArchive();
+		const cwd = path.join(root, 'budget-invalid');
+		const archivePath = await crawlInto(cwd, []);
 		const before = await readTemplateTables(archivePath, cwd);
 
 		const exitCode = await runCli(
@@ -186,8 +182,8 @@ describe('page template classification at crawl end', () => {
 	}, 120_000);
 
 	it('viewer-build --skip-templates は既存の分類に触れない', async () => {
-		const cwd = defaultCwd();
-		const archivePath = await getDefaultArchive();
+		const cwd = path.join(root, 'keep');
+		const archivePath = await crawlInto(cwd, []);
 		const before = await readTemplateTables(archivePath, cwd);
 
 		expect(await runCli(['viewer-build', archivePath, '--skip-templates'], cwd)).toBe(0);
