@@ -2206,7 +2206,7 @@ __metadata:
     react: "npm:19.3.1"
     react-dom: "npm:19.3.1"
     react-router: "npm:8.5.1"
-    sigma: "npm:4.0.4"
+    sigma: "npm:4.0.6"
     storybook: "npm:10.6.5"
     vite: "npm:8.3.5"
     vitest: "npm:5.1.0"
@@ -12272,13 +12272,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"sigma@npm:4.0.4":
-  version: 4.0.4
-  resolution: "sigma@npm:4.0.4"
+"sigma@npm:4.0.6":
+  version: 4.0.6
+  resolution: "sigma@npm:4.0.6"
   dependencies:
     events: "npm:^3.3.0"
     graphology-utils: "npm:^2.5.2"
-  checksum: 10c0/7e2011df92a1578b9f91aff3007c4419744bf77910272164559d0b34070eb7b0b0e1b06e6d9c56d13855236b002d9e6ca3c3ab3956ed8edf235b1b8a62e99688
+  checksum: 10c0/8ec793cac599771f66d8d49b2268a8a0b495c3036ab574bf9a5bbafddfc8c940aecd288b8a40a9750db0919775d71f8589ea37153a159e96d2e260c8c5a614e3
   languageName: node
   linkType: hard
 
