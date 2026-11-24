@@ -706,19 +706,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@d-zero/readtext@npm:1.2.1":
-  version: 1.2.1
-  resolution: "@d-zero/readtext@npm:1.2.1"
-  checksum: 10c0/c5497805dac7a38a8de758aac681faeeb56f4fda3b0aa38389b73806bbfd131a8b11705cfee9521b48f13198540b2aa253aa5923d6d6d0e5a8dd572f77fd69a2
+"@d-zero/readtext@npm:1.2.2":
+  version: 1.2.2
+  resolution: "@d-zero/readtext@npm:1.2.2"
+  checksum: 10c0/12ba0d2a990f1cbb723565cfe52bd09b18cd2b2f7a6afeffbe66178a28a9fcc60d371978a6642bd28b3bb385b07137a3dd6174f3068b132c150411a15ec2f88c
   languageName: node
   linkType: hard
 
-"@d-zero/roar@npm:2.3.0":
-  version: 2.3.0
-  resolution: "@d-zero/roar@npm:2.3.0"
+"@d-zero/roar@npm:2.3.1":
+  version: 2.3.1
+  resolution: "@d-zero/roar@npm:2.3.1"
   dependencies:
     yargs-parser: "npm:22.0.0"
-  checksum: 10c0/b9557b2e8a1eb5ae24a2758167f83d5497a8ec2e3f5f9df8b9fd22f3937e192df21e76910ffd592858da892c11df1a05bde24d4e4f6a39b8c6369cbb2d32e88c
+  checksum: 10c0/a2208e372c06f880e9b82b32c162a06d3d82b33a0e130075a311ae82d7edfa258194ad89dcc61e86d6912859bae6dbdcb9e0770e30b64b3607f91bcd84499437
   languageName: node
   linkType: hard
 
@@ -2056,8 +2056,8 @@ __metadata:
   resolution: "@nitpicker/cli@workspace:packages/@nitpicker/cli"
   dependencies:
     "@d-zero/dealer": "npm:1.14.2"
-    "@d-zero/readtext": "npm:1.2.1"
-    "@d-zero/roar": "npm:2.3.0"
+    "@d-zero/readtext": "npm:1.2.2"
+    "@d-zero/roar": "npm:2.3.1"
     "@d-zero/shared": "npm:0.23.2"
     "@nitpicker/archive": "npm:0.25.1"
     "@nitpicker/crawler": "npm:0.25.1"
