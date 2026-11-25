@@ -349,7 +349,7 @@
 		"fs-extra": "11.4.1",
 		"knex": "3.3.0",
 		"libsql": "0.5.29",
-		"tar": "7.5.22"
+		"tar": "7.5.23"
 	},
 	"devDependencies": {
 		"@types/debug": "4.1.13",
