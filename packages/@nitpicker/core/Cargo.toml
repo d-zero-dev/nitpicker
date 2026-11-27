@@ -15,9 +15,9 @@ nitpicker_tech_detect = { path = "crates/nitpicker_tech_detect" }
 nitpicker_template_cluster = { path = "crates/nitpicker_template_cluster" }
 nitpicker_union_find = { path = "crates/nitpicker_union_find" }
 nitpicker_url_key = { path = "crates/nitpicker_url_key" }
-napi = { version = "3.14.2", default-features = false, features = ["napi8"] }
-napi-build = "2.6.0"
-napi-derive = "3.6.12"
+napi = { version = "3.16.3", default-features = false, features = ["napi8"] }
+napi-build = "2.7.0"
+napi-derive = "3.7.2"
 aho-corasick = "1.1.5"
 form_urlencoded = "1.2.3"
 indexmap = "2.14.2"
