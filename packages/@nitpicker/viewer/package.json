@@ -47,7 +47,7 @@
 	},
 	"dependencies": {
 		"@d-zero/dealer": "1.14.2",
-		"@hono/node-server": "2.1.7",
+		"@hono/node-server": "2.1.11",
 		"@nitpicker/archive": "0.25.1",
 		"@nitpicker/query": "0.25.1",
 		"@tanstack/react-query": "5.106.0",
@@ -55,7 +55,7 @@
 		"@tanstack/react-virtual": "3.14.26",
 		"graphology": "0.26.0",
 		"graphology-layout-forceatlas2": "0.10.1",
-		"hono": "4.13.18",
+		"hono": "4.13.21",
 		"react": "19.3.1",
 		"react-dom": "19.3.1",
 		"react-router": "8.5.2",
