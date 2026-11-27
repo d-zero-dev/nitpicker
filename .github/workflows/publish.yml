@@ -1,10 +1,13 @@
 name: Publish
 
+# Rule 65: the merge of a Release PR into main publishes it. The command checks
+# the Release PR, tags the merge commit as the Publish App, publishes with OIDC
+# Trusted Publishing, verifies the registry, and brings main back to dev. A push
+# that is not the merge of a Release PR publishes nothing. Tag pushes start
+# nothing.
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    branches: [main]
 
 concurrency:
   group: publish
@@ -13,6 +16,9 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  checks: read
+  issues: write
+  pull-requests: read
 
 jobs:
   core-prebuilt:
@@ -21,21 +27,24 @@ jobs:
   publish:
     needs: core-prebuilt
     runs-on: ubuntu-latest
+    environment: release
     steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        id: publish-app
+        with:
+          client-id: ${{ vars.PUBLISH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PUBLISH_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       # @nitpicker/core has no JavaScript fallback: a platform package
       # published without its binary breaks `npx @nitpicker/cli` on that
       # platform, so both must be in place before anything is published.
-      - name: Download darwin-arm64 binary
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: core-darwin-arm64
           path: packages/@nitpicker/core-darwin-arm64/
-      - name: Download linux-x64-gnu binary
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: core-linux-x64-gnu
           path: packages/@nitpicker/core-linux-x64-gnu/
@@ -43,34 +52,17 @@ jobs:
         run: |
           test -s packages/@nitpicker/core-darwin-arm64/core.darwin-arm64.node
           test -s packages/@nitpicker/core-linux-x64-gnu/core.linux-x64-gnu.node
-      # Node 26 dropped the bundled corepack, so install it explicitly first.
-      - name: Install Corepack
-        run: npm install -g corepack
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.8.1
-          registry-url: 'https://registry.npmjs.org'
-      - name: Install dependencies
-        run: yarn install --immutable
-      - name: Build
-        run: yarn build
-      - name: Determine dist-tag
-        id: dist-tag
-        run: |
-          VERSION=$(node -e "console.log(require('./lerna.json').version)")
-          if [[ "$VERSION" == *"-alpha"* ]]; then
-            echo "tag=alpha" >> "$GITHUB_OUTPUT"
-          elif [[ "$VERSION" == *"-beta"* ]]; then
-            echo "tag=beta" >> "$GITHUB_OUTPUT"
-          elif [[ "$VERSION" == *"-rc"* ]]; then
-            echo "tag=rc" >> "$GITHUB_OUTPUT"
-          elif [[ "$VERSION" == *"-"* ]]; then
-            echo "tag=next" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Publish
-        run: npx lerna publish from-package --dist-tag ${{ steps.dist-tag.outputs.tag }} --yes
+          node-version-file: package.json
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn build
+      - run: yarn release-automation publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_APP_SLUG: ${{ vars.RELEASE_APP_SLUG }}
+          PUBLISH_APP_TOKEN: ${{ steps.publish-app.outputs.token }}
+          PUBLISH_APP_SLUG: ${{ vars.PUBLISH_APP_SLUG }}
