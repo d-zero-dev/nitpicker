@@ -1,0 +1,81 @@
+name: Nightly
+
+# Rules 33-36: start the Full CI of each line once a day (a success on the same
+# commit is reused), keep the release-blocker Issues in line with the results,
+# open the end-of-support and age gate Issues, and audit the dependencies.
+# The schedule runs on the default branch, dev.
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Run the Full CI even where the same commit passed
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: [Full CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+jobs:
+  dispatch:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn release-automation nightly-dispatch ${{ inputs.force && '--force' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn release-automation nightly-report
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  audit:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      # One line (dev), so the audit runs on this checkout.
+      # The exit code tells a clean audit (0) from a failed one; both print nothing.
+      - id: audit
+        run: |
+          status=0
+          yarn npm audit --all --recursive --json > "$RUNNER_TEMP/audit.json" || status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - run: yarn release-automation audit-report --line dev --file "$RUNNER_TEMP/audit.json" --exit-code "${{ steps.audit.outputs.status }}"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

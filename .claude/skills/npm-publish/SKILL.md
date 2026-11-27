@@ -1,229 +1,86 @@
 ---
 name: npm-publish
-description: npm パッケージのリリース（dev→main マージ、バージョニング、tag push、publish workflow 監視、publish 結果検証、dev への同期）
-when_to_use: ユーザーが「リリースして」「publish して」「バージョン上げて」「/npm-publish」と指示した場合
+description: リリース（Release PR の確認とマージ、昇格の指示、公開の監視と検証、失敗時の復旧）
+when_to_use: ユーザーが「リリースして」「publish して」「Release PR を見て」「/npm-publish」と指示した場合
 disable-model-invocation: true
 ---
 
-# 前提
+# 仕組み
 
-- リリースは `main` ブランチから行う。`dev` の変更を `main` にマージしてから実行する
-- `v*` タグ push で `publish.yml` が発火し、npm へ自動 publish される（OIDC Trusted Publishing）
-- **publish は取り消せない**。各ステップでユーザーの確認を取る
-- **`yarn release` / `git push` 系はユーザーが実行する**。エージェントは実行せず（`.claude/settings.json` で deny されている）`!` プレフィックス付きのコマンドを提示し、完了報告を待つ
+- 利用者に影響する変更が3日たつと、`Release PR`ワークフローが系列ごとに Release PR を作る。手動起動なら待たずに作れる
+- Release PR をマージすると`Publish`ワークフローが公開し、npm の版と dist-tag を確かめ、現行系列なら`main`を`dev`に反映する
+- このリポジトリのレビュー方式は 単独メンテナー。共同開発では Approve と Full CI の後に自動でマージされる。単独メンテナーでは本人が手動でマージする
+- 系列：`dev`（現行系列 v0。`main`から公開）
+- 公開パッケージ：`@nitpicker/*`（Lerna fixed。ネイティブバイナリの `@nitpicker/core-darwin-arm64`・`@nitpicker/core-linux-x64-gnu` は `lerna.json` の `forcePublish` で毎回同じ版になる）
+- **公開は取り消せない**。マージ・手動起動・再実行の前に、対象と内容を示してユーザーの確認を取る
+- タグの作成、`npm publish`、`main`や系列のブランチへの直接の push はしない。すべてワークフローが行う
 
-# 対象パッケージ
-
-Lerna **fixed モード**のため、全パッケージが同一バージョンで上がる。
-
-| npm パッケージ名                  |
-| --------------------------------- |
-| `@nitpicker/archive`              |
-| `@nitpicker/cli`                  |
-| `@nitpicker/core`                 |
-| `@nitpicker/core-darwin-arm64`    |
-| `@nitpicker/core-linux-x64-gnu`   |
-| `@nitpicker/crawler`              |
-| `@nitpicker/mcp-server`           |
-| `@nitpicker/query`                |
-| `@nitpicker/report-google-sheets` |
-| `@nitpicker/report-html`          |
-| `@nitpicker/viewer`               |
-
-`packages/test-server` は `private: true` なので publish されない。バージョンは上がるが npm には出ない。
-
-**npm に未公開の新規パッケージ（`@nitpicker/archive` 等）を含むリリースでは、tag push より前に npm 側の Trusted Publisher 登録が済んでいることをユーザーに確認する。** 未登録だとそのパッケージの OIDC publish だけが失敗し、それに exact pin で依存する `@nitpicker/cli` などがインストールできなくなる。
-
-`npm trust` は registry に一度も存在しないパッケージには設定できない（`404 Not Found`）。新規パッケージは、ユーザーが手動で 1 回だけプレースホルダー版を publish して名前を確保し、その後に `npm trust github <パッケージ名> --file publish.yml --repository d-zero-dev/nitpicker --allow-publish --yes` で登録する。手順の詳細はオーケストレーションディレクトリの `npm-oidc-trusted-publishing-setup.md`「初回publish（新規パッケージ）のブートストラップ」を参照。プラットフォーム別パッケージ（`@nitpicker/core-*`）のプレースホルダーには `.node` を含めず、バージョンを `0.0.0` にする — lerna の固定バージョンと衝突せず、`@nitpicker/core` が exact pin で参照することもない。
-
-## ネイティブアドオン（`@nitpicker/core`）の注意
-
-- `@nitpicker/core` には JavaScript のフォールバックがない。プラットフォーム別パッケージが `.node` なしで publish されると、そのプラットフォームで `npx @nitpicker/cli` が起動しなくなる。`publish.yml` は `build-core.yml` の 2 バイナリ（glibc 2.28 コンテナの linux-x64-gnu、macOS の darwin-arm64）がそろい、それぞれ golden fixture の検証を通ってから publish する
-- プラットフォーム別パッケージのディレクトリには `package.json` と README しかなく、Rust のコード（`core/crates/`）を変えても lerna は変更を検出しない。そのため `yarn release` は 2 パッケージを `--force-publish` で毎回 publish する（`release:alpha` 等はもともと全パッケージを force-publish している）。外すと、Rust の修正を含むリリースで古いバイナリが exact pin されたまま配布される
-- 手順 10 の検証に加えて、darwin-arm64 と WSL2（linux-x64-gnu）の実機で `npx @nitpicker/cli@<version> crawl <URL>` が起動することをユーザーに確認してもらう。CI の検証はバイナリ単体の読み込みまでで、npm からのインストール経路（`optionalDependencies` の解決）は実機でしか確かめられない
-- 対応プラットフォームの制限（darwin-arm64 と linux-x64 glibc >= 2.28 のみ）を初めて含むリリースでは、リリースノートに書く
-
-# 手順
-
-## 1. ワーキングツリーの状態確認
-
-`git status` で未コミットの変更・未追跡ファイルがないか確認する。
-
-- クリーンなら次へ
-- 変更があればユーザーに報告し、`git stash` / コミット / 中断のいずれかを尋ねる。指示に従ってから次へ
-
-`.nitpicker` アーカイブや `._*` の作業ファイルは gitignore 済みなので無視してよい。汚れたまま先に進むとマージ・バージョニングが意図しない差分を巻き込むため、追跡対象の変更は必ず処理する。
-
-## 2. main と dev の最新化
+# 1. 状況の確認
 
 ```bash
-git fetch origin
-git checkout main
-git pull origin main
-git checkout dev
-git pull origin dev
-git checkout main
+gh pr list --repo d-zero-dev/nitpicker --label release --state open
+gh run list --repo d-zero-dev/nitpicker --workflow release-pr.yml --limit 3
+gh issue list --repo d-zero-dev/nitpicker --label release-blocker --state open
 ```
 
-両ブランチをローカルで最新にしてから `main` に戻る。`dev` を最新にしておくのは、手順 11 の `main` → `dev` 同期でそのまま使うため。
+- Release PR がなければ、直近の`Release PR`実行のジョブサマリーで系列ごとの判断（`reason`）を確かめ、ユーザーに伝える
+- `release-blocker` Issue があれば、その系列の新しい Release PR は作られない。Nightly の失敗を直して再実行するのが先
 
-いずれかの `pull` が失敗したらユーザーに報告して指示を仰ぐ。
+# 2. Release PR を作る（待たずに出す場合）
 
-## 3. 未マージ PR の確認
-
-リリースに含めるべき PR が残っていないか確認し、あればユーザーに提示して続行可否を尋ねる。
+ユーザーに系列と昇格の有無を確認してから、手動起動する：
 
 ```bash
-gh pr list --base dev --state open
+gh workflow run release-pr.yml --repo d-zero-dev/nitpicker -f line=<branch> -f promote=none
 ```
 
-## 4. dev → main マージ
+- 昇格（alpha→beta、beta→rc、rc→正式版）は`promote`に`beta`・`rc`・`stable`を指定する。ユーザーが明示したときだけ
+- 次のメジャーの正式版は、`major-rotation`スキルで次メジャー系列を`dev`に入れた後に、`dev`の Release PR を`promote=stable`で作る
 
-`dev` が `main` より進んでいる場合、差分コミットをユーザーに提示してからマージする。
+# 3. Release PR の確認
 
 ```bash
-git log --oneline main..dev
-git merge dev --no-edit
+gh pr view <number> --repo d-zero-dev/nitpicker
+gh pr diff <number> --repo d-zero-dev/nitpicker
+gh pr checks <number> --repo d-zero-dev/nitpicker
 ```
 
-コンフリクトが発生したらユーザーに報告して指示を仰ぐ。
+ユーザーに示すもの：バージョン、変更履歴、利用者に影響する変更の一覧、`full-ci-ok`と`release-pr-verified`の結果。
 
-## 5. lockfile の同期確認
+- Release PR には push しない。内容を変えたいときは、系列のブランチに修正を入れれば、未承認の Release PR は自動で作り直される
+- 承認済み（1件でも Approve がある）Release PR は凍結されている。後続の変更は次の Release PR に入る
+
+# 4. マージ
+
+- 共同開発：人間が Approve すれば、Full CI の後に自動でマージされる。エージェントは Approve もマージもしない
+- 単独メンテナー：ユーザーが内容を確認した時点の head の SHA を指定してマージする。ユーザーの明示の指示があるときだけ実行する
 
 ```bash
-yarn install
-git diff yarn.lock
+gh pr merge <number> --repo d-zero-dev/nitpicker --merge --match-head-commit <sha>
 ```
 
-差分が出たらユーザーに報告し、コミットしてから次へ。CI の `yarn install --immutable` が失敗するのを防ぐため必須。
-
-## 6. 事前チェック
+# 5. 公開の監視と検証
 
 ```bash
-yarn build
-yarn lint
-yarn test
+gh run list --repo d-zero-dev/nitpicker --workflow publish.yml --limit 1
+gh run watch <run-id> --repo d-zero-dev/nitpicker
 ```
 
-すべてパスすること。E2E も確認する場合は `yarn vitest run --config vitest.e2e.config.ts` を別途実行する。`main` の CI が green かも併せて確認する。
+完了後、各パッケージの版と dist-tag を確かめる：
 
 ```bash
-gh run list --branch main --limit 5
+npm view <package> dist-tags
 ```
 
-## 7. リリース内容の提示
+現行系列では、`dev`に反映されたことも確かめる（`git fetch origin`の後、`git merge-base --is-ancestor origin/main origin/dev`）。
 
-現在のバージョンと前回タグからの差分をユーザーに提示する。
+# 6. 失敗したとき
 
-```bash
-git describe --tags --abbrev=0
-git log --oneline $(git describe --tags --abbrev=0)..HEAD
-```
+| 段階                                             | 対処                                                                                                                                |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 検証（`was not generated by the Release App`等） | 公開されていない。Release PR を作り直す                                                                                             |
+| 未公開のパッケージ（`was never published`）      | ユーザーにプレースホルダー版の手動公開と Trusted Publisher の設定を依頼し、`Publish`を再実行する                                    |
+| 公開（3回の再試行後も失敗）                      | 原因（npm の障害、認証、E422 等）を調べてユーザーに示す。直ったら`gh run rerun <run-id> --failed`。公開済みのパッケージは飛ばされる |
+| `dev`への反映（競合・`ci-ok`の失敗）             | 原因を直して`Publish`を再実行する。`dev`へ手で push しない                                                                          |
 
-fixed モードなので `lerna.json` の `version` が現行バージョンの正。`yarn release` は conventional commits からバージョンを自動決定するため、**リリース種別（graduate / alpha / beta / rc）をユーザーに確認する必要はない**。差分は「何が入るか」の確認材料として提示するだけでよい。
-
-あわせて、前回タグ以降に破壊的変更マーカーが無いかを確認する。マーカー付きコミットが 1 つでもあれば `yarn release` の決めるバージョンが変わる。`0.x`（現在はここ）ではマイナーに丸められるだけだが、安定版（`1.0.0` 以降）とマイナー / パッチのプレリリースではメジャーに跳ねる（段階ごとの効果と、付けてよい条件は `git` スキルの「破壊的変更と振る舞いの変更」）。
-
-```bash
-git log <last-tag>..HEAD --format=%s | grep -E '^[a-z]+(\([^)]*\))?!:'
-git log <last-tag>..HEAD --format=%B | grep -iE '^(\* +)?BREAKING[ -]CHANGE:'
-```
-
-ヒットがあれば提示する。`0.x` では CHANGELOG に BREAKING CHANGES 節が入ることを伝えるだけでよい。承認の無いマーカーがメジャーを切ってしまう段階では、バンプを明示して回避できる: `yarn release minor`（または `patch`）。`lerna version` は `--conventional-commits` の推奨より位置引数のバンプを優先し、CHANGELOG は生成する。その CHANGELOG にはコミットの注記から「BREAKING CHANGES」節が入るので、マイナーリリースが破壊的変更を告知する形になる。選択肢を提示するときにそう言う。
-
-振る舞いの変更の段落も集めて、リリース内容の一部として提示する。
-
-```bash
-git log <last-tag>..HEAD --grep='^Behavior change'
-```
-
-## 8. バージョニングと push（ユーザー実行）
-
-`lerna version` は選択・確認のプロンプトを出すインタラクティブコマンドで、Claude Code の `!` 経由では対話できない（プロンプトが表示されても入力できず止まる）。ユーザーに次の手順を依頼する:
-
-1. Claude Code のセッションを終了する（`exit`）
-2. ターミナルで直接 `yarn release` を実行し、プロンプトに対話的に回答する
-3. 完了したら `claude --continue` で会話に戻る
-
-```
-yarn release          # graduate（正式リリース。通常はこれだけで十分）
-```
-
-alpha / beta / rc のプレリリースが必要な場合は、ユーザーが会話の中で明示的に指示したときだけ、上記と同じ exit → 実行 → `--continue` の手順で該当コマンドを案内する。
-
-```
-yarn release:alpha    # alpha プレリリース
-yarn release:beta     # beta プレリリース
-yarn release:rc       # RC プレリリース
-```
-
-リリーススクリプトは `--no-push` なので、**コミットとタグの push が別途必要**。ユーザーから完了報告を受けたら、次を提示する。
-
-```
-! git push origin main --follow-tags
-```
-
-実際にタグが push されたことを確認してから次へ進む。
-
-```bash
-git ls-remote --tags origin
-```
-
-## 9. publish workflow の監視
-
-`v*` タグ push で `publish.yml` が発火する。バックグラウンド実行で完了を待つ。
-
-```bash
-gh run watch --exit-status
-```
-
-失敗したらログ URL をユーザーに提示し、「12. 失敗時の対処」へ。
-
-## 10. publish 結果の検証
-
-workflow が success でも publish が意図通りとは限らない。**全パッケージについて**実際の npm 上の状態を確認する。
-
-```bash
-npm view @nitpicker/cli version
-npm view @nitpicker/cli dist-tags
-```
-
-確認項目:
-
-- バージョンが手順 8 で上げた値と一致しているか
-- **dist-tag が意図通りか**。正式リリースは `latest`、プレリリースは `alpha` / `beta` / `rc` / `next`。`publish.yml` は `lerna.json` の `version` 文字列から判定する（`-alpha` → `alpha`、`-` を含む → `next`、それ以外 → `latest`）
-- provenance が付与されているか（`npm view <package> --json` の `dist.attestations`）
-
-fixed モードでも**一部のパッケージだけ publish される（部分 publish）**ことがある。上表の全パッケージを個別に確認し、漏れがあればユーザーに報告する。
-
-**ここが success の判定点**。npm 上の状態を確認するまでリリース完了と判断してはいけない。
-
-## 11. main → dev の同期
-
-publish の成功を確認した後、バージョン更新コミットを `dev` に取り込む。
-
-```bash
-git checkout dev
-git merge main --no-edit
-```
-
-コンフリクトが発生したらユーザーに報告して指示を仰ぐ。マージできたら push をユーザーに依頼する。
-
-```
-! git push origin dev
-```
-
-`dev` はブランチ保護がかかっており、`maintain` ロールでは直接 push できない場合がある。push が拒否されたら PR 経由に切り替える（`git checkout -b chore/sync-main` してから `/pr` の手順へ）。
-
-## 12. 失敗時の対処
-
-- **sigstore の transient 409**: `gh run rerun` で再実行する。`from-package` は未 publish のバージョンのみを対象にするため、成功済みパッケージは二重 publish されない
-- **部分 publish**: 成功したパッケージは publish 済みで巻き戻せない。`workflow_dispatch` で publish workflow を再実行すれば、未 publish のパッケージのみが対象になる
-- **誤ったバージョンを publish した**: unpublish は原則不可。`npm deprecate <package>@<version> "<理由>"` で非推奨化し、修正版を新バージョンとして publish する。この判断は必ずユーザーに確認を取る
-- **publish が失敗したまま中断する場合**: 手順 11 の `dev` 同期は行わない。`main` にバージョン更新コミットだけが残るため、次回リリース時にそこから再開する
-
-# 注意
-
-- **`v*` タグの作成・削除は CODEOWNERS のみ**（GitHub Rulesets で保護）。権限がない場合は手順 8 で失敗するため、実行者がタグ権限者か事前に確認する
-- **publish は取り消せない**。手順 5・6 の事前チェックを省略しない
-- **`.yarnrc.yml` の `npmMinimalAgeGate` を一時的に外していないか確認する**。自社パッケージの取り込みのためにコメントアウトしたまま publish すると、保護が外れた状態がリリースに固定される
+恒久的に公開できないバージョンは、ユーザーの明示の指示があれば欠番にできる。その場合も、次のバージョンは Release PR で出す。

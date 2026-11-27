@@ -1,1 +1,2 @@
+yarn release-automation guard
 lint-staged

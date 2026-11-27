@@ -1,0 +1,296 @@
+name: Checks
+
+# Every check of the repository, called by the Minimum CI (Test) and the Full CI.
+# The E2E suites are part of it, so that a dependency update reaches dev only
+# after the E2E that exercises it. They run when the change touches what they
+# cover, decided by the `changes` job instead of a path filter: a required
+# check cannot depend on a path filter, which leaves it missing rather than
+# skipped. With `all`, the Full CI runs every suite.
+on:
+  workflow_call:
+    inputs:
+      all:
+        description: Run every suite whatever the change
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      e2e: ${{ steps.paths.outputs.e2e }}
+      viewer-e2e: ${{ steps.paths.outputs.viewer-e2e }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # The lock file and the root manifest are included: a dependency update
+      # may only touch them, and the E2E are what exercise most dependencies.
+      - id: paths
+        env:
+          ALL: ${{ inputs.all }}
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+        run: |
+          base=''
+          if [ "$ALL" != true ]; then
+            case "$EVENT" in
+              pull_request) base="$PR_BASE" ;;
+              merge_group) base="$QUEUE_BASE" ;;
+            esac
+          fi
+          if [ -z "$base" ]; then
+            echo "e2e=true" >> "$GITHUB_OUTPUT"
+            echo "viewer-e2e=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "$base" HEAD)"
+          printf '%s\n' "$files"
+          common='package\.json$|yarn\.lock$|\.yarnrc\.yml$|rust-toolchain\.toml$|\.github/workflows/checks\.yml$'
+          e2e="^(packages/@nitpicker/(archive|cli|core|crawler|query|report-google-sheets|report-html|viewer)/|packages/test-server/|vitest\.e2e\.config\.ts$|$common)"
+          viewer="^(packages/@nitpicker/(viewer|query|archive|core|cli)/|$common)"
+          if printf '%s\n' "$files" | grep -Eq "$e2e"; then echo "e2e=true"; else echo "e2e=false"; fi >> "$GITHUB_OUTPUT"
+          if printf '%s\n' "$files" | grep -Eq "$viewer"; then echo "viewer-e2e=true"; else echo "viewer-e2e=false"; fi >> "$GITHUB_OUTPUT"
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      # Also compiles @nitpicker/core's native addon for this runner (cargo is
+      # preinstalled on GitHub-hosted runners; the version comes from
+      # rust-toolchain.toml). Published binaries are built separately by
+      # build-core.yml against an older glibc.
+      - run: yarn build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-output
+          path: |
+            packages/**/lib/
+            packages/@nitpicker/core/*.node
+          retention-days: 1
+
+  # Release builds of the native addon (glibc 2.28 container + macOS), each
+  # checked against the body-hash golden fixture on its own platform.
+  core-prebuilt:
+    uses: ./.github/workflows/build-core.yml
+
+  # The platform packages must ship exactly their binary: place the
+  # prebuilt artifacts as Publish does and inspect the would-be tarballs.
+  core-platform-packages:
+    needs: core-prebuilt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: core-darwin-arm64
+          path: packages/@nitpicker/core-darwin-arm64/
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: core-linux-x64-gnu
+          path: packages/@nitpicker/core-linux-x64-gnu/
+      - name: Check tarball contents
+        run: |
+          for platform in darwin-arm64 linux-x64-gnu; do
+            dir="packages/@nitpicker/core-$platform"
+            npm pack --dry-run --json "./$dir" > "pack-$platform.json"
+            node -e '
+              const [pack] = require(process.argv[1]);
+              const files = pack.files.map((f) => f.path).sort();
+              const expected = ["README.md", "core." + process.argv[2] + ".node", "package.json"];
+              if (JSON.stringify(files) !== JSON.stringify(expected)) {
+                console.error("unexpected tarball contents for " + process.argv[2] + ": " + files.join(", "));
+                process.exit(1);
+              }
+              console.log(process.argv[2] + ": " + files.join(", "));
+            ' "./pack-$platform.json" "$platform"
+          done
+
+  # Unit + golden tests of the Rust crates themselves (no Node involved).
+  # rustfmt / clippy run in the lint job via `yarn lint:check`.
+  rust-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Same command as `yarn test:rust`, run directly: cargo needs none of
+      # the node_modules a `yarn install` would spend minutes on.
+      - run: cargo test --manifest-path packages/@nitpicker/core/Cargo.toml --locked
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-output
+          path: packages/
+      - run: yarn test
+
+  # Smoke run of every Rust-port baseline bench (scripts/bench-suite.mjs) on
+  # the committed 2-page fixture: every case must run against the current
+  # build and print its record. The values are not checked. Its own job so it
+  # runs beside `test` instead of after it; the timeout bounds a hung bench,
+  # which the suite has no per-case timeout for.
+  bench-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-output
+          path: packages/
+      - run: yarn bench:smoke
+
+  # Minimum-support check: the build artifact (tsc output) is Node-runtime
+  # agnostic, so it's reused as-is from the node26 build rather than
+  # rebuilding under node24 — this job only re-verifies runtime behavior
+  # (native deps, engine floors) on the oldest supported major.
+  test-node24:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.3
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-output
+          path: packages/
+      - run: yarn test
+
+  lint:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+      # Type-aware lint rules (oxlint --type-aware, e.g. typescript/no-unnecessary-type-assertion)
+      # resolve cross-package types from each package's built lib/*.d.ts. Without the
+      # build artifact, `@nitpicker/*` types collapse to `any` and the rules misfire,
+      # so the lint job must consume the build output just like the test job does.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-output
+          path: packages/
+      - run: yarn lint:check
+
+  # Full E2E suite (Puppeteer-driven, maxWorkers:1). `vitest.e2e.config.ts`
+  # includes every `*.e2e.ts` under `packages/test-server/src/__tests__/e2e/`,
+  # so a new file runs as soon as it exists; narrowing that `include` would
+  # bring back the risk of a file that silently never runs. The run takes about
+  # 7 minutes; when the job gets close to the timeout, split it into matrix
+  # shards with a step that diffs the files on disk against the shard lists.
+  e2e:
+    needs: [changes, build]
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      - run: yarn install --immutable
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-output
+          path: packages/
+      # Puppeteer's browser download is a silent no-op on this runner (it creates an
+      # empty cache folder without the binary), so skip it and drive the Chrome that
+      # ubuntu-latest ships pre-installed via PUPPETEER_EXECUTABLE_PATH instead.
+      - name: Use the runner's pre-installed Chrome
+        run: |
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium-browser || command -v chromium)"
+          test -n "$CHROME"
+          "$CHROME" --version
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROME" >> "$GITHUB_ENV"
+      # ubuntu-latest (24.04) restricts unprivileged user namespaces via AppArmor,
+      # which breaks Chromium's sandbox. Relax the restriction so the sandbox can
+      # still start — this keeps the sandbox enabled rather than passing --no-sandbox.
+      - name: Allow Chromium sandbox (unprivileged userns)
+        run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+      - name: Run E2E
+        run: yarn vitest run --config vitest.e2e.config.ts
+
+  # Playwright-driven browser E2E for the viewer SPA (real CLI server + built SPA).
+  viewer-e2e:
+    needs: changes
+    if: needs.changes.outputs.viewer-e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: npm install --global corepack@0.36.0
+      - run: corepack enable
+      # The viewer E2E builds its fixture via Archive directly (no Puppeteer),
+      # so skip Puppeteer's browser download during install.
+      - run: yarn install --immutable
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      - run: yarn build
+      - name: Install Playwright Chromium
+        run: yarn workspace @nitpicker/viewer exec playwright install --with-deps chromium
+      - run: yarn workspace @nitpicker/viewer test:e2e
+      - run: yarn workspace @nitpicker/viewer test:e2e:stub
+      - run: yarn workspace @nitpicker/viewer test:e2e:directory-tree
+      - run: yarn workspace @nitpicker/viewer test:e2e:template-clusters
+      - run: yarn workspace @nitpicker/viewer test:e2e:inbound-links
+      - run: yarn workspace @nitpicker/viewer test:e2e:crawl-suppression

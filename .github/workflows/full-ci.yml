@@ -1,0 +1,28 @@
+name: Full CI
+
+# The Full CI (rule 32): on Release PRs (the release label) and on the Nightly
+# (workflow_dispatch). Every check runs, the E2E suites included whatever the
+# change. Other pull requests skip the job, and full-ci-ok passes.
+# Required check: full-ci-ok.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  full:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release')
+    uses: ./.github/workflows/checks.yml
+    with:
+      all: true
+
+  full-ci-ok:
+    if: always()
+    needs: [full]
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false
