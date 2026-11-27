@@ -2,5 +2,14 @@
 	"lerna": "9.0.4",
 	"version": "0.25.1",
 	"npmClient": "yarn",
-	"packages": ["packages/@nitpicker/*", "packages/@nitpicker/cli", "packages/test-server"]
+	"packages": [
+		"packages/@nitpicker/*",
+		"packages/@nitpicker/cli",
+		"packages/test-server"
+	],
+	"command": {
+		"version": {
+			"forcePublish": ["@nitpicker/core-darwin-arm64", "@nitpicker/core-linux-x64-gnu"]
+		}
+	}
 }

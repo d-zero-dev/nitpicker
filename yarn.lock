@@ -713,6 +713,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@d-zero/release-automation@npm:0.0.2":
+  version: 0.0.2
+  resolution: "@d-zero/release-automation@npm:0.0.2"
+  dependencies:
+    yaml: "npm:2.9.1"
+  bin:
+    release-automation: dist/cli.js
+  checksum: 10c0/65da41e3ae09acd79617b1fafc873a53fc84ba0ce4691b6d0ddb315f4d28137c7e89f421e1d21a6bfc72f1f2529c7453d7c15afee57318efb2eb2916012cefb5
+  languageName: node
+  linkType: hard
+
 "@d-zero/roar@npm:2.3.1":
   version: 2.3.1
   resolution: "@d-zero/roar@npm:2.3.1"
@@ -9867,6 +9878,7 @@ __metadata:
     "@d-zero/markuplint-config": "npm:6.0.0-alpha.3"
     "@d-zero/oxlint-config": "npm:6.0.0-alpha.3"
     "@d-zero/oxlint-plugin": "npm:6.0.0-alpha.3"
+    "@d-zero/release-automation": "npm:0.0.2"
     "@d-zero/stylelint-config": "npm:6.0.0-alpha.3"
     "@d-zero/textlint-config": "npm:6.0.0-alpha.3"
     "@d-zero/tsconfig": "npm:2.0.0"
@@ -14466,7 +14478,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"yaml@npm:^2.9.1":
+"yaml@npm:2.9.1, yaml@npm:^2.9.1":
   version: 2.9.1
   resolution: "yaml@npm:2.9.1"
   bin:
