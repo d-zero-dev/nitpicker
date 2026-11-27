@@ -57,7 +57,7 @@
 		"jsdom": "30.1.3",
 		"lerna": "10.1.3",
 		"npm-run-all2": "9.0.4",
-		"oxfmt": "0.62.0",
+		"oxfmt": "0.80.0",
 		"oxlint": "1.95.0",
 		"oxlint-tsgolint": "7.0.2008",
 		"parse5": "8.1.1",
