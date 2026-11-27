@@ -46,6 +46,19 @@ describe('LibsqlDialect', () => {
 		expect(rows).toEqual([{ id: 1, name: 'a' }]);
 		await db.destroy();
 	});
+
+	it('libsql の接続は inTransaction を公開し、BEGIN と COMMIT で切り替わる', () => {
+		const connection = new libsql(':memory:');
+		try {
+			expect(connection.inTransaction).toBe(false);
+			connection.prepare('BEGIN').run();
+			expect(connection.inTransaction).toBe(true);
+			connection.prepare('COMMIT').run();
+			expect(connection.inTransaction).toBe(false);
+		} finally {
+			connection.close();
+		}
+	});
 });
 
 describe('LibsqlDialect の ROLLBACK 取り扱い', () => {
@@ -197,6 +210,230 @@ describe('LibsqlDialect の ROLLBACK 取り扱い', () => {
 		},
 	);
 
+	describe('自動ロールバックされた接続での COMMIT', () => {
+		/**
+		 * `INSERT` でトランザクションを失い（`inTransaction` が `false` になり）、例外を投げる
+		 * 偽の接続。SQLite が自動ロールバックした接続を模す。それ以外の文は `prepared: <SQL>`
+		 * で失敗する。
+		 * @param options - 偽の接続の振る舞い
+		 * @param options.error - トランザクションを失わせる例外（既定は `SQLITE_FULL`）
+		 * @param options.succeedingCommits - 最初の何回の `COMMIT` を成功させるか
+		 */
+		function createRolledBackConnection(
+			options: { error?: Error; succeedingCommits?: number } = {},
+		) {
+			const original =
+				options.error ??
+				Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
+			let succeedingCommits = options.succeedingCommits ?? 0;
+			const connection = {
+				inTransaction: true,
+				prepare(sql: string) {
+					if (sql.startsWith('INSERT')) {
+						connection.inTransaction = false;
+						throw original;
+					}
+					if (sql.startsWith('COMMIT') && succeedingCommits-- > 0) {
+						return { reader: false, run: () => ({ changes: 0, lastInsertRowid: 0 }) };
+					}
+					throw new Error(`prepared: ${sql}`);
+				},
+			};
+			return { connection, original };
+		}
+
+		it.each([
+			'COMMIT;',
+			'END',
+			'end transaction',
+			'RELEASE SAVEPOINT trx2;',
+			'RELEASE trx2',
+		])(
+			'トランザクション用クライアントで失敗したあとの %s は、元の例外を cause に付けて差し替える',
+			async (sql) => {
+				const { connection, original } = createRolledBackConnection();
+				await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(
+					original,
+				);
+
+				const error = await runQuery(connection, { sql }).catch(
+					(error_: unknown) => error_,
+				);
+
+				expect(error).toMatchObject({ code: 'SQLITE_FULL' });
+				expect((error as Error).cause).toBe(original);
+			},
+		);
+
+		it('最も外側の COMMIT を差し替えたあとは記録を残さず、次の COMMIT は元のまま失敗する', async () => {
+			const { connection, original } = createRolledBackConnection();
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(original);
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toMatchObject({
+				cause: original,
+			});
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toThrow(
+				'prepared: COMMIT;',
+			);
+		});
+
+		it('最も外側の ROLLBACK を省いたあとは記録を残さない', async () => {
+			const { connection, original } = createRolledBackConnection();
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(original);
+			await runQuery(connection, { sql: 'ROLLBACK' });
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toThrow(
+				'prepared: COMMIT;',
+			);
+		});
+
+		it.each(['ROLLBACK TO SAVEPOINT trx2', 'ROLLBACK TO trx2'])(
+			'入れ子の %s を省いても記録は残り、外側の COMMIT で使われる',
+			async (sql) => {
+				const { connection, original } = createRolledBackConnection();
+				await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(
+					original,
+				);
+				await runQuery(connection, { sql });
+
+				await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toMatchObject({
+					cause: original,
+				});
+			},
+		);
+
+		it('入れ子の RELEASE SAVEPOINT を差し替えても記録は残り、外側の COMMIT でも使われる', async () => {
+			const { connection, original } = createRolledBackConnection();
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(original);
+			await expect(
+				runQuery(connection, { sql: 'RELEASE SAVEPOINT trx2;' }),
+			).rejects.toMatchObject({ cause: original });
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toMatchObject({
+				cause: original,
+			});
+		});
+
+		it('生きているトランザクションの中で COMMIT が別の理由で失敗したときは、記録があっても元の例外のまま届く', async () => {
+			const { connection, original } = createRolledBackConnection();
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(original);
+			// 入れ子のトランザクションが SAVEPOINT で新しいトランザクションを始めた状態
+			connection.inTransaction = true;
+
+			await expect(
+				runQuery(connection, { sql: 'RELEASE SAVEPOINT trx2;' }),
+			).rejects.toThrow('prepared: RELEASE SAVEPOINT trx2;');
+		});
+
+		it('自動ロールバックが重なったときは、外側の書き込みを捨てた最初の原因を残す', async () => {
+			const first = Object.assign(new Error('database or disk is full'), {
+				code: 'SQLITE_FULL',
+			});
+			const second = Object.assign(new Error('disk I/O error'), { code: 'SQLITE_IOERR' });
+			const errors = [first, second];
+			const connection = {
+				inTransaction: true,
+				prepare(sql: string) {
+					if (sql.startsWith('INSERT')) {
+						connection.inTransaction = false;
+						throw errors.shift();
+					}
+					throw new Error(`prepared: ${sql}`);
+				},
+			};
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(first);
+			// 入れ子のトランザクションが SAVEPOINT で新しいトランザクションを始め、そこでも失った
+			connection.inTransaction = true;
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(second);
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toMatchObject({
+				code: 'SQLITE_FULL',
+				cause: first,
+			});
+		});
+
+		it('原因の例外が code を持たないときは、code を付けずに cause だけ付ける', async () => {
+			const { connection, original } = createRolledBackConnection({
+				error: new Error('unknown failure'),
+			});
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(original);
+
+			const error = (await runQuery(connection, { sql: 'COMMIT;' }).catch(
+				(error_: unknown) => error_,
+			)) as Error;
+
+			expect(error.cause).toBe(original);
+			expect(error).not.toHaveProperty('code');
+			expect(error.message).toContain('after an earlier error.');
+		});
+
+		it('inTransaction を持たない接続の失敗は記録しない', async () => {
+			const original = new Error('boom');
+			const connection = {
+				prepare() {
+					throw original;
+				},
+			};
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(original);
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toBe(original);
+		});
+
+		it('最も外側の COMMIT が自分で失敗してトランザクションを失っても、次の COMMIT は元のまま失敗する', async () => {
+			const original = Object.assign(new Error('database or disk is full'), {
+				code: 'SQLITE_FULL',
+			});
+			const connection = {
+				inTransaction: true,
+				prepare() {
+					connection.inTransaction = false;
+					throw original;
+				},
+			};
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toBe(original);
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toBe(original);
+		});
+
+		it('成功した最も外側の COMMIT のあとは記録を残さない', async () => {
+			const { connection, original } = createRolledBackConnection({
+				succeedingCommits: 1,
+			});
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(original);
+			// 入れ子のトランザクションが SAVEPOINT で新しいトランザクションを始めた状態
+			connection.inTransaction = true;
+			await runQuery(connection, { sql: 'COMMIT;' });
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toThrow(
+				'prepared: COMMIT;',
+			);
+		});
+
+		it('BEGIN で新しいトランザクションを始めたら、前の記録を捨てる', async () => {
+			const { connection, original } = createRolledBackConnection();
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' })).rejects.toBe(original);
+			connection.inTransaction = true;
+			await expect(runQuery(connection, { sql: 'BEGIN;' })).rejects.toThrow(
+				'prepared: BEGIN;',
+			);
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' })).rejects.toThrow(
+				'prepared: COMMIT;',
+			);
+		});
+
+		it('トランザクション用でないクライアントの失敗は記録せず、COMMIT は元のまま失敗する', async () => {
+			const { connection, original } = createRolledBackConnection();
+			await expect(runQuery(connection, { sql: 'INSERT INTO t' }, false)).rejects.toBe(
+				original,
+			);
+
+			await expect(runQuery(connection, { sql: 'COMMIT;' }, false)).rejects.toThrow(
+				'prepared: COMMIT;',
+			);
+		});
+	});
+
 	describe('実ファイル DB のトランザクション', () => {
 		let dir: string;
 		let db: Knex | undefined;
@@ -327,6 +564,244 @@ describe('LibsqlDialect の ROLLBACK 取り扱い', () => {
 			await expect(run).rejects.toThrow('original failure');
 			expect(executed).toContain('ROLLBACK');
 			expect(await target('t').count({ count: '*' })).toEqual([{ count: 0 }]);
+		});
+
+		describe('自動ロールバックのあとの確定', () => {
+			/**
+			 * 確定に失敗した `db.transaction()` の例外を取り出す。
+			 * @param run - `db.transaction()` が返す Promise
+			 */
+			async function rejection(
+				run: PromiseLike<unknown>,
+			): Promise<Error & { code?: string }> {
+				const error = await Promise.resolve(run).then(
+					() => {},
+					(error_: unknown) => error_,
+				);
+				expect(error).toBeInstanceOf(Error);
+				return error as Error & { code?: string };
+			}
+
+			/**
+			 * COMMIT / RELEASE SAVEPOINT が `SQLITE_CONSTRAINT` で失敗する仕掛けを作る。
+			 * `child` に親のない行を入れると、確定の時点で遅延外部キーが違反する。トランザクションが
+			 * 生きたまま、自動ロールバックとは別の理由で失敗する例になる。
+			 * @param target - 対象の DB
+			 */
+			async function createDeferredForeignKey(target: Knex): Promise<void> {
+				await target.raw('PRAGMA foreign_keys = ON');
+				await target.raw('CREATE TABLE parent (id INTEGER PRIMARY KEY)');
+				await target.raw(
+					'CREATE TABLE child (id INTEGER PRIMARY KEY, p INTEGER REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED)',
+				);
+			}
+
+			it('コールバックの中で捕捉して続けると、COMMIT の失敗に元の例外が cause で付く', async () => {
+				const target = await openDb();
+				await limitStorage(target);
+				let caught: unknown;
+
+				const error = await rejection(
+					target.transaction(async (trx) => {
+						try {
+							await insertUntilFull(trx);
+						} catch (error_) {
+							caught = error_;
+						}
+					}),
+				);
+
+				expect(caught).toMatchObject({ code: 'SQLITE_FULL' });
+				expect(error.cause).toBe(caught);
+				expect(error.code).toBe('SQLITE_FULL');
+				expect(error.message).toContain('rolled the transaction back');
+				// knex が元の例外に付け足す SQL 全文（バインド値を含む）は、差し替えた例外に写さない
+				expect(error.message).not.toContain('xxxx');
+				expect(await target('t').count({ count: '*' })).toEqual([{ count: 0 }]);
+			});
+
+			it('ネストした内側のコールバックで捕捉して続けると、RELEASE SAVEPOINT の失敗に元の例外が cause で付く', async () => {
+				const target = await openDb();
+				await limitStorage(target);
+				let caught: unknown;
+
+				const error = await rejection(
+					target.transaction(async (outer) => {
+						await outer.raw("INSERT INTO t (v) VALUES ('outer')");
+						await outer.transaction(async (inner) => {
+							try {
+								await insertUntilFull(inner);
+							} catch (error_) {
+								caught = error_;
+							}
+						});
+					}),
+				);
+
+				expect(caught).toMatchObject({ code: 'SQLITE_FULL' });
+				expect(error.cause).toBe(caught);
+				expect(error.code).toBe('SQLITE_FULL');
+				expect(await target('t').count({ count: '*' })).toEqual([{ count: 0 }]);
+			});
+
+			it('内側の reject を外側が捕捉して続けると、外側の COMMIT の失敗に元の例外が cause で付く', async () => {
+				const target = await openDb();
+				await limitStorage(target);
+				let caught: unknown;
+
+				const error = await rejection(
+					target.transaction(async (outer) => {
+						await outer.raw("INSERT INTO t (v) VALUES ('outer')");
+						try {
+							await outer.transaction(insertUntilFull);
+						} catch (error_) {
+							caught = error_;
+						}
+					}),
+				);
+
+				expect(caught).toMatchObject({ code: 'SQLITE_FULL' });
+				expect(error.cause).toBe(caught);
+				expect(error.code).toBe('SQLITE_FULL');
+				expect(await target('t').count({ count: '*' })).toEqual([{ count: 0 }]);
+			});
+
+			it('自動ロールバックのあとに内側のトランザクションが SAVEPOINT で新しく始まっても、外側の COMMIT の失敗に元の例外が cause で付く', async () => {
+				const target = await openDb();
+				await limitStorage(target);
+				let caught: unknown;
+
+				const error = await rejection(
+					target.transaction(async (outer) => {
+						try {
+							await insertUntilFull(outer);
+						} catch (error_) {
+							caught = error_;
+						}
+						await outer.transaction(async (inner) => {
+							await inner.raw("INSERT INTO t (v) VALUES ('inner')");
+						});
+					}),
+				);
+
+				expect(caught).toMatchObject({ code: 'SQLITE_FULL' });
+				expect(error.cause).toBe(caught);
+				expect(error.code).toBe('SQLITE_FULL');
+			});
+
+			it('入れ子の RELEASE SAVEPOINT の差し替えのあとも、外側の COMMIT の失敗に元の例外が cause で付く', async () => {
+				const target = await openDb();
+				await limitStorage(target);
+				const { executed } = await trackExecuted(target);
+				let caught: unknown;
+				let innerError: unknown;
+
+				const error = await rejection(
+					target.transaction(async (outer) => {
+						try {
+							await outer.transaction(async (inner) => {
+								try {
+									await insertUntilFull(inner);
+								} catch (error_) {
+									caught = error_;
+								}
+							});
+						} catch (error_) {
+							innerError = error_;
+						}
+					}),
+				);
+
+				expect(caught).toMatchObject({ code: 'SQLITE_FULL' });
+				expect(executed.some((sql) => /^RELEASE\b/i.test(sql))).toBe(true);
+				expect((innerError as Error).cause).toBe(caught);
+				expect(error.cause).toBe(caught);
+			});
+
+			it('自動ロールバックのあとに、生きているトランザクションが別の理由で確定に失敗したら、その例外が届く', async () => {
+				const target = await openDb();
+				await createDeferredForeignKey(target);
+				await limitStorage(target);
+
+				const error = await rejection(
+					target.transaction(async (outer) => {
+						try {
+							await insertUntilFull(outer);
+						} catch {
+							// 自動ロールバックされたあとも続ける
+						}
+						await outer.transaction(async (inner) => {
+							await inner.raw('INSERT INTO child (p) VALUES (999)');
+						});
+					}),
+				);
+
+				expect(error.code).toContain('SQLITE_CONSTRAINT');
+				expect(error.cause).toBeUndefined();
+			});
+
+			it('自動ロールバックの原因は、同じ接続の次のトランザクションの、別の理由による COMMIT の失敗に付かない', async () => {
+				const target = await openDb();
+				await createDeferredForeignKey(target);
+				await limitStorage(target);
+				await rejection(
+					target.transaction(async (trx) => {
+						try {
+							await insertUntilFull(trx);
+						} catch {
+							// 続けて COMMIT に進む
+						}
+					}),
+				);
+
+				const error = await rejection(
+					target.transaction(async (trx) => {
+						await trx.raw('INSERT INTO child (p) VALUES (999)');
+					}),
+				);
+
+				expect(error.code).toContain('SQLITE_CONSTRAINT');
+				expect(error.cause).toBeUndefined();
+			});
+
+			it('自動ロールバックの記録は、同じ接続の次のトランザクションに残らない', async () => {
+				const target = await openDb();
+				await limitStorage(target);
+				await rejection(
+					target.transaction(async (trx) => {
+						try {
+							await insertUntilFull(trx);
+						} catch {
+							// 続けて COMMIT に進む
+						}
+					}),
+				);
+
+				await target.transaction(async (trx) => {
+					await trx.raw("INSERT INTO t (v) VALUES ('next')");
+				});
+
+				expect(await target('t').count({ count: '*' })).toEqual([{ count: 1 }]);
+			});
+
+			it('自動ロールバックのあとに成功した文はトランザクションの外で実行され、書き込まれる（現状の制約）', async () => {
+				const target = await openDb();
+				await limitStorage(target);
+
+				const error = await rejection(
+					target.transaction(async (trx) => {
+						try {
+							await insertUntilFull(trx);
+						} catch {
+							// 自動ロールバックされたあとも続ける
+						}
+						await trx.raw("INSERT INTO t (v) VALUES ('after')");
+					}),
+				);
+
+				expect(error.message).toContain('rolled the transaction back');
+				expect(await target('t').count({ count: '*' })).toEqual([{ count: 1 }]);
+			});
 		});
 	});
 });
