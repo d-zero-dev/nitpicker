@@ -2270,7 +2270,7 @@ __metadata:
     follow-redirects: "npm:1.16.3"
     knex: "npm:3.3.0"
     puppeteer: "npm:25.15.0"
-    robots-parser: "npm:3.0.1"
+    robots-parser: "npm:3.1.1"
   languageName: unknown
   linkType: soft
 
@@ -12088,10 +12088,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"robots-parser@npm:3.0.1":
-  version: 3.0.1
-  resolution: "robots-parser@npm:3.0.1"
-  checksum: 10c0/91443b15ab1b39f69ac998a2dae8859ad35c981504e5facbb34d494fd6163877e821ce7ed830d14e9efdd6ed28c347491c3d699738943501dec2b6bedfdd6a81
+"robots-parser@npm:3.1.1":
+  version: 3.1.1
+  resolution: "robots-parser@npm:3.1.1"
+  checksum: 10c0/b511d133df83c01052dff695fd79941e9eaa2f6770abb2e2f123fff49b9e3397657a868ae8e5924882cb20e9a1977cb000d4d521fd3721823a0e8a2d69085c10
   languageName: node
   linkType: hard
 
