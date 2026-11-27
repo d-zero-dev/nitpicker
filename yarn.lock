@@ -2167,7 +2167,7 @@ __metadata:
     ansi-colors: "npm:4.1.3"
     debug: "npm:4.4.3"
     enquirer: "npm:2.4.1"
-    googleapis: "npm:173.0.0"
+    googleapis: "npm:190.0.0"
     vitest: "npm:5.1.1"
   languageName: unknown
   linkType: soft
@@ -7176,6 +7176,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"gaxios@npm:^8.3.0":
+  version: 8.3.3
+  resolution: "gaxios@npm:8.3.3"
+  dependencies:
+    extend: "npm:^3.0.2"
+    https-proxy-agent: "npm:^7.0.1"
+    node-fetch: "npm:^3.3.2"
+  checksum: 10c0/868b34bb7ea8d44933971a6d9a1c6f3da6b5d468a56c100b250f82aa819a36cf4f375330c51f0e91624a60a8206008be32e9a2bc9c725fb1e7af39e70d0c3f42
+  languageName: node
+  linkType: hard
+
 "gaxios@npm:^8.3.1":
   version: 8.3.2
   resolution: "gaxios@npm:8.3.2"
@@ -7444,6 +7455,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"google-logging-utils@npm:^2.0.0":
+  version: 2.2.0
+  resolution: "google-logging-utils@npm:2.2.0"
+  checksum: 10c0/cc773d474dfcc5581f5bcd84faa00305996e2dabe3006d305ff3efb88641e3cdedbe47a4090d5bd417109aadd72a3875eb82ecbe25dd0e3c37bd4ac5af259f45
+  languageName: node
+  linkType: hard
+
 "google-logging-utils@npm:^2.1.0":
   version: 2.1.1
   resolution: "google-logging-utils@npm:2.1.1"
@@ -7464,6 +7482,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"googleapis-common@npm:^9.0.0":
+  version: 9.3.1
+  resolution: "googleapis-common@npm:9.3.1"
+  dependencies:
+    extend: "npm:^3.0.2"
+    gaxios: "npm:^8.3.0"
+    google-auth-library: "npm:^11.0.0"
+    google-logging-utils: "npm:^2.0.0"
+    qs: "npm:^6.7.0"
+    url-template: "npm:^2.0.8"
+  checksum: 10c0/98fd6a14cc2f309940050a585569cba06343a17b97877aa68b9197f69b26cd45e3b593a0d13efbaf47bbe2f2e834fff32eb54c145d8fe98e2bc732c6767d6e4d
+  languageName: node
+  linkType: hard
+
 "googleapis@npm:173.0.0":
   version: 173.0.0
   resolution: "googleapis@npm:173.0.0"
@@ -7471,6 +7503,16 @@ __metadata:
     google-auth-library: "npm:^10.2.0"
     googleapis-common: "npm:^8.0.0"
   checksum: 10c0/29a4814292ae98390d6db26deeb299160f07730f59075193fec54300035e7d6919e0bec4e45cf4b109370b7a2ebbee186ad9c12ee931a3cf02a40b2c9132d802
+  languageName: node
+  linkType: hard
+
+"googleapis@npm:190.0.0":
+  version: 190.0.0
+  resolution: "googleapis@npm:190.0.0"
+  dependencies:
+    google-auth-library: "npm:^11.0.0"
+    googleapis-common: "npm:^9.0.0"
+  checksum: 10c0/4eb161191847fcf6a1a721a7b92c20d2560513a1d7e4182a08ae5b14556d991620bbfd22f42cd23741f8b738c7f3b6bb960837bac8eb5caa58447779c0aac49b
   languageName: node
   linkType: hard
 
