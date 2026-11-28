@@ -46,7 +46,7 @@
 		"@d-zero/markuplint-config": "6.0.0-alpha.3",
 		"@d-zero/oxlint-config": "6.0.0-alpha.3",
 		"@d-zero/oxlint-plugin": "6.0.0-alpha.3",
-		"@d-zero/release-automation": "0.0.2",
+		"@d-zero/release-automation": "0.1.0",
 		"@d-zero/stylelint-config": "6.0.0-alpha.3",
 		"@d-zero/textlint-config": "6.0.0-alpha.3",
 		"@d-zero/tsconfig": "2.0.0",
