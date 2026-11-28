@@ -64,8 +64,8 @@
 	"devDependencies": {
 		"@d-zero/shared": "0.23.2",
 		"@playwright/test": "1.65.1",
-		"@storybook/addon-a11y": "10.6.8",
-		"@storybook/react-vite": "10.6.8",
+		"@storybook/addon-a11y": "10.6.9",
+		"@storybook/react-vite": "10.6.9",
 		"@testing-library/dom": "10.4.2",
 		"@testing-library/jest-dom": "8.0.0",
 		"@testing-library/react": "16.3.3",
@@ -74,7 +74,7 @@
 		"@vitejs/plugin-react": "6.3.0",
 		"graphology-types": "0.24.8",
 		"jsdom": "31.0.1",
-		"storybook": "10.6.8",
+		"storybook": "10.6.9",
 		"vite": "8.3.8",
 		"vitest": "5.1.1"
 	}
